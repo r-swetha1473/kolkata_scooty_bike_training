@@ -1,0 +1,156 @@
+<div class="contact-page">
+  <section class="contact-hero">
+    <div class="container">
+      <h1 class="fade-in">Get In Touch</h1>
+      <p class="fade-in-delay">We're here to answer your questions and help you get started</p>
+    </div>
+  </section>
+
+  <section class="contact-info">
+    <div class="container">
+      <div class="info-grid">
+        <div class="info-card" *ngFor="let info of contactInfo">
+          <div class="info-icon">{{ info.icon }}</div>
+          <h3>{{ info.title }}</h3>
+          <a [href]="info.link" *ngIf="info.link !== '#'">{{ info.value }}</a>
+          <span *ngIf="info.link === '#'">{{ info.value }}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="contact-form-section">
+    <div class="container">
+      <div class="form-container">
+        <div class="form-left">
+          <h2>Send us a Message</h2>
+          <p>Fill out the form and our team will get back to you within 24 hours</p>
+
+          <form (ngSubmit)="onSubmit()" #contactForm="ngForm">
+            <div class="form-group">
+              <label for="name">Full Name *</label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                [(ngModel)]="formData.name"
+                required
+                placeholder="Enter your name">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="email">Email *</label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  [(ngModel)]="formData.email"
+                  required
+                  placeholder="your@email.com">
+              </div>
+
+              <div class="form-group">
+                <label for="phone">Phone</label>
+                <input
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  [(ngModel)]="formData.phone"
+                  placeholder="+91 98765 43210">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="subject">Subject</label>
+              <input
+                type="text"
+                id="subject"
+                name="subject"
+                [(ngModel)]="formData.subject"
+                placeholder="How can we help?">
+            </div>
+
+            <div class="form-group">
+              <label for="message">Message *</label>
+              <textarea
+                id="message"
+                name="message"
+                [(ngModel)]="formData.message"
+                required
+                rows="5"
+                placeholder="Tell us more about your inquiry..."></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-submit" [disabled]="!contactForm.form.valid">
+              Send Message
+            </button>
+          </form>
+        </div>
+
+        <div class="form-right">
+          <div class="contact-image">
+            <div class="image-placeholder">📞</div>
+          </div>
+          <div class="social-section">
+            <h3>Follow Us</h3>
+            <div class="social-links">
+              <a [href]="link.url" *ngFor="let link of socialLinks" class="social-link">
+                {{ link.icon }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="branches">
+    <div class="container">
+      <h2 class="section-title">Our Branches</h2>
+      <div class="branches-grid">
+        <div class="branch-card" *ngFor="let branch of branches">
+          <h3>{{ branch.name }}</h3>
+          <div class="branch-info">
+            <div class="branch-item">
+              <span class="branch-icon">📍</span>
+              <span>{{ branch.address }}</span>
+            </div>
+            <div class="branch-item">
+              <span class="branch-icon">📞</span>
+              <a [href]="'tel:' + branch.phone">{{ branch.phone }}</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="map-section">
+    <div class="container">
+      <h2 class="section-title">Find Us</h2>
+      <div class="map-placeholder">
+        <div class="map-content">
+          <span class="map-icon">🗺️</span>
+          <p>Main Branch: Salt Lake, Sector V, Kolkata</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq">
+    <div class="container">
+      <h2 class="section-title">Common Questions</h2>
+      <div class="faq-grid">
+        <div class="faq-card" *ngFor="let faq of faqs">
+          <h3>{{ faq.question }}</h3>
+          <p>{{ faq.answer }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="toast" [class.show]="showToast">
+    {{ toastMessage }}
+  </div>
+</div>

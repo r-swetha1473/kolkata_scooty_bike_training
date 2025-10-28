@@ -1,0 +1,148 @@
+<div class="booking-page">
+  <section class="booking-hero">
+    <div class="container">
+      <h1 class="fade-in">Book Your Training Slot</h1>
+      <p class="fade-in-delay">Choose your preferred date and time</p>
+    </div>
+  </section>
+
+  <section class="booking-content">
+    <div class="container">
+      <div class="date-selector">
+        <label for="date">Select Date:</label>
+        <input
+          type="date"
+          id="date"
+          [(ngModel)]="selectedDate"
+          [min]="getMinDate()"
+          (change)="onDateChange()"
+          class="date-input">
+      </div>
+
+      <div class="slots-container">
+        <h2>Available Time Slots</h2>
+        <p class="legend">
+          <span class="legend-item">
+            <span class="dot available"></span> Available
+          </span>
+          <span class="legend-item">
+            <span class="dot booked"></span> Booked
+          </span>
+        </p>
+
+        <div class="slots-grid">
+          <div
+            *ngFor="let slot of timeSlots"
+            class="slot-card"
+            [class.available]="slot.available"
+            [class.booked]="!slot.available"
+            (click)="selectSlot(slot)">
+            <div class="slot-time">{{ slot.time }}</div>
+            <div class="slot-status">{{ slot.available ? 'Available' : 'Booked' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <div class="info-card">
+          <h3>📋 Booking Information</h3>
+          <ul>
+            <li>Each session is 30 minutes</li>
+            <li>Arrive 10 minutes early</li>
+            <li>Bring your learner's license</li>
+            <li>Wear comfortable clothes</li>
+          </ul>
+        </div>
+
+        <div class="info-card">
+          <h3>💡 Important Notes</h3>
+          <ul>
+            <li>Free cancellation 24 hours before</li>
+            <li>Safety gear provided</li>
+            <li>Trainer assigned based on availability</li>
+            <li>Confirmation via SMS</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-overlay" *ngIf="showBookingModal" (click)="closeBookingModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeBookingModal()">×</button>
+      <h2>Book Your Slot</h2>
+      <p class="modal-subtitle">{{ bookingForm.date }} at {{ bookingForm.time }}</p>
+
+      <form>
+        <div class="form-group">
+          <label for="name">Full Name *</label>
+          <input
+            type="text"
+            id="name"
+            [(ngModel)]="bookingForm.name"
+            name="name"
+            placeholder="Enter your full name"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Phone Number *</label>
+          <input
+            type="tel"
+            id="phone"
+            [(ngModel)]="bookingForm.phone"
+            name="phone"
+            placeholder="+91 98765 43210"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label>Select Trainer *</label>
+          <div class="driver-selector" (click)="openDriverModal()">
+            <div *ngIf="!selectedDriver" class="driver-placeholder">
+              Click to select a trainer
+            </div>
+            <div *ngIf="selectedDriver" class="selected-driver">
+              <span class="driver-avatar">{{ selectedDriver.avatar }}</span>
+              <span class="driver-name">{{ selectedDriver.name }}</span>
+              <span class="driver-rating">⭐ {{ selectedDriver.rating }}</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-confirm"
+          [disabled]="!bookingForm.name || !bookingForm.phone || !bookingForm.driver"
+          (click)="confirmBooking()">
+          Confirm Booking
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showDriverModal" (click)="closeDriverModal()">
+    <div class="modal-content driver-modal" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeDriverModal()">×</button>
+      <h2>Select Your Trainer</h2>
+      <p class="modal-subtitle">Choose from our expert trainers</p>
+
+      <div class="drivers-grid">
+        <div
+          *ngFor="let driver of drivers"
+          class="driver-card"
+          (click)="selectDriver(driver)">
+          <div class="driver-avatar-large">{{ driver.avatar }}</div>
+          <h3>{{ driver.name }}</h3>
+          <div class="driver-rating">⭐ {{ driver.rating }}/5</div>
+          <div class="driver-experience">{{ driver.experience }}</div>
+          <button class="btn-select">Select</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast success" [class.show]="showConfirmation">
+    ✓ Booking confirmed! We'll send you a confirmation SMS shortly.
+  </div>
+</div>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Kolkata Scotty Bike Training</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Professional bike training in Kolkata with certified instructors. Learn from the best!" />
+    <meta name="theme-color" content="#667eea" />
+    <base href="/">
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+  </head>
+  <body>
+    <app-root>
+      <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #667eea;">
+        <div style="text-align: center;">
+          <h1 style="font-size: 48px; margin-bottom: 20px;">🏍️</h1>
+          <h2>Loading Kolkata Scotty...</h2>
+        </div>
+      </div>
+    </app-root>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => console.log('SW registered'))
+            .catch(err => console.log('SW registration failed'));
+        });
+      }
+    </script>
+  </body>
+</html>

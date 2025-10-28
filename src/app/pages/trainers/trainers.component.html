@@ -1,0 +1,145 @@
+<div class="trainers-page">
+  <section class="trainers-hero">
+    <div class="container">
+      <h1 class="fade-in">Meet Our Expert Trainers</h1>
+      <p class="fade-in-delay">Learn from certified professionals dedicated to your success</p>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-card" *ngFor="let stat of stats">
+          <div class="stat-number">{{ stat.number }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trainers-grid-section">
+    <div class="container">
+      <div class="trainers-grid">
+        <div class="trainer-card" *ngFor="let trainer of trainers" (click)="openTrainerDetails(trainer)">
+          <div class="trainer-avatar">{{ trainer.avatar }}</div>
+          <h3>{{ trainer.name }}</h3>
+          <div class="trainer-designation">{{ trainer.designation }}</div>
+          <div class="trainer-info">
+            <div class="info-item">
+              <span class="icon">💼</span>
+              <span>{{ trainer.experience }}</span>
+            </div>
+            <div class="info-item">
+              <span class="icon">⭐</span>
+              <span>{{ trainer.rating }}/5</span>
+            </div>
+            <div class="info-item">
+              <span class="icon">👥</span>
+              <span>{{ trainer.students }}+ students</span>
+            </div>
+          </div>
+          <div class="trainer-specialization">
+            <strong>Specialization:</strong> {{ trainer.specialization }}
+          </div>
+          <p class="trainer-description">{{ trainer.description }}</p>
+          <div class="trainer-skills">
+            <span class="skill-tag" *ngFor="let skill of trainer.skills">{{ skill }}</span>
+          </div>
+          <button class="btn-view">View Details</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="certifications">
+    <div class="container">
+      <h2 class="section-title">Trainer Certifications</h2>
+      <div class="certifications-grid">
+        <div class="cert-card" *ngFor="let cert of certifications">
+          <div class="cert-icon">{{ cert.icon }}</div>
+          <h3>{{ cert.title }}</h3>
+          <p>{{ cert.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="approach">
+    <div class="container">
+      <h2 class="section-title">Our Training Approach</h2>
+      <div class="approach-grid">
+        <div class="approach-card" *ngFor="let step of trainingApproach">
+          <div class="step-number">{{ step.step }}</div>
+          <h3>{{ step.title }}</h3>
+          <p>{{ step.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="qualities">
+    <div class="container">
+      <h2 class="section-title">What Makes Our Trainers Special?</h2>
+      <div class="qualities-grid">
+        <div class="quality-item" *ngFor="let quality of qualities">
+          <span class="check">✓</span>
+          <span>{{ quality }}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="container">
+      <div class="cta-content">
+        <h2>Start Learning with the Best</h2>
+        <p>Book your session and experience professional training</p>
+        <a routerLink="/booking" class="btn btn-primary btn-large">Book Now</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="trainer-modal" *ngIf="selectedTrainer" (click)="closeTrainerDetails()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeTrainerDetails()">×</button>
+      <div class="modal-header">
+        <div class="modal-avatar">{{ selectedTrainer.avatar }}</div>
+        <div class="modal-header-text">
+          <h2>{{ selectedTrainer.name }}</h2>
+          <div class="modal-designation">{{ selectedTrainer.designation }}</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="modal-stats">
+          <div class="modal-stat">
+            <div class="modal-stat-label">Experience</div>
+            <div class="modal-stat-value">{{ selectedTrainer.experience }}</div>
+          </div>
+          <div class="modal-stat">
+            <div class="modal-stat-label">Rating</div>
+            <div class="modal-stat-value">{{ selectedTrainer.rating }}/5</div>
+          </div>
+          <div class="modal-stat">
+            <div class="modal-stat-label">Students</div>
+            <div class="modal-stat-value">{{ selectedTrainer.students }}+</div>
+          </div>
+        </div>
+        <div class="modal-section">
+          <h3>Specialization</h3>
+          <p>{{ selectedTrainer.specialization }}</p>
+        </div>
+        <div class="modal-section">
+          <h3>About</h3>
+          <p>{{ selectedTrainer.description }}</p>
+        </div>
+        <div class="modal-section">
+          <h3>Skills & Expertise</h3>
+          <div class="modal-skills">
+            <span class="skill-tag" *ngFor="let skill of selectedTrainer.skills">{{ skill }}</span>
+          </div>
+        </div>
+        <a routerLink="/booking" class="btn btn-primary btn-full" (click)="closeTrainerDetails()">Book with {{ selectedTrainer.name }}</a>
+      </div>
+    </div>
+  </div>
+</div>

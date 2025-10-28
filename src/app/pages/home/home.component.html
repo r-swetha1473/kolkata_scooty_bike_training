@@ -1,0 +1,78 @@
+<div class="home-page">
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="fade-in">Master the Art of Riding</h1>
+      <p class="fade-in-delay">Professional bike training in Kolkata with certified instructors</p>
+      <div class="hero-buttons fade-in-delay-2">
+        <a routerLink="/booking" class="btn btn-primary">Book Your Slot</a>
+        <a routerLink="/courses" class="btn btn-secondary">View Courses</a>
+      </div>
+    </div>
+    <div class="hero-image">
+      <div class="bike-illustration">🏍️</div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="container">
+      <div class="features-grid">
+        <div class="feature-card" *ngFor="let feature of features; let i = index" [style.animation-delay]="i * 0.1 + 's'">
+          <div class="feature-icon">{{ feature.icon }}</div>
+          <h3>{{ feature.title }}</h3>
+          <p>{{ feature.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-card" *ngFor="let stat of stats">
+          <div class="stat-number">{{ stat.number }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="why-choose">
+    <div class="container">
+      <h2 class="section-title">Why Choose Kolkata Scotty?</h2>
+      <p class="section-subtitle">We provide the best bike training experience in Kolkata</p>
+      <div class="why-grid">
+        <div class="why-card" *ngFor="let item of whyChooseUs; let i = index">
+          <div class="why-icon">{{ item.icon }}</div>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="testimonials">
+    <div class="container">
+      <h2 class="section-title">What Our Students Say</h2>
+      <div class="testimonials-grid">
+        <div class="testimonial-card" *ngFor="let testimonial of testimonials">
+          <div class="testimonial-avatar">{{ testimonial.avatar }}</div>
+          <div class="testimonial-rating">
+            <span *ngFor="let star of [1,2,3,4,5]">⭐</span>
+          </div>
+          <p class="testimonial-text">"{{ testimonial.text }}"</p>
+          <h4 class="testimonial-name">{{ testimonial.name }}</h4>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="container">
+      <div class="cta-content">
+        <h2>Ready to Start Your Journey?</h2>
+        <p>Book your first training session today and learn from the best!</p>
+        <a routerLink="/booking" class="btn btn-primary btn-large">Book Now</a>
+      </div>
+    </div>
+  </section>
+</div>
