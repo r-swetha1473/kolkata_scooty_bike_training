@@ -32,6 +32,8 @@ interface Database {
           created_at: string;
           updated_at: string;
         };
+        Insert: Omit<Database['public']['Tables']['trainers']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['trainers']['Insert']>;
       };
       slots: {
         Row: {
@@ -45,6 +47,8 @@ interface Database {
           created_at: string;
           updated_at: string;
         };
+        Insert: Omit<Database['public']['Tables']['slots']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['slots']['Insert']>;
       };
       bookings: {
         Row: {
@@ -60,6 +64,8 @@ interface Database {
           created_at: string;
           updated_at: string;
         };
+        Insert: Omit<Database['public']['Tables']['bookings']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['bookings']['Insert']>;
       };
       audit_logs: {
         Row: {
@@ -73,6 +79,8 @@ interface Database {
           ip_address: string | null;
           created_at: string;
         };
+        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>;
       };
       settings: {
         Row: {
@@ -82,6 +90,8 @@ interface Database {
           updated_at: string;
           updated_by: string | null;
         };
+        Insert: Omit<Database['public']['Tables']['settings']['Row'], 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['settings']['Insert']>;
       };
     };
   };

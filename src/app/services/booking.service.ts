@@ -195,13 +195,14 @@ export class BookingService {
     const newBookedCount = typedSlot.booked_count + 1;
     const newStatus = newBookedCount >= typedSlot.capacity ? 'full' : 'available';
 
-    await this.supabase.client
+    // @ts-ignore
+    await (this.supabase.client
       .from('slots')
       .update({
         booked_count: newBookedCount,
         status: newStatus
-      } as any)
-      .eq('id', slotId);
+      })
+      .eq('id', slotId) as any);
 
     return booking;
   }
@@ -239,26 +240,28 @@ export class BookingService {
 
     if (fetchError) throw fetchError;
 
-    const { error } = await this.supabase.client
+    // @ts-ignore
+    const { error } = await (this.supabase.client
       .from('bookings')
       .update({
         status: 'cancelled',
         cancelled_at: new Date().toISOString(),
         cancelled_by: user.id,
         cancellation_reason: reason || 'Cancelled by user'
-      } as any)
-      .eq('id', bookingId);
+      })
+      .eq('id', bookingId) as any);
 
     if (error) throw error;
 
     const slot = (booking as any).slot;
     if (slot && slot.booked_count > 0) {
+      // @ts-ignore
       await (this.supabase.client
         .from('slots')
         .update({
           booked_count: slot.booked_count - 1,
           status: 'available'
-        } as any)
+        })
         .eq('id', slot.id) as any);
     }
   }

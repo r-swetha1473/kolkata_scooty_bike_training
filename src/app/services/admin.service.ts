@@ -100,12 +100,13 @@ export class AdminService {
     const updateData: any = { status };
     if (notes) updateData.notes = notes;
 
-    const { data, error } = await (this.supabase.client
+    // @ts-ignore
+    const { data, error } = await this.supabase.client
       .from('bookings')
-      .update(updateData as any)
+      .update(updateData)
       .eq('id', bookingId)
       .select()
-      .single() as any);
+      .single() as any;
 
     if (error) throw error;
 
@@ -143,7 +144,7 @@ export class AdminService {
     await this.createAuditLog({
       action: 'create_slot',
       entity_type: 'slot',
-      entity_id: data?.id || null,
+      entity_id: (data as any)?.id || null,
       new_data: data
     });
 
@@ -157,12 +158,13 @@ export class AdminService {
       .eq('id', slotId)
       .single();
 
-    const { data, error } = await (this.supabase.client
+    // @ts-ignore
+    const { data, error } = await this.supabase.client
       .from('slots')
-      .update(updates as any)
+      .update(updates)
       .eq('id', slotId)
       .select()
-      .single() as any);
+      .single() as any;
 
     if (error) throw error;
 
@@ -213,12 +215,13 @@ export class AdminService {
   }
 
   async updateTrainer(trainerId: string, updates: any) {
-    const { data, error } = await (this.supabase.client
+    // @ts-ignore
+    const { data, error } = await this.supabase.client
       .from('trainers')
-      .update(updates as any)
+      .update(updates)
       .eq('id', trainerId)
       .select()
-      .single() as any);
+      .single() as any;
 
     if (error) throw error;
 
@@ -251,12 +254,13 @@ export class AdminService {
       throw new Error('Only superadmins can update user roles');
     }
 
-    const { data, error } = await (this.supabase.client
+    // @ts-ignore
+    const { data, error } = await this.supabase.client
       .from('profiles')
-      .update({ role } as any)
+      .update({ role })
       .eq('id', userId)
       .select()
-      .single() as any);
+      .single() as any;
 
     if (error) throw error;
 
