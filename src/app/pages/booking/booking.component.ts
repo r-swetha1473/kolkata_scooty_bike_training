@@ -1,104 +1,115 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BookingService, TimeSlot } from '../../services/booking.service';
+import { BookingService, SlotWithTrainer } from '../../services/booking.service';
+import { AuthService } from '../../services/auth.service';
+import { CaptchaComponent } from '../../components/captcha/captcha.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CaptchaComponent],
   templateUrl: './booking.component.html',
   styleUrls: ['./booking.component.css']
 })
-export class BookingComponent implements OnInit {
-  timeSlots: TimeSlot[] = [];
+export class BookingComponent implements OnInit, OnDestroy {
+  slots: SlotWithTrainer[] = [];
   selectedDate: string = '';
-  selectedSlot: TimeSlot | null = null;
+  selectedSlot: SlotWithTrainer | null = null;
   showBookingModal = false;
-  showDriverModal = false;
   showConfirmation = false;
+  showLoginPrompt = false;
+  captchaVerified = false;
+  loading = false;
+  errorMessage = '';
+  private slotsSubscription?: Subscription;
 
   bookingForm = {
-    name: '',
-    phone: '',
-    date: '',
-    time: '',
-    driver: ''
+    notes: ''
   };
 
-  drivers = [
-    { id: 1, name: 'Rajesh Kumar', avatar: '👨‍🏫', rating: 4.9, experience: '12 Years' },
-    { id: 2, name: 'Anita Sharma', avatar: '👩‍🏫', rating: 4.8, experience: '10 Years' },
-    { id: 3, name: 'Vikram Singh', avatar: '👨‍🏫', rating: 5.0, experience: '15 Years' },
-    { id: 4, name: 'Priya Banerjee', avatar: '👩‍🏫', rating: 4.9, experience: '8 Years' }
-  ];
+  constructor(
+    public bookingService: BookingService,
+    public authService: AuthService
+  ) {}
 
-  selectedDriver: any = null;
-
-  constructor(private bookingService: BookingService) {}
-
-  ngOnInit() {
-    this.timeSlots = this.bookingService.generateTimeSlots();
+  async ngOnInit() {
     const today = new Date();
     this.selectedDate = today.toISOString().split('T')[0];
-    this.updateSlotAvailability();
+    await this.loadSlots();
+
+    this.slotsSubscription = this.bookingService.slots$.subscribe(slots => {
+      this.slots = slots.filter(slot => {
+        const slotDate = new Date(slot.start_time).toISOString().split('T')[0];
+        return slotDate === this.selectedDate;
+      });
+    });
   }
 
-  onDateChange() {
-    this.updateSlotAvailability();
+  ngOnDestroy() {
+    this.slotsSubscription?.unsubscribe();
   }
 
-  updateSlotAvailability() {
-    this.timeSlots = this.timeSlots.map(slot => ({
-      ...slot,
-      available: !this.bookingService.isSlotBooked(this.selectedDate, slot.time)
-    }));
+  async loadSlots() {
+    this.loading = true;
+    try {
+      await this.bookingService.getSlotsByDate(this.selectedDate);
+    } catch (error) {
+      this.errorMessage = 'Failed to load slots';
+    } finally {
+      this.loading = false;
+    }
   }
 
-  selectSlot(slot: TimeSlot) {
-    if (slot.available) {
+  async onDateChange() {
+    await this.loadSlots();
+  }
+
+  selectSlot(slot: SlotWithTrainer) {
+    if (!this.authService.isAuthenticated()) {
+      this.showLoginPrompt = true;
+      return;
+    }
+
+    if (slot.status === 'available' && slot.booked_count < slot.capacity) {
       this.selectedSlot = slot;
-      this.bookingForm.date = this.selectedDate;
-      this.bookingForm.time = slot.time;
       this.showBookingModal = true;
+      this.captchaVerified = false;
+    }
+  }
+
+  async signInWithGoogle() {
+    try {
+      await this.authService.signInWithGoogle();
+    } catch (error) {
+      this.errorMessage = 'Failed to sign in';
     }
   }
 
   closeBookingModal() {
     this.showBookingModal = false;
     this.selectedSlot = null;
+    this.captchaVerified = false;
     this.resetForm();
   }
 
-  openDriverModal() {
-    if (this.bookingForm.name && this.bookingForm.phone) {
-      this.showDriverModal = true;
-    }
+  onCaptchaVerified(verified: boolean) {
+    this.captchaVerified = verified;
   }
 
-  closeDriverModal() {
-    this.showDriverModal = false;
-  }
+  async confirmBooking() {
+    if (!this.selectedSlot || !this.captchaVerified) return;
 
-  selectDriver(driver: any) {
-    this.selectedDriver = driver;
-    this.bookingForm.driver = driver.name;
-    this.closeDriverModal();
-  }
+    this.loading = true;
+    this.errorMessage = '';
 
-  confirmBooking() {
-    if (this.bookingForm.name && this.bookingForm.phone && this.bookingForm.driver) {
-      const booking = {
-        id: Date.now().toString(),
-        name: this.bookingForm.name,
-        phone: this.bookingForm.phone,
-        date: this.bookingForm.date,
-        time: this.bookingForm.time,
-        driver: this.bookingForm.driver
-      };
-
-      this.bookingService.bookSlot(booking);
-      this.updateSlotAvailability();
+    try {
+      await this.bookingService.createBooking(
+        this.selectedSlot.id,
+        this.selectedSlot.trainer_id,
+        this.bookingForm.notes
+      );
 
       this.closeBookingModal();
       this.showConfirmation = true;
@@ -106,21 +117,34 @@ export class BookingComponent implements OnInit {
       setTimeout(() => {
         this.showConfirmation = false;
       }, 4000);
+
+      await this.loadSlots();
+    } catch (error: any) {
+      this.errorMessage = error.message || 'Failed to create booking';
+    } finally {
+      this.loading = false;
     }
   }
 
   resetForm() {
     this.bookingForm = {
-      name: '',
-      phone: '',
-      date: '',
-      time: '',
-      driver: ''
+      notes: ''
     };
-    this.selectedDriver = null;
+    this.errorMessage = '';
   }
 
   getMinDate(): string {
     return new Date().toISOString().split('T')[0];
+  }
+
+  formatTime(dateString: string): string {
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  isSlotAvailable(slot: SlotWithTrainer): boolean {
+    return slot.status === 'available' && slot.booked_count < slot.capacity;
   }
 }

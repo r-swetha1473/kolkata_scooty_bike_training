@@ -1,12 +1,16 @@
 {
   "name": "Kolkata Scotty Bike Training",
   "short_name": "Scotty Bike",
-  "description": "Professional bike training in Kolkata with certified instructors",
+  "description": "Professional bike and scooter training in Kolkata. Book online with certified instructors and learn to ride safely.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#667eea",
   "orientation": "portrait-primary",
+  "categories": ["education", "lifestyle"],
+  "lang": "en-IN",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -19,6 +23,21 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Book a Slot",
+      "short_name": "Book",
+      "description": "Book a training slot",
+      "url": "/booking",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
