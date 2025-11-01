@@ -100,13 +100,12 @@ export class AdminService {
     const updateData: any = { status };
     if (notes) updateData.notes = notes;
 
-    // @ts-ignore
-    const { data, error } = await this.supabase.client
+    const { data, error } = await (this.supabase.client
       .from('bookings')
-      .update(updateData)
+      .update(updateData as any)
       .eq('id', bookingId)
       .select()
-      .single() as any;
+      .single() as any);
 
     if (error) throw error;
 
@@ -158,13 +157,12 @@ export class AdminService {
       .eq('id', slotId)
       .single();
 
-    // @ts-ignore
-    const { data, error } = await this.supabase.client
+    const { data, error } = await (this.supabase.client
       .from('slots')
-      .update(updates)
+      .update(updates as any)
       .eq('id', slotId)
       .select()
-      .single() as any;
+      .single() as any);
 
     if (error) throw error;
 
@@ -215,13 +213,12 @@ export class AdminService {
   }
 
   async updateTrainer(trainerId: string, updates: any) {
-    // @ts-ignore
-    const { data, error } = await this.supabase.client
+    const { data, error } = await (this.supabase.client
       .from('trainers')
-      .update(updates)
+      .update(updates as any)
       .eq('id', trainerId)
       .select()
-      .single() as any;
+      .single() as any);
 
     if (error) throw error;
 
@@ -254,13 +251,12 @@ export class AdminService {
       throw new Error('Only superadmins can update user roles');
     }
 
-    // @ts-ignore
-    const { data, error } = await this.supabase.client
+    const { data, error } = await (this.supabase.client
       .from('profiles')
-      .update({ role })
+      .update({ role } as any)
       .eq('id', userId)
       .select()
-      .single() as any;
+      .single() as any);
 
     if (error) throw error;
 

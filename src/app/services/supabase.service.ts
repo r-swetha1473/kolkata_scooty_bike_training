@@ -101,7 +101,7 @@ interface Database {
   providedIn: 'root'
 })
 export class SupabaseService {
-  private supabase: SupabaseClient<Database>;
+  private supabase: SupabaseClient<any>;
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   private sessionSubject = new BehaviorSubject<Session | null>(null);
 
@@ -112,7 +112,7 @@ export class SupabaseService {
     const supabaseUrl = this.getEnvVar('VITE_SUPABASE_URL');
     const supabaseKey = this.getEnvVar('VITE_SUPABASE_ANON_KEY');
 
-    this.supabase = createClient<Database>(supabaseUrl, supabaseKey);
+    this.supabase = createClient<any>(supabaseUrl, supabaseKey);
 
     this.supabase.auth.onAuthStateChange((event, session) => {
       this.sessionSubject.next(session);
@@ -136,7 +136,7 @@ export class SupabaseService {
     this.currentUserSubject.next(data.session?.user ?? null);
   }
 
-  get client(): SupabaseClient<Database> {
+  get client(): SupabaseClient<any> {
     return this.supabase;
   }
 
