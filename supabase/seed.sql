@@ -63,7 +63,7 @@ BEGIN
     slot_date := CURRENT_DATE + day_offset;
 
     FOR hour IN 9..20 LOOP
-      FOR minute IN ARRAY[0, 30] LOOP
+      FOREACH minute IN ARRAY ARRAY[0, 30] LOOP
         slot_time := make_time(hour, minute, 0);
         slot_start := (slot_date + slot_time)::timestamptz;
         slot_end := slot_start + interval '30 minutes';
