@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 interface Database {
   public: {
@@ -109,10 +110,10 @@ export class SupabaseService {
   session$: Observable<Session | null> = this.sessionSubject.asObservable();
 
   constructor() {
-    const supabaseUrl = this.getEnvVar('VITE_SUPABASE_URL');
-    const supabaseKey = this.getEnvVar('VITE_SUPABASE_ANON_KEY');
-
-    this.supabase = createClient<any>(supabaseUrl, supabaseKey);
+    this.supabase = createClient<any>(
+      environment.supabaseUrl,
+      environment.supabaseAnonKey
+    );
 
     this.supabase.auth.onAuthStateChange((event, session) => {
       this.sessionSubject.next(session);
@@ -120,14 +121,6 @@ export class SupabaseService {
     });
 
     this.initializeAuth();
-  }
-
-  private getEnvVar(key: string): string {
-    const value = (import.meta as any).env?.[key];
-    if (!value) {
-      throw new Error(`Environment variable ${key} is not defined`);
-    }
-    return value;
   }
 
   private async initializeAuth() {

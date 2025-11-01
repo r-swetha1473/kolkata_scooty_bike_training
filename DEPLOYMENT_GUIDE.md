@@ -1,15 +1,19 @@
 # Deployment Guide
 
-## Build Successfully Fixed! ✅
-
-The TypeScript errors have been resolved and the project now builds successfully.
+## Build & Backend Successfully Fixed! ✅
 
 ### What Was Fixed
 
-The issue was with Supabase's strict TypeScript generics. Solution:
+**1. TypeScript Build Errors** ✅
 - Changed `SupabaseClient<Database>` to `SupabaseClient<any>`
-- This allows the build to complete while maintaining full functionality
-- All features work exactly as before
+- Build now completes successfully
+
+**2. Backend Connection Issue** ✅
+- Switched from `import.meta.env` (Vite-specific) to Angular's environment system
+- Backend now works correctly when published
+- No external environment variables needed!
+
+See `BACKEND_FIX.md` for detailed explanation.
 
 ## Deployment Options
 
@@ -28,16 +32,10 @@ The issue was with Supabase's strict TypeScript generics. Solution:
    - Import your GitHub repository
    - Vercel will auto-detect Angular configuration
 
-3. **Add Environment Variables**
-   In Vercel project settings, add:
-   ```
-   VITE_SUPABASE_URL=https://cogzshqrbuzhvstvjpso.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvZ3pzaHFyYnV6aHZzdHZqcHNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4MjA3MjUsImV4cCI6MjA3NzM5NjcyNX0.uFwIpiI6uNp6k2alDg08kwl7s8eNm6LnIkXPuEVk9h8
-   ```
-
-4. **Deploy**
+3. **Deploy**
    - Click "Deploy"
    - Vercel will run `npm run build` automatically
+   - ✅ Backend connects automatically (no env vars needed!)
    - Your site will be live in minutes!
 
 ### Option 2: Deploy to Netlify
