@@ -36,9 +36,6 @@ import { AuthService } from './services/auth.service';
                   <span class="dropdown-arrow">▼</span>
                 </button>
                 <div class="dropdown-menu" *ngIf="showUserMenu">
-                  <a routerLink="/admin" *ngIf="authService.isAdmin()" (click)="closeMenus()">
-                    <span class="menu-icon">⚙️</span> Admin Panel
-                  </a>
                   <a routerLink="/booking" (click)="closeMenus()">
                     <span class="menu-icon">📅</span> My Bookings
                   </a>

@@ -1,101 +1,207 @@
 /*
-  # Database Seed Data
+  # Clean Seed Data for Kolkata Scotty
 
-  Creates demo data for testing the application:
-  - Demo admin user (superadmin@demo.com)
-  - 4 Trainer profiles with different specializations
-  - Multiple training slots for the next 7 days
-  - Sample settings configuration
+  Creates demo data for testing:
+  - Admin users (for email/password login)
+  - Customer profiles
+  - Trainers with specializations
+  - Time slots for next 7 days
+  - Sample bookings
+  - System settings
 
-  Demo Credentials:
-  - Superadmin: superadmin@demo.com (role: superadmin)
-  - Admin: admin@demo.com (role: admin)
-  - Trainer: trainer1@demo.com (role: trainer)
-  - Customer: customer@demo.com (role: customer)
-
-  Note: These are demo accounts for testing. In production, use Google OAuth.
+  IMPORTANT:
+  1. Run migrations first
+  2. Create admin users in Supabase Auth dashboard
+  3. Run this seed file
 */
+
+-- Clean existing data
+TRUNCATE TABLE audit_logs CASCADE;
+TRUNCATE TABLE bookings CASCADE;
+TRUNCATE TABLE slots CASCADE;
+TRUNCATE TABLE trainers CASCADE;
+TRUNCATE TABLE profiles CASCADE;
+
+-- =============================================
+-- 1. PROFILES (Admin & Customers)
+-- =============================================
+
+-- Note: Admin user IDs will be replaced after creating in Supabase Auth
+-- Placeholder IDs for now
+INSERT INTO profiles (id, email, full_name, phone, role) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'admin@kolkatascotty.com', 'Admin User', '+91 98765 00001', 'admin'),
+  ('00000000-0000-0000-0000-000000000002', 'superadmin@kolkatascotty.com', 'Super Admin', '+91 98765 00002', 'superadmin');
+
+-- Demo customers
+INSERT INTO profiles (id, email, full_name, phone, role) VALUES
+  ('10000000-0000-0000-0000-000000000001', 'customer1@example.com', 'Raj Kumar', '+91 98765 11111', 'customer'),
+  ('10000000-0000-0000-0000-000000000002', 'customer2@example.com', 'Priya Singh', '+91 98765 22222', 'customer'),
+  ('10000000-0000-0000-0000-000000000003', 'customer3@example.com', 'Amit Sharma', '+91 98765 33333', 'customer');
+
+-- Demo trainer profiles
+INSERT INTO profiles (id, email, full_name, phone, role) VALUES
+  ('20000000-0000-0000-0000-000000000001', 'rajesh.mehta@kolkatascotty.com', 'Rajesh Mehta', '+91 98765 91111', 'trainer'),
+  ('20000000-0000-0000-0000-000000000002', 'sanjay.das@kolkatascotty.com', 'Sanjay Das', '+91 98765 92222', 'trainer'),
+  ('20000000-0000-0000-0000-000000000003', 'vikram.patel@kolkatascotty.com', 'Vikram Patel', '+91 98765 93333', 'trainer');
+
+-- =============================================
+-- 2. TRAINERS
+-- =============================================
+
+INSERT INTO trainers (user_id, bio, experience_years, specialization, rating, total_sessions, is_active) VALUES
+  (
+    '20000000-0000-0000-0000-000000000001',
+    'Expert bike trainer with 10+ years of experience. Specializes in beginners and highway riding.',
+    10,
+    ARRAY['Beginner Training', 'Highway Riding', 'License Test Prep'],
+    4.8,
+    450,
+    true
+  ),
+  (
+    '20000000-0000-0000-0000-000000000002',
+    'Professional instructor focused on safety and defensive riding techniques.',
+    8,
+    ARRAY['Safety Training', 'Defensive Riding', 'Advanced Skills'],
+    4.9,
+    380,
+    true
+  ),
+  (
+    '20000000-0000-0000-0000-000000000003',
+    'Experienced trainer specializing in sports bikes and advanced maneuvers.',
+    6,
+    ARRAY['Sports Bikes', 'Advanced Maneuvers', 'City Traffic'],
+    4.7,
+    290,
+    true
+  );
+
+-- =============================================
+-- 3. TIME SLOTS (Next 7 Days)
+-- =============================================
 
 DO $$
 DECLARE
-  admin_user_id uuid;
-  trainer1_id uuid;
-  trainer2_id uuid;
-  trainer3_id uuid;
-  trainer4_id uuid;
-  slot_date date;
-  slot_time time;
-  slot_start timestamptz;
-  slot_end timestamptz;
+  trainer1_id UUID;
+  trainer2_id UUID;
+  trainer3_id UUID;
+  slot_date DATE;
 BEGIN
-  admin_user_id := 'a0000000-0000-0000-0000-000000000001'::uuid;
-  trainer1_id := gen_random_uuid();
-  trainer2_id := gen_random_uuid();
-  trainer3_id := gen_random_uuid();
-  trainer4_id := gen_random_uuid();
+  -- Get trainer IDs
+  SELECT id INTO trainer1_id FROM trainers WHERE user_id = '20000000-0000-0000-0000-000000000001';
+  SELECT id INTO trainer2_id FROM trainers WHERE user_id = '20000000-0000-0000-0000-000000000002';
+  SELECT id INTO trainer3_id FROM trainers WHERE user_id = '20000000-0000-0000-0000-000000000003';
 
-  INSERT INTO profiles (id, email, full_name, phone, role, avatar_url) VALUES
-  (admin_user_id, 'superadmin@demo.com', 'Super Admin', '+91 98765 00001', 'superadmin', NULL),
-  ('a0000000-0000-0000-0000-000000000002'::uuid, 'admin@demo.com', 'Admin User', '+91 98765 00002', 'admin', NULL),
-  ('a0000000-0000-0000-0000-000000000003'::uuid, 'trainer1@demo.com', 'Rajesh Kumar', '+91 98765 43211', 'trainer', NULL),
-  ('a0000000-0000-0000-0000-000000000004'::uuid, 'trainer2@demo.com', 'Anita Sharma', '+91 98765 43212', 'trainer', NULL),
-  ('a0000000-0000-0000-0000-000000000005'::uuid, 'trainer3@demo.com', 'Vikram Singh', '+91 98765 43213', 'trainer', NULL),
-  ('a0000000-0000-0000-0000-000000000006'::uuid, 'trainer4@demo.com', 'Priya Banerjee', '+91 98765 43214', 'trainer', NULL),
-  ('a0000000-0000-0000-0000-000000000007'::uuid, 'customer@demo.com', 'Test Customer', '+91 98765 99999', 'customer', NULL)
-  ON CONFLICT (id) DO NOTHING;
+  -- Create slots for next 7 days
+  FOR i IN 0..6 LOOP
+    slot_date := CURRENT_DATE + i;
 
-  INSERT INTO trainers (id, user_id, bio, experience_years, specialization, rating, total_sessions, is_active) VALUES
-  (trainer1_id, 'a0000000-0000-0000-0000-000000000003'::uuid,
-   'Experienced trainer specializing in beginner-friendly lessons',
-   12, ARRAY['Beginner Training', 'Safety Protocols'], 4.9, 450, true),
-  (trainer2_id, 'a0000000-0000-0000-0000-000000000004'::uuid,
-   'Expert in defensive driving and advanced techniques',
-   10, ARRAY['Advanced Training', 'Defensive Driving'], 4.8, 380, true),
-  (trainer3_id, 'a0000000-0000-0000-0000-000000000005'::uuid,
-   'Specialized in confidence building and road awareness',
-   15, ARRAY['Confidence Building', 'Road Awareness'], 5.0, 520, true),
-  (trainer4_id, 'a0000000-0000-0000-0000-000000000006'::uuid,
-   'Focus on practical skills and real-world scenarios',
-   8, ARRAY['Practical Skills', 'City Riding'], 4.9, 310, true)
-  ON CONFLICT (id) DO NOTHING;
+    -- Morning slots
+    INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status) VALUES
+      (trainer1_id, slot_date + TIME '09:00', slot_date + TIME '10:00', 3, 0, 'available'),
+      (trainer1_id, slot_date + TIME '10:00', slot_date + TIME '11:00', 3, 0, 'available'),
+      (trainer2_id, slot_date + TIME '09:00', slot_date + TIME '10:00', 2, 0, 'available'),
+      (trainer2_id, slot_date + TIME '10:00', slot_date + TIME '11:00', 2, 0, 'available');
 
-  FOR day_offset IN 0..6 LOOP
-    slot_date := CURRENT_DATE + day_offset;
+    -- Afternoon slots
+    INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status) VALUES
+      (trainer2_id, slot_date + TIME '14:00', slot_date + TIME '15:00', 2, 0, 'available'),
+      (trainer3_id, slot_date + TIME '14:00', slot_date + TIME '15:00', 3, 0, 'available'),
+      (trainer3_id, slot_date + TIME '15:00', slot_date + TIME '16:00', 3, 0, 'available');
 
-    FOR hour IN 9..20 LOOP
-      FOREACH minute IN ARRAY ARRAY[0, 30] LOOP
-        slot_time := make_time(hour, minute, 0);
-        slot_start := (slot_date + slot_time)::timestamptz;
-        slot_end := slot_start + interval '30 minutes';
-
-        IF day_offset % 4 = 0 THEN
-          INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
-          VALUES (trainer1_id, slot_start, slot_end, 1, 0, 'available')
-          ON CONFLICT DO NOTHING;
-        ELSIF day_offset % 4 = 1 THEN
-          INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
-          VALUES (trainer2_id, slot_start, slot_end, 1, 0, 'available')
-          ON CONFLICT DO NOTHING;
-        ELSIF day_offset % 4 = 2 THEN
-          INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
-          VALUES (trainer3_id, slot_start, slot_end, 1, 0, 'available')
-          ON CONFLICT DO NOTHING;
-        ELSE
-          INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
-          VALUES (trainer4_id, slot_start, slot_end, 1, 0, 'available')
-          ON CONFLICT DO NOTHING;
-        END IF;
-      END LOOP;
-    END LOOP;
+    -- Evening slots
+    INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status) VALUES
+      (trainer1_id, slot_date + TIME '18:00', slot_date + TIME '19:00', 3, 0, 'available'),
+      (trainer3_id, slot_date + TIME '18:00', slot_date + TIME '19:00', 3, 0, 'available');
   END LOOP;
+END $$;
 
-  INSERT INTO settings (key, value, description, updated_by) VALUES
-  ('cancellation_window_hours', '24'::jsonb, 'Hours before session to allow free cancellation', admin_user_id),
-  ('allow_overbooking', 'false'::jsonb, 'Allow booking more than slot capacity', admin_user_id),
-  ('session_duration_minutes', '30'::jsonb, 'Default session duration in minutes', admin_user_id),
-  ('max_advance_booking_days', '14'::jsonb, 'Maximum days in advance to book', admin_user_id),
-  ('business_hours_start', '"09:00"'::jsonb, 'Business hours start time', admin_user_id),
-  ('business_hours_end', '"21:00"'::jsonb, 'Business hours end time', admin_user_id)
-  ON CONFLICT (key) DO NOTHING;
+-- =============================================
+-- 4. SAMPLE BOOKINGS
+-- =============================================
 
+DO $$
+DECLARE
+  slot_id UUID;
+  trainer_id UUID;
+BEGIN
+  -- Get a slot from today
+  SELECT s.id, s.trainer_id INTO slot_id, trainer_id
+  FROM slots s
+  WHERE DATE(s.start_time) = CURRENT_DATE
+  AND TIME(s.start_time) = '09:00:00'
+  LIMIT 1;
+
+  -- Create sample bookings
+  IF slot_id IS NOT NULL THEN
+    INSERT INTO bookings (user_id, slot_id, trainer_id, status, notes) VALUES
+      ('10000000-0000-0000-0000-000000000001', slot_id, trainer_id, 'confirmed', 'First time learner');
+
+    UPDATE slots SET booked_count = 1 WHERE id = slot_id;
+  END IF;
+END $$;
+
+-- =============================================
+-- 5. SYSTEM SETTINGS
+-- =============================================
+
+INSERT INTO settings (key, value, description, updated_by) VALUES
+  (
+    'business_hours',
+    '{"monday": "09:00-20:00", "tuesday": "09:00-20:00", "wednesday": "09:00-20:00", "thursday": "09:00-20:00", "friday": "09:00-20:00", "saturday": "09:00-20:00", "sunday": "10:00-18:00"}'::jsonb,
+    'Business operating hours',
+    '00000000-0000-0000-0000-000000000001'
+  ),
+  (
+    'booking_settings',
+    '{"advance_booking_days": 30, "cancellation_hours": 24, "max_bookings_per_user": 5}'::jsonb,
+    'Booking configuration',
+    '00000000-0000-0000-0000-000000000001'
+  ),
+  (
+    'pricing',
+    '{"per_session": 500, "package_5": 2250, "package_10": 4000}'::jsonb,
+    'Session pricing',
+    '00000000-0000-0000-0000-000000000001'
+  );
+
+-- =============================================
+-- SUMMARY
+-- =============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '==========================================';
+  RAISE NOTICE 'Seed Data Created Successfully!';
+  RAISE NOTICE '==========================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Profiles: %', (SELECT COUNT(*) FROM profiles);
+  RAISE NOTICE 'Trainers: %', (SELECT COUNT(*) FROM trainers);
+  RAISE NOTICE 'Slots: %', (SELECT COUNT(*) FROM slots);
+  RAISE NOTICE 'Bookings: %', (SELECT COUNT(*) FROM bookings);
+  RAISE NOTICE '';
+  RAISE NOTICE '==========================================';
+  RAISE NOTICE 'NEXT STEPS: Create Admin Users';
+  RAISE NOTICE '==========================================';
+  RAISE NOTICE '';
+  RAISE NOTICE '1. Go to Supabase Dashboard';
+  RAISE NOTICE '   Authentication > Users > Add User';
+  RAISE NOTICE '';
+  RAISE NOTICE '2. Create admin user:';
+  RAISE NOTICE '   Email: admin@kolkatascotty.com';
+  RAISE NOTICE '   Password: admin123';
+  RAISE NOTICE '   Auto Confirm: Yes';
+  RAISE NOTICE '';
+  RAISE NOTICE '3. Link to profile (replace USER_ID):';
+  RAISE NOTICE '   UPDATE profiles';
+  RAISE NOTICE '   SET id = ''USER_ID''';
+  RAISE NOTICE '   WHERE email = ''admin@kolkatascotty.com'';';
+  RAISE NOTICE '';
+  RAISE NOTICE '4. Test admin login:';
+  RAISE NOTICE '   Visit: /admin/login';
+  RAISE NOTICE '   Use admin@kolkatascotty.com / admin123';
+  RAISE NOTICE '';
+  RAISE NOTICE '==========================================';
 END $$;

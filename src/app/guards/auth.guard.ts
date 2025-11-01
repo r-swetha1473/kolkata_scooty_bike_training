@@ -19,7 +19,7 @@ export const adminGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
 
   if (!authService.isAuthenticated()) {
-    router.navigate(['/'], { queryParams: { returnUrl: state.url } });
+    router.navigate(['/admin/login'], { queryParams: { returnUrl: state.url } });
     return false;
   }
 
@@ -27,7 +27,7 @@ export const adminGuard: CanActivateFn = (route, state) => {
     return true;
   }
 
-  router.navigate(['/']);
+  router.navigate(['/admin/login']);
   return false;
 };
 

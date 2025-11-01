@@ -45,6 +45,21 @@ export class AuthService {
     }
   }
 
+  async signInWithEmailPassword(email: string, password: string) {
+    try {
+      const { user } = await this.supabase.signInWithEmailPassword(email, password);
+      if (user) {
+        const profile = await this.supabase.getUserProfile(user.id);
+        this.userProfileSubject.next(profile);
+        return profile;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error signing in:', error);
+      throw error;
+    }
+  }
+
   async signOut() {
     try {
       await this.supabase.signOut();
