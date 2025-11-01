@@ -87,6 +87,11 @@ import { AdminService } from '../../../services/admin.service';
                     (click)="updateStatus(booking.id, 'cancelled')">
                     ✕ Cancel
                   </button>
+                  <button
+                    class="btn-action btn-delete"
+                    (click)="deleteBooking(booking.id)">
+                    🗑️ Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -268,6 +273,16 @@ import { AdminService } from '../../../services/admin.service';
       color: white;
     }
 
+    .btn-delete {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .btn-delete:hover {
+      background: #f59e0b;
+      color: white;
+    }
+
     .empty-state {
       padding: 60px 20px;
       text-align: center;
@@ -345,5 +360,19 @@ export class AdminBookingsComponent implements OnInit {
 
   formatDateTime(dateString: string): string {
     return new Date(dateString).toLocaleString();
+  }
+
+  async deleteBooking(bookingId: string) {
+    if (!confirm('Are you sure you want to permanently delete this booking? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await this.adminService.deleteBooking(bookingId).toPromise();
+      await this.loadBookings();
+    } catch (error: any) {
+      console.error('Error deleting booking:', error);
+      alert(error.error?.error || error.error?.message || 'Failed to delete booking');
+    }
   }
 }

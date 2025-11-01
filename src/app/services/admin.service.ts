@@ -78,7 +78,23 @@ export class AdminService {
     return this.http.put(`/admin/trainers/${trainerId}`, trainerData);
   }
 
+  deleteTrainer(trainerId: string): Observable<any> {
+    return this.http.delete(`/admin/trainers/${trainerId}`);
+  }
+
   updateBookingStatus(bookingId: string, status: string): Observable<any> {
     return this.http.put(`/admin/bookings/${bookingId}/status`, { status });
+  }
+
+  deleteBooking(bookingId: string): Observable<any> {
+    return this.http.delete(`/admin/bookings/${bookingId}`);
+  }
+
+  createUser(userData: any): Observable<any> {
+    return this.http.post('/admin/users', userData);
+  }
+
+  deleteUser(userId: string): Observable<any> {
+    return this.http.delete(`/admin/users/${userId}`);
   }
 }
