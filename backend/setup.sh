@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # Colors for output
 RED='\033[0;31m'
@@ -54,9 +54,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
 SQL
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Database and user created${NC}\n"
+    echo -e "${GREEN}âœ“ Database and user created${NC}\n"
 else
-    echo -e "${RED}✗ Failed to create database${NC}"
+    echo -e "${RED}âœ— Failed to create database${NC}"
     exit 1
 fi
 
@@ -66,9 +66,9 @@ echo -e "${GREEN}Step 2: Running schema...${NC}"
 PGPASSWORD=$DB_PASS psql -U $DB_USER -d $DB_NAME -f schema.sql
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Schema created${NC}\n"
+    echo -e "${GREEN}âœ“ Schema created${NC}\n"
 else
-    echo -e "${RED}✗ Failed to create schema${NC}"
+    echo -e "${RED}âœ— Failed to create schema${NC}"
     exit 1
 fi
 

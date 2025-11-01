@@ -1,4 +1,5 @@
 -- Kolkata Scotty Bike Training Database Schema
+-- Run this in pgAdmin Query Tool connected to the 'kolkata_scotty' database
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -11,7 +12,6 @@ CREATE TABLE IF NOT EXISTS profiles (
   phone TEXT,
   avatar_url TEXT,
   role TEXT NOT NULL CHECK (role IN ('customer', 'trainer', 'admin', 'superadmin')) DEFAULT 'customer',
-  password_hash TEXT, -- For admin email/password authentication
   google_id TEXT UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -122,3 +122,11 @@ CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON bookings
 
 CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Grant permissions to scotty user
+GRANT ALL ON SCHEMA public TO scotty;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scotty;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scotty;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO scotty;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO scotty;
+

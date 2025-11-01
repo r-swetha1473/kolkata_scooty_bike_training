@@ -69,4 +69,356 @@ router.get('/dashboard', async (req, res, next) => {
   }
 });
 
+// Alias for dashboard
+router.get('/stats', async (req, res, next) => {
+  try {
+    const stats = {};
+
+    const totalUsers = await db.query('SELECT COUNT(*) FROM profiles');
+    stats.totalUsers = parseInt(totalUsers.rows[0].count);
+
+    const totalBookings = await db.query('SELECT COUNT(*) FROM bookings');
+    stats.totalBookings = parseInt(totalBookings.rows[0].count);
+
+    const activeTrainers = await db.query('SELECT COUNT(*) FROM trainers WHERE is_active = true');
+    stats.activeTrainers = parseInt(activeTrainers.rows[0].count);
+
+    const upcomingBookings = await db.query(`
+      SELECT COUNT(*) FROM bookings b
+      JOIN slots s ON b.slot_id = s.id
+      WHERE s.start_time > NOW() AND b.status = 'confirmed'
+    `);
+    stats.upcomingBookings = parseInt(upcomingBookings.rows[0].count);
+
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all trainers with their profile information
+router.get('/trainers', async (req, res, next) => {
+  try {
+    const result = await db.query(`
+      SELECT t.*,
+             p.id as profile_id, p.email, p.full_name, p.phone, p.avatar_url, p.role
+      FROM trainers t
+      JOIN profiles p ON t.user_id = p.id
+      ORDER BY t.created_at DESC
+    `);
+
+    // Format response to match frontend expectations
+    const trainers = result.rows.map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      bio: row.bio,
+      experience_years: row.experience_years,
+      specialization: row.specialization,
+      rating: parseFloat(row.rating) || 0,
+      total_sessions: row.total_sessions,
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      profile: {
+        id: row.profile_id,
+        email: row.email,
+        full_name: row.full_name,
+        phone: row.phone,
+        avatar_url: row.avatar_url,
+        role: row.role
+      }
+    }));
+
+    res.json(trainers);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update trainer
+router.put('/trainers/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { is_active, bio, experience_years, specialization } = req.body;
+
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramCount++}`);
+      values.push(is_active);
+    }
+    if (bio !== undefined) {
+      updates.push(`bio = $${paramCount++}`);
+      values.push(bio);
+    }
+    if (experience_years !== undefined) {
+      updates.push(`experience_years = $${paramCount++}`);
+      values.push(experience_years);
+    }
+    if (specialization !== undefined) {
+      updates.push(`specialization = $${paramCount++}`);
+      values.push(specialization);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+    const query = `UPDATE trainers SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    
+    const result = await db.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Trainer not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all slots with trainer information
+router.get('/slots', async (req, res, next) => {
+  try {
+    const result = await db.query(`
+      SELECT s.*,
+             t.id as trainer_table_id,
+             p.id as trainer_profile_id, p.full_name as trainer_name, p.email as trainer_email
+      FROM slots s
+      JOIN trainers t ON s.trainer_id = t.id
+      JOIN profiles p ON t.user_id = p.id
+      ORDER BY s.start_time DESC
+    `);
+
+    // Format response to match frontend expectations
+    const slots = result.rows.map(row => ({
+      id: row.id,
+      trainer_id: row.trainer_id,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      capacity: row.capacity,
+      booked_count: row.booked_count,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      trainer: {
+        id: row.trainer_table_id,
+        profile: {
+          id: row.trainer_profile_id,
+          full_name: row.trainer_name,
+          email: row.trainer_email
+        }
+      }
+    }));
+
+    res.json(slots);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create slot
+router.post('/slots', async (req, res, next) => {
+  try {
+    const { trainer_id, start_time, end_time, capacity } = req.body;
+
+    if (!trainer_id || !start_time || !end_time || !capacity) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await db.query(`
+      INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
+      VALUES ($1, $2, $3, $4, 0, 'available')
+      RETURNING *
+    `, [trainer_id, start_time, end_time, capacity]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') { // Unique constraint violation
+      return res.status(409).json({ error: 'Slot already exists at this time' });
+    }
+    next(error);
+  }
+});
+
+// Update slot
+router.put('/slots/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { start_time, end_time, capacity, status } = req.body;
+
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (start_time !== undefined) {
+      updates.push(`start_time = $${paramCount++}`);
+      values.push(start_time);
+    }
+    if (end_time !== undefined) {
+      updates.push(`end_time = $${paramCount++}`);
+      values.push(end_time);
+    }
+    if (capacity !== undefined) {
+      updates.push(`capacity = $${paramCount++}`);
+      values.push(capacity);
+    }
+    if (status !== undefined) {
+      updates.push(`status = $${paramCount++}`);
+      values.push(status);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+    const query = `UPDATE slots SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    
+    const result = await db.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Slot not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete slot
+router.delete('/slots/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await db.query('DELETE FROM slots WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Slot not found' });
+    }
+
+    res.json({ message: 'Slot deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get audit logs
+router.get('/audit', async (req, res, next) => {
+  try {
+    const result = await db.query(`
+      SELECT a.*,
+             p.full_name, p.email
+      FROM audit_logs a
+      LEFT JOIN profiles p ON a.user_id = p.id
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `);
+
+    // Format response
+    const logs = result.rows.map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      action: row.action,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id,
+      old_data: row.old_data,
+      new_data: row.new_data,
+      ip_address: row.ip_address,
+      created_at: row.created_at,
+      user: row.user_id ? {
+        full_name: row.full_name,
+        email: row.email
+      } : null
+    }));
+
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get settings
+router.get('/settings', async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT * FROM settings ORDER BY key');
+    
+    // Convert to object format
+    const settings = {};
+    result.rows.forEach(row => {
+      settings[row.key] = {
+        value: row.value,
+        description: row.description,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by
+      };
+    });
+
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update settings
+router.put('/settings', async (req, res, next) => {
+  try {
+    const settings = req.body;
+    const userId = req.user.id;
+
+    for (const [key, data] of Object.entries(settings)) {
+      const { value } = data;
+      
+      await db.query(`
+        INSERT INTO settings (key, value, description, updated_by)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (key) 
+        DO UPDATE SET 
+          value = EXCLUDED.value,
+          updated_by = EXCLUDED.updated_by,
+          updated_at = NOW()
+      `, [key, JSON.stringify(value), data.description || '', userId]);
+    }
+
+    res.json({ message: 'Settings updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update booking status
+router.put('/bookings/:id/status', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const result = await db.query(
+      'UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

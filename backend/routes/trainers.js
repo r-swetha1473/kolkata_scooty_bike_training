@@ -18,6 +18,23 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// Get active trainers (specific route before /:id to avoid conflict)
+router.get('/active', async (req, res, next) => {
+  try {
+    const result = await db.query(`
+      SELECT t.*, p.full_name, p.avatar_url, p.email
+      FROM trainers t
+      JOIN profiles p ON t.user_id = p.id
+      WHERE t.is_active = true
+      ORDER BY t.rating DESC, t.total_sessions DESC
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const result = await db.query(`
