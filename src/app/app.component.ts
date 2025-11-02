@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from './services/auth.service';
+import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
@@ -9,7 +10,7 @@ import { AuthService } from './services/auth.service';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule],
   template: `
     <div class="app-container">
-      <header class="header" [class.scrolled]="isScrolled">
+      <header class="header" *ngIf="!isAdminRoute" [class.scrolled]="isScrolled">
         <div class="container">
           <div class="header-content">
             <div class="logo">
@@ -60,11 +61,11 @@ import { AuthService } from './services/auth.service';
         </div>
       </header>
 
-      <main>
+      <main [class.no-padding-top]="isAdminRoute">
         <router-outlet></router-outlet>
       </main>
 
-      <footer class="footer">
+      <footer class="footer" *ngIf="!isAdminRoute">
         <div class="container">
           <div class="footer-content">
             <div class="footer-col">
@@ -113,6 +114,10 @@ import { AuthService } from './services/auth.service';
     main {
       flex: 1;
       padding-top: 80px;
+    }
+
+    main.no-padding-top {
+      padding-top: 0;
     }
 
     .header {
@@ -424,12 +429,28 @@ export class AppComponent implements OnInit {
   isScrolled = false;
   menuOpen = false;
   showUserMenu = false;
+  isAdminRoute = false;
 
-  constructor(public authService: AuthService) {}
+  constructor(
+    public authService: AuthService,
+    private router: Router
+  ) {}
 
   ngOnInit() {
+    // Check current route
+    this.checkAdminRoute(this.router.url);
+
+    // Listen to route changes
+    this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe((event: any) => {
+        this.checkAdminRoute(event.url);
+      });
+
     window.addEventListener('scroll', () => {
-      this.isScrolled = window.scrollY > 50;
+      if (!this.isAdminRoute) {
+        this.isScrolled = window.scrollY > 50;
+      }
     });
 
     document.addEventListener('click', (event) => {
@@ -438,6 +459,11 @@ export class AppComponent implements OnInit {
         this.showUserMenu = false;
       }
     });
+  }
+
+  private checkAdminRoute(url: string) {
+    // Check if route starts with /admin but not /admin/login
+    this.isAdminRoute = url.startsWith('/admin') && url !== '/admin/login' && !url.startsWith('/admin/login');
   }
 
   toggleMenu() {

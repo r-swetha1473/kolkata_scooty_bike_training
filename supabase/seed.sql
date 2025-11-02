@@ -28,9 +28,11 @@ TRUNCATE TABLE profiles CASCADE;
 
 -- Note: Admin user IDs will be replaced after creating in Supabase Auth
 -- Placeholder IDs for now
-INSERT INTO profiles (id, email, full_name, phone, role) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'admin@kolkatascotty.com', 'Admin User', '+91 98765 00001', 'admin'),
-  ('00000000-0000-0000-0000-000000000002', 'superadmin@kolkatascotty.com', 'Super Admin', '+91 98765 00002', 'superadmin');
+-- Password for both admin users: admin123
+-- Hash generated with: bcryptjs.hash('admin123', 10)
+INSERT INTO profiles (id, email, full_name, phone, role, password_hash) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'admin@kolkatascotty.com', 'Admin User', '+91 98765 00001', 'admin', '$2a$10$f87h02FkekIgyRPNLBlKEuf3KbUWrlfVrpqSJXdJYymnuTv749gVO'),
+  ('00000000-0000-0000-0000-000000000002', 'superadmin@kolkatascotty.com', 'Super Admin', '+91 98765 00002', 'superadmin', '$2a$10$f87h02FkekIgyRPNLBlKEuf3KbUWrlfVrpqSJXdJYymnuTv749gVO');
 
 -- Demo customers
 INSERT INTO profiles (id, email, full_name, phone, role) VALUES

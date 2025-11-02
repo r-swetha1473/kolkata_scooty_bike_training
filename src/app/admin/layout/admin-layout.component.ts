@@ -2,13 +2,17 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { AdminHeaderComponent } from '../components/admin-header/admin-header.component';
+import { AdminFooterComponent } from '../components/admin-footer/admin-footer.component';
 
 @Component({
   selector: 'app-admin-layout',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, AdminHeaderComponent, AdminFooterComponent],
   template: `
     <div class="admin-layout">
+      <app-admin-header></app-admin-header>
+      
       <aside class="sidebar">
         <div class="sidebar-header">
           <h2>🏍️ Admin Panel</h2>
@@ -54,20 +58,35 @@ import { AuthService } from '../../services/auth.service';
 
         <div class="sidebar-footer">
           <button class="btn-secondary" (click)="goToSite()">← Back to Site</button>
-          <button class="btn-danger" (click)="logout()">Logout</button>
+          <button class="btn-danger" (click)="logout()">🚪 Logout</button>
         </div>
       </aside>
 
-      <main class="main-content">
-        <router-outlet></router-outlet>
-      </main>
+      <div class="content-wrapper">
+        <main class="main-content">
+          <router-outlet></router-outlet>
+        </main>
+        
+        <app-admin-footer></app-admin-footer>
+      </div>
     </div>
   `,
   styles: [`
     .admin-layout {
       display: flex;
+      flex-direction: column;
       min-height: 100vh;
       background: #f5f7fa;
+    }
+
+    .content-wrapper {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      margin-left: 280px;
+      margin-top: 70px;
+      height: calc(100vh - 70px);
+      overflow: hidden;
     }
 
     .sidebar {
@@ -77,8 +96,10 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       flex-direction: column;
       position: fixed;
-      height: 100vh;
+      height: calc(100vh - 70px);
+      top: 70px;
       overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .sidebar-header {
@@ -207,9 +228,10 @@ import { AuthService } from '../../services/auth.service';
 
     .main-content {
       flex: 1;
-      margin-left: 280px;
       padding: 32px;
       overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
     }
 
     @media (max-width: 768px) {
@@ -217,10 +239,16 @@ import { AuthService } from '../../services/auth.service';
         width: 100%;
         position: relative;
         height: auto;
+        top: 0;
+      }
+
+      .content-wrapper {
+        margin-left: 0;
+        margin-top: 0;
+        min-height: auto;
       }
 
       .main-content {
-        margin-left: 0;
         padding: 16px;
       }
     }

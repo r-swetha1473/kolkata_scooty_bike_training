@@ -11,9 +11,12 @@ import { AdminService } from '../../../services/admin.service';
     <div class="settings-page">
       <h1 class="page-title">Settings</h1>
       <div class="settings-list">
+        <div *ngIf="settings.length === 0" class="empty-state">
+          <p>No settings found.</p>
+        </div>
         <div *ngFor="let setting of settings" class="setting-card">
           <div class="setting-key">{{ setting.key }}</div>
-          <div class="setting-description">{{ setting.description }}</div>
+          <div class="setting-description">{{ setting.description || 'No description' }}</div>
           <div class="setting-value">Value: {{ setting.value | json }}</div>
         </div>
       </div>
@@ -27,6 +30,7 @@ import { AdminService } from '../../../services/admin.service';
     .setting-key { font-weight: 600; font-size: 16px; margin-bottom: 8px; color: #1f2937; }
     .setting-description { font-size: 14px; color: #6b7280; margin-bottom: 8px; }
     .setting-value { font-size: 14px; font-family: monospace; background: #f3f4f6; padding: 8px; border-radius: 4px; }
+    .empty-state { text-align: center; padding: 40px; color: #6b7280; }
   `]
 })
 export class AdminSettingsComponent implements OnInit {
@@ -39,6 +43,16 @@ export class AdminSettingsComponent implements OnInit {
   }
 
   async loadSettings() {
-    this.settings = await this.adminService.getSettings();
+    try {
+      const settingsData = await this.adminService.getSettings();
+      // Convert object to array format for display
+      this.settings = Object.keys(settingsData || {}).map(key => ({
+        key,
+        ...settingsData[key]
+      }));
+    } catch (error: any) {
+      console.error('Error loading settings:', error);
+      this.settings = [];
+    }
   }
 }

@@ -20,6 +20,11 @@ import { AdminService } from '../../../services/admin.service';
           </tr>
         </thead>
         <tbody>
+          <tr *ngIf="logs.length === 0">
+            <td colspan="5" style="text-align: center; padding: 40px; color: #6b7280;">
+              No audit logs found.
+            </td>
+          </tr>
           <tr *ngFor="let log of logs">
             <td>{{ formatDateTime(log.created_at) }}</td>
             <td>{{ log.user?.full_name || 'System' }}</td>
@@ -52,7 +57,12 @@ export class AdminAuditComponent implements OnInit {
   }
 
   async loadLogs() {
-    this.logs = await this.adminService.getAuditLogs();
+    try {
+      this.logs = await this.adminService.getAuditLogs();
+    } catch (error: any) {
+      console.error('Error loading audit logs:', error);
+      this.logs = [];
+    }
   }
 
   formatDateTime(date: string) {

@@ -39,11 +39,28 @@ import { AdminService } from '../../../services/admin.service';
               </span>
             </td>
             <td>
-              <button class="btn-sm" [class.btn-success]="!trainer.is_active" [class.btn-warning]="trainer.is_active" (click)="toggleActive(trainer.id, trainer.is_active)">
-                {{ trainer.is_active ? 'Deactivate' : 'Activate' }}
-              </button>
-              <button class="btn-sm btn-info" (click)="showEditModal(trainer)">Edit</button>
-              <button class="btn-sm btn-danger" (click)="deleteTrainer(trainer.id)">Delete</button>
+              <div class="action-buttons">
+                <button 
+                  class="btn-icon" 
+                  [class.btn-success]="!trainer.is_active" 
+                  [class.btn-warning]="trainer.is_active" 
+                  (click)="toggleActive(trainer.id, trainer.is_active)"
+                  [title]="trainer.is_active ? 'Deactivate' : 'Activate'">
+                  <span class="icon">{{ trainer.is_active ? '⏸️' : '▶️' }}</span>
+                </button>
+                <button 
+                  class="btn-icon btn-info" 
+                  (click)="showEditModal(trainer)"
+                  title="Edit">
+                  <span class="icon">✏️</span>
+                </button>
+                <button 
+                  class="btn-icon btn-danger" 
+                  (click)="deleteTrainer(trainer.id)"
+                  title="Delete">
+                  <span class="icon">🗑️</span>
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -102,15 +119,74 @@ import { AdminService } from '../../../services/admin.service';
     .status-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .status-badge { background: #fee2e2; color: #991b1b; }
     .status-badge.active { background: #d1fae5; color: #065f46; }
-    .btn-sm { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 4px; transition: all 0.2s; }
-    .btn-success { background: #10b981; color: white; }
-    .btn-success:hover { background: #059669; }
-    .btn-warning { background: #f59e0b; color: white; }
-    .btn-warning:hover { background: #d97706; }
-    .btn-info { background: #3b82f6; color: white; }
-    .btn-info:hover { background: #2563eb; }
-    .btn-danger { background: #ef4444; color: white; }
-    .btn-danger:hover { background: #dc2626; }
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      background: #f3f4f6;
+    }
+
+    .btn-icon .icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .btn-icon.btn-success {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-icon.btn-success:hover {
+      background: #059669;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-icon.btn-warning {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .btn-icon.btn-warning:hover {
+      background: #d97706;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-icon.btn-info {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-icon.btn-info:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-icon.btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-icon.btn-danger:hover {
+      background: #dc2626;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+    }
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .modal-content { background: white; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 24px; border-bottom: 1px solid #e5e7eb; }
