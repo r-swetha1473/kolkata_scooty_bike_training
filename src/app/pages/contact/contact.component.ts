@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SettingsService, SiteSettings } from '../../services/settings.service';
 
 @Component({
   selector: 'app-contact',
@@ -9,7 +10,7 @@ import { FormsModule } from '@angular/forms';
   templateUrl: './contact.component.html',
   styleUrls: ['./contact.component.css']
 })
-export class ContactComponent {
+export class ContactComponent implements OnInit {
   formData = {
     name: '',
     email: '',
@@ -21,12 +22,26 @@ export class ContactComponent {
   showToast = false;
   toastMessage = '';
 
-  contactInfo = [
-    { icon: '📞', title: 'Phone', value: '+91 98765 43210', link: 'tel:+919876543210' },
-    { icon: '📧', title: 'Email', value: 'info@kolkatascotty.com', link: 'mailto:info@kolkatascotty.com' },
-    { icon: '📍', title: 'Location', value: 'Salt Lake, Kolkata, West Bengal', link: '#' },
-    { icon: '🕐', title: 'Hours', value: 'Mon-Sat: 9 AM - 9 PM', link: '#' }
-  ];
+  contactInfo: any[] = [];
+  settings: SiteSettings | null = null;
+
+  constructor(private settingsService: SettingsService) {}
+
+  async ngOnInit() {
+    await this.settingsService.loadSettings();
+    this.settings = this.settingsService.getSettings();
+    this.updateContactInfo();
+  }
+
+  updateContactInfo() {
+    if (!this.settings) return;
+    this.contactInfo = [
+      { icon: '📞', title: 'Phone', value: this.settings.contact_phone, link: `tel:${this.settings.contact_phone}` },
+      { icon: '📧', title: 'Email', value: this.settings.contact_email, link: `mailto:${this.settings.contact_email}` },
+      { icon: '📍', title: 'Location', value: this.settings.contact_address, link: '#' },
+      { icon: '🕐', title: 'Hours', value: 'Mon-Sat: 9 AM - 9 PM', link: '#' }
+    ];
+  }
 
   branches = [
     { name: 'Salt Lake Branch', address: 'Sector V, Salt Lake, Kolkata - 700091', phone: '+91 98765 43210' },

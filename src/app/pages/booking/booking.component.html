@@ -38,8 +38,10 @@
             [class.booked]="!isSlotAvailable(slot)"
             (click)="selectSlot(slot)">
             <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
-            <div class="slot-trainer">{{ slot.trainer?.profile?.full_name }}</div>
+            <div class="slot-trainer">{{ slot.trainer?.profile?.full_name || 'No Trainer' }}</div>
             <div class="slot-status">{{ slot.booked_count }}/{{ slot.capacity }}</div>
+            <div class="slot-badge" *ngIf="isSlotAvailable(slot)">Available</div>
+            <div class="slot-badge booked" *ngIf="!isSlotAvailable(slot)">Booked</div>
           </div>
         </div>
       </div>
@@ -77,9 +79,7 @@
       </p>
 
       <div *ngIf="selectedSlot" class="booking-details">
-        <p><strong>Trainer:</strong> {{ selectedSlot.trainer?.profile?.full_name }}</p>
-        <p><strong>Rating:</strong> ⭐ {{ selectedSlot.trainer?.rating || 5.0 }}</p>
-        <p><strong>Experience:</strong> {{ selectedSlot.trainer?.experience_years || 0 }} years</p>
+        <p><strong>Trainer:</strong> {{ selectedSlot.trainer?.profile?.full_name || 'Not assigned' }}</p>
       </div>
 
       <form (ngSubmit)="confirmBooking()">

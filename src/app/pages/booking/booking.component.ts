@@ -1,10 +1,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BookingService, SlotWithTrainer } from '../../services/booking.service';
+import { SlotService, Slot } from '../../services/slot.service';
 import { AuthService } from '../../services/auth.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { Subscription } from 'rxjs';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 @Component({
   selector: 'app-booking',
@@ -14,47 +15,42 @@ import { Subscription } from 'rxjs';
   styleUrls: ['./booking.component.css']
 })
 export class BookingComponent implements OnInit, OnDestroy {
-  slots: SlotWithTrainer[] = [];
+  slots: Slot[] = [];
   selectedDate: string = '';
-  selectedSlot: SlotWithTrainer | null = null;
+  selectedSlot: Slot | null = null;
   showBookingModal = false;
   showConfirmation = false;
   showLoginPrompt = false;
   captchaVerified = false;
   loading = false;
   errorMessage = '';
-  private slotsSubscription?: Subscription;
+  private supabase: SupabaseClient;
 
   bookingForm = {
     notes: ''
   };
 
   constructor(
-    public bookingService: BookingService,
+    private slotService: SlotService,
     public authService: AuthService
-  ) {}
+  ) {
+    const supabaseUrl = (window as any).ENV?.VITE_SUPABASE_URL || 'https://yvcdcmthcognzodgfvjq.supabase.co';
+    const supabaseKey = (window as any).ENV?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2Y2RjbXRoY29nbnpvZGdmdmpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwODY0MDMsImV4cCI6MjA3NzY2MjQwM30.Z2uJXAvEudnV6IvHPJxi-zJ5uWOv8R5xXV63_AsiTeo';
+    this.supabase = createClient(supabaseUrl, supabaseKey);
+  }
 
   async ngOnInit() {
     const today = new Date();
     this.selectedDate = today.toISOString().split('T')[0];
     await this.loadSlots();
-
-    this.slotsSubscription = this.bookingService.slots$.subscribe(slots => {
-      this.slots = slots.filter(slot => {
-        const slotDate = new Date(slot.start_time).toISOString().split('T')[0];
-        return slotDate === this.selectedDate;
-      });
-    });
   }
 
-  ngOnDestroy() {
-    this.slotsSubscription?.unsubscribe();
-  }
+  ngOnDestroy() {}
 
   async loadSlots() {
     this.loading = true;
     try {
-      await this.bookingService.getSlotsByDate(this.selectedDate);
+      this.slots = await this.slotService.getAvailableSlots(this.selectedDate);
     } catch (error) {
       this.errorMessage = 'Failed to load slots';
     } finally {
@@ -66,13 +62,13 @@ export class BookingComponent implements OnInit, OnDestroy {
     await this.loadSlots();
   }
 
-  selectSlot(slot: SlotWithTrainer) {
+  selectSlot(slot: Slot) {
     if (!this.authService.isAuthenticated()) {
       this.showLoginPrompt = true;
       return;
     }
 
-    if (slot.status === 'available' && slot.booked_count < slot.capacity) {
+    if (slot.status === 'available' && slot.booked_count < slot.capacity && slot.trainer_id) {
       this.selectedSlot = slot;
       this.showBookingModal = true;
       this.captchaVerified = false;
@@ -99,17 +95,31 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async confirmBooking() {
-    if (!this.selectedSlot || !this.captchaVerified) return;
+    if (!this.selectedSlot || !this.captchaVerified || !this.selectedSlot.trainer_id) return;
 
     this.loading = true;
     this.errorMessage = '';
 
     try {
-      await this.bookingService.createBooking(
-        this.selectedSlot.id,
-        this.selectedSlot.trainer_id,
-        this.bookingForm.notes
-      );
+      const { data: user } = await this.supabase.auth.getUser();
+      if (!user.user) throw new Error('Not authenticated');
+
+      const { error } = await this.supabase
+        .from('bookings')
+        .insert({
+          user_id: user.user.id,
+          slot_id: this.selectedSlot.id,
+          trainer_id: this.selectedSlot.trainer_id,
+          notes: this.bookingForm.notes,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      await this.supabase
+        .from('slots')
+        .update({ booked_count: this.selectedSlot.booked_count + 1 })
+        .eq('id', this.selectedSlot.id);
 
       this.closeBookingModal();
       this.showConfirmation = true;
@@ -144,7 +154,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     });
   }
 
-  isSlotAvailable(slot: SlotWithTrainer): boolean {
-    return slot.status === 'available' && slot.booked_count < slot.capacity;
+  isSlotAvailable(slot: Slot): boolean {
+    return slot.status === 'available' && slot.booked_count < slot.capacity && !!slot.trainer_id;
   }
 }

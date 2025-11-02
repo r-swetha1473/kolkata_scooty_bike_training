@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AdminService } from '../../../services/admin.service';
+import { TrainerService, Trainer } from '../../../services/trainer.service';
 
 @Component({
   selector: 'app-admin-trainers',
@@ -22,7 +22,8 @@ import { AdminService } from '../../../services/admin.service';
             <th>Experience</th>
             <th>Rating</th>
             <th>Specialization</th>
-            <th>Active</th>
+            <th>Status</th>
+            <th>On Duty</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -39,23 +40,32 @@ import { AdminService } from '../../../services/admin.service';
               </span>
             </td>
             <td>
+              <button
+                class="duty-toggle"
+                [class.on-duty]="trainer.on_duty"
+                [class.off-duty]="!trainer.on_duty"
+                (click)="toggleOnDuty(trainer.id, trainer.on_duty)">
+                {{ trainer.on_duty ? 'On Duty' : 'Off Duty' }}
+              </button>
+            </td>
+            <td>
               <div class="action-buttons">
-                <button 
-                  class="btn-icon" 
-                  [class.btn-success]="!trainer.is_active" 
-                  [class.btn-warning]="trainer.is_active" 
+                <button
+                  class="btn-icon"
+                  [class.btn-success]="!trainer.is_active"
+                  [class.btn-warning]="trainer.is_active"
                   (click)="toggleActive(trainer.id, trainer.is_active)"
                   [title]="trainer.is_active ? 'Deactivate' : 'Activate'">
                   <span class="icon">{{ trainer.is_active ? '⏸️' : '▶️' }}</span>
                 </button>
-                <button 
-                  class="btn-icon btn-info" 
+                <button
+                  class="btn-icon btn-info"
                   (click)="showEditModal(trainer)"
                   title="Edit">
                   <span class="icon">✏️</span>
                 </button>
-                <button 
-                  class="btn-icon btn-danger" 
+                <button
+                  class="btn-icon btn-danger"
                   (click)="deleteTrainer(trainer.id)"
                   title="Delete">
                   <span class="icon">🗑️</span>
@@ -110,7 +120,7 @@ import { AdminService } from '../../../services/admin.service';
     .trainers-page { max-width: 1400px; }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .page-title { font-size: 32px; font-weight: 700; color: #1f2937; margin: 0; }
-    .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
+    .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
     .btn-primary:hover { transform: translateY(-2px); }
     .data-table { width: 100%; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .data-table th, .data-table td { padding: 16px; text-align: left; }
@@ -187,6 +197,11 @@ import { AdminService } from '../../../services/admin.service';
       transform: translateY(-2px);
       box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
     }
+    .duty-toggle { padding: 6px 14px; border: none; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .duty-toggle.on-duty { background: #d1fae5; color: #065f46; }
+    .duty-toggle.on-duty:hover { background: #a7f3d0; }
+    .duty-toggle.off-duty { background: #fee2e2; color: #991b1b; }
+    .duty-toggle.off-duty:hover { background: #fecaca; }
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .modal-content { background: white; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 24px; border-bottom: 1px solid #e5e7eb; }
@@ -197,7 +212,7 @@ import { AdminService } from '../../../services/admin.service';
     .form-group { margin-bottom: 20px; }
     .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #374151; }
     .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
-    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #667eea; }
+    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #3b82f6; }
     .form-group input:disabled { background: #f3f4f6; color: #9ca3af; }
     .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
     .btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 2px solid #e5e7eb; border-radius: 8px; font-weight: 600; cursor: pointer; }
@@ -205,9 +220,9 @@ import { AdminService } from '../../../services/admin.service';
   `]
 })
 export class AdminTrainersComponent implements OnInit {
-  trainers: any[] = [];
+  trainers: Trainer[] = [];
   showModal = false;
-  editingTrainer: any = null;
+  editingTrainer: Trainer | null = null;
   specializationInput = '';
   trainerForm: any = {
     full_name: '',
@@ -218,14 +233,19 @@ export class AdminTrainersComponent implements OnInit {
     specialization: []
   };
 
-  constructor(private adminService: AdminService) {}
+  constructor(private trainerService: TrainerService) {}
 
   async ngOnInit() {
     await this.loadTrainers();
   }
 
   async loadTrainers() {
-    this.trainers = await this.adminService.getAllTrainers();
+    try {
+      this.trainers = await this.trainerService.getAllTrainers();
+    } catch (error) {
+      console.error('Failed to load trainers:', error);
+      alert('Failed to load trainers');
+    }
   }
 
   showCreateModal() {
@@ -242,7 +262,7 @@ export class AdminTrainersComponent implements OnInit {
     this.showModal = true;
   }
 
-  showEditModal(trainer: any) {
+  showEditModal(trainer: Trainer) {
     this.editingTrainer = trainer;
     this.trainerForm = {
       full_name: trainer.profile?.full_name || '',
@@ -265,7 +285,8 @@ export class AdminTrainersComponent implements OnInit {
   async saveTrainer() {
     try {
       const data = {
-        ...this.trainerForm,
+        bio: this.trainerForm.bio,
+        experience_years: this.trainerForm.experience_years,
         specialization: this.specializationInput
           .split(',')
           .map(s => s.trim())
@@ -273,24 +294,34 @@ export class AdminTrainersComponent implements OnInit {
       };
 
       if (this.editingTrainer) {
-        await this.adminService.updateTrainer(this.editingTrainer.id, data).toPromise();
+        await this.trainerService.updateTrainer(this.editingTrainer.id, data);
       } else {
-        await this.adminService.createTrainer(data).toPromise();
+        alert('Creating trainers requires profile setup. Please use the user management system.');
+        return;
       }
 
       this.showModal = false;
       await this.loadTrainers();
     } catch (error: any) {
-      alert(error.error?.error || 'Failed to save trainer');
+      alert('Failed to save trainer');
+    }
+  }
+
+  async toggleOnDuty(trainerId: string, currentStatus: boolean) {
+    try {
+      await this.trainerService.toggleOnDuty(trainerId, !currentStatus);
+      await this.loadTrainers();
+    } catch (error) {
+      alert('Failed to update duty status');
     }
   }
 
   async toggleActive(trainerId: string, currentStatus: boolean) {
     try {
-      await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
+      await this.trainerService.toggleActive(trainerId, !currentStatus);
       await this.loadTrainers();
-    } catch (error: any) {
-      alert(error.error?.error || 'Failed to update trainer');
+    } catch (error) {
+      alert('Failed to update trainer status');
     }
   }
 
@@ -300,10 +331,10 @@ export class AdminTrainersComponent implements OnInit {
     }
 
     try {
-      await this.adminService.deleteTrainer(trainerId).toPromise();
+      await this.trainerService.deleteTrainer(trainerId);
       await this.loadTrainers();
-    } catch (error: any) {
-      alert(error.error?.error || error.error?.message || 'Failed to delete trainer');
+    } catch (error) {
+      alert('Failed to delete trainer');
     }
   }
 }

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from './services/auth.service';
+import { SettingsService, SiteSettings } from './services/settings.service';
 import { filter } from 'rxjs/operators';
 
 @Component({
@@ -14,7 +15,7 @@ import { filter } from 'rxjs/operators';
         <div class="container">
           <div class="header-content">
             <div class="logo">
-              <h2>Kolkata Scotty</h2>
+              <h2>{{ settings.site_name }}</h2>
               <span>Bike Training</span>
             </div>
             <button class="menu-toggle" (click)="toggleMenu()">
@@ -69,8 +70,13 @@ import { filter } from 'rxjs/operators';
         <div class="container">
           <div class="footer-content">
             <div class="footer-col">
-              <h3>Kolkata Scotty</h3>
-              <p>Professional bike training for all skill levels. Learn from certified trainers in a safe environment.</p>
+              <h3>{{ settings.site_name }}</h3>
+              <p>{{ settings.about_text }}</p>
+              <div class="social-links" *ngIf="hasSocialLinks()">
+                <a *ngIf="settings.social_facebook" [href]="settings.social_facebook" target="_blank" rel="noopener" class="social-link">Facebook</a>
+                <a *ngIf="settings.social_instagram" [href]="settings.social_instagram" target="_blank" rel="noopener" class="social-link">Instagram</a>
+                <a *ngIf="settings.social_youtube" [href]="settings.social_youtube" target="_blank" rel="noopener" class="social-link">YouTube</a>
+              </div>
             </div>
             <div class="footer-col">
               <h4>Quick Links</h4>
@@ -79,14 +85,15 @@ import { filter } from 'rxjs/operators';
                 <li><a routerLink="/about">About</a></li>
                 <li><a routerLink="/courses">Courses</a></li>
                 <li><a routerLink="/trainers">Trainers</a></li>
+                <li><a routerLink="/contact">Contact</a></li>
               </ul>
             </div>
             <div class="footer-col">
               <h4>Contact</h4>
               <ul>
-                <li>Phone: +91 98765 43210</li>
-                <li>Email: info&#64;kolkatascotty.com</li>
-                <li>Location: Kolkata, West Bengal</li>
+                <li>Phone: {{ settings.contact_phone }}</li>
+                <li>Email: {{ settings.contact_email }}</li>
+                <li>{{ settings.contact_address }}</li>
               </ul>
             </div>
             <div class="footer-col">
@@ -98,7 +105,7 @@ import { filter } from 'rxjs/operators';
             </div>
           </div>
           <div class="footer-bottom">
-            <p>&copy; 2025 Kolkata Scotty Bike Training. All rights reserved.</p>
+            <p>{{ settings.footer_copyright }}</p>
           </div>
         </div>
       </footer>
@@ -389,6 +396,27 @@ import { filter } from 'rxjs/operators';
       color: #e74c3c;
     }
 
+    .social-links {
+      display: flex;
+      gap: 15px;
+      margin-top: 15px;
+    }
+
+    .social-link {
+      display: inline-block;
+      padding: 8px 16px;
+      background: rgba(231, 76, 60, 0.1);
+      border-radius: 20px;
+      transition: all 0.3s;
+      font-size: 14px;
+    }
+
+    .social-link:hover {
+      background: #e74c3c;
+      color: white !important;
+      transform: translateY(-2px);
+    }
+
     .footer-bottom {
       text-align: center;
       padding-top: 20px;
@@ -430,17 +458,30 @@ export class AppComponent implements OnInit {
   menuOpen = false;
   showUserMenu = false;
   isAdminRoute = false;
+  settings: SiteSettings = {
+    site_name: 'Kolkata Scotty',
+    site_logo: '',
+    contact_email: 'info@kolkatascotty.com',
+    contact_phone: '+91 98765 43210',
+    contact_address: 'Kolkata, West Bengal',
+    social_facebook: '',
+    social_instagram: '',
+    social_youtube: '',
+    footer_copyright: '© 2025 Kolkata Scotty. All rights reserved.',
+    about_text: 'Professional bike training for all skill levels.'
+  };
 
   constructor(
     public authService: AuthService,
-    private router: Router
+    private router: Router,
+    private settingsService: SettingsService
   ) {}
 
-  ngOnInit() {
-    // Check current route
+  async ngOnInit() {
+    await this.loadSettings();
+
     this.checkAdminRoute(this.router.url);
 
-    // Listen to route changes
     this.router.events
       .pipe(filter(event => event instanceof NavigationEnd))
       .subscribe((event: any) => {
@@ -459,6 +500,19 @@ export class AppComponent implements OnInit {
         this.showUserMenu = false;
       }
     });
+  }
+
+  async loadSettings() {
+    try {
+      await this.settingsService.loadSettings();
+      this.settings = this.settingsService.getSettings();
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  }
+
+  hasSocialLinks(): boolean {
+    return !!(this.settings.social_facebook || this.settings.social_instagram || this.settings.social_youtube);
   }
 
   private checkAdminRoute(url: string) {
