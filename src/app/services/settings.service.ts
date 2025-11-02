@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface Setting {
   key: string;
@@ -27,7 +27,7 @@ export interface SiteSettings {
   providedIn: 'root'
 })
 export class SettingsService {
-  private supabase: SupabaseClient;
+  private apiUrl = environment.apiUrl;
   private settingsSubject = new BehaviorSubject<SiteSettings>({
     site_name: 'Kolkata Scotty',
     site_logo: '',
@@ -44,19 +44,16 @@ export class SettingsService {
   public settings$: Observable<SiteSettings> = this.settingsSubject.asObservable();
 
   constructor() {
-    const supabaseUrl = (window as any).ENV?.VITE_SUPABASE_URL || 'https://yvcdcmthcognzodgfvjq.supabase.co';
-    const supabaseKey = (window as any).ENV?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2Y2RjbXRoY29nbnpvZGdmdmpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwODY0MDMsImV4cCI6MjA3NzY2MjQwM30.Z2uJXAvEudnV6IvHPJxi-zJ5uWOv8R5xXV63_AsiTeo';
-    this.supabase = createClient(supabaseUrl, supabaseKey);
     this.loadSettings();
   }
 
   async loadSettings(): Promise<void> {
     try {
-      const { data, error } = await this.supabase
-        .from('settings')
-        .select('*');
-
-      if (error) throw error;
+      const response = await fetch(`${this.apiUrl}/settings`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to load settings');
+      const data = await response.json();
 
       if (data) {
         const settingsObj: any = {};
@@ -75,23 +72,22 @@ export class SettingsService {
   }
 
   async getSetting(key: string): Promise<any> {
-    const { data, error } = await this.supabase
-      .from('settings')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle();
-
-    if (error) throw error;
+    const response = await fetch(`${this.apiUrl}/settings/${key}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch setting');
+    const data = await response.json();
     return data?.value;
   }
 
   async updateSetting(key: string, value: any): Promise<void> {
-    const { error } = await this.supabase
-      .from('settings')
-      .update({ value })
-      .eq('key', key);
-
-    if (error) throw error;
+    const response = await fetch(`${this.apiUrl}/settings/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ value })
+    });
+    if (!response.ok) throw new Error('Failed to update setting');
     await this.loadSettings();
   }
 
@@ -107,12 +103,10 @@ export class SettingsService {
   }
 
   async getAllSettings(): Promise<Setting[]> {
-    const { data, error } = await this.supabase
-      .from('settings')
-      .select('*')
-      .order('key', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    const response = await fetch(`${this.apiUrl}/settings`, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch settings');
+    return await response.json();
   }
 }

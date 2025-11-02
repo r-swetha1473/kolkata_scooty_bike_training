@@ -4,8 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
 import { AuthService } from '../../services/auth.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
-import { Subscription } from 'rxjs';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-booking',
@@ -24,7 +23,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   captchaVerified = false;
   loading = false;
   errorMessage = '';
-  private supabase: SupabaseClient;
+  private apiUrl = environment.apiUrl;
 
   bookingForm = {
     notes: ''
@@ -33,11 +32,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   constructor(
     private slotService: SlotService,
     public authService: AuthService
-  ) {
-    const supabaseUrl = (window as any).ENV?.VITE_SUPABASE_URL || 'https://yvcdcmthcognzodgfvjq.supabase.co';
-    const supabaseKey = (window as any).ENV?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2Y2RjbXRoY29nbnpvZGdmdmpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwODY0MDMsImV4cCI6MjA3NzY2MjQwM30.Z2uJXAvEudnV6IvHPJxi-zJ5uWOv8R5xXV63_AsiTeo';
-    this.supabase = createClient(supabaseUrl, supabaseKey);
-  }
+  ) {}
 
   async ngOnInit() {
     const today = new Date();
@@ -101,25 +96,21 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     try {
-      const { data: user } = await this.supabase.auth.getUser();
-      if (!user.user) throw new Error('Not authenticated');
-
-      const { error } = await this.supabase
-        .from('bookings')
-        .insert({
-          user_id: user.user.id,
+      const response = await fetch(`${this.apiUrl}/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
           slot_id: this.selectedSlot.id,
           trainer_id: this.selectedSlot.trainer_id,
-          notes: this.bookingForm.notes,
-          status: 'pending'
-        });
+          notes: this.bookingForm.notes
+        })
+      });
 
-      if (error) throw error;
-
-      await this.supabase
-        .from('slots')
-        .update({ booked_count: this.selectedSlot.booked_count + 1 })
-        .eq('id', this.selectedSlot.id);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create booking');
+      }
 
       this.closeBookingModal();
       this.showConfirmation = true;

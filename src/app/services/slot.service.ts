@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
 
 export interface Slot {
@@ -26,135 +25,77 @@ export interface Slot {
   providedIn: 'root'
 })
 export class SlotService {
-  private supabase: SupabaseClient;
+  private apiUrl = environment.apiUrl;
 
-  constructor() {
-    const supabaseUrl = (window as any).ENV?.VITE_SUPABASE_URL || 'https://yvcdcmthcognzodgfvjq.supabase.co';
-    const supabaseKey = (window as any).ENV?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2Y2RjbXRoY29nbnpvZGdmdmpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwODY0MDMsImV4cCI6MjA3NzY2MjQwM30.Z2uJXAvEudnV6IvHPJxi-zJ5uWOv8R5xXV63_AsiTeo';
-    this.supabase = createClient(supabaseUrl, supabaseKey);
-  }
+  constructor() {}
 
   async generateDailySlots(date?: string): Promise<any> {
-    const apiUrl = `https://yvcdcmthcognzodgfvjq.supabase.co/functions/v1/generate-daily-slots`;
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-
-    const body = date ? JSON.stringify({ date }) : JSON.stringify({});
-
-    const response = await fetch(apiUrl, {
+    const body = date ? { date } : {};
+    const response = await fetch(`${this.apiUrl}/slots/generate`, {
       method: 'POST',
-      headers,
-      body,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body)
     });
-
+    if (!response.ok) throw new Error('Failed to generate slots');
     return await response.json();
   }
 
   async getSlotsByDate(date: string): Promise<Slot[]> {
-    const { data, error } = await this.supabase
-      .from('slots')
-      .select(`
-        *,
-        trainer:trainers(
-          id,
-          profile:profiles!trainers_user_id_fkey(
-            full_name
-          )
-        )
-      `)
-      .eq('slot_date', date)
-      .order('start_time', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    const response = await fetch(`${this.apiUrl}/slots?date=${date}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch slots');
+    return await response.json();
   }
 
   async getSlotsByDateRange(startDate: string, endDate: string): Promise<Slot[]> {
-    const { data, error } = await this.supabase
-      .from('slots')
-      .select(`
-        *,
-        trainer:trainers(
-          id,
-          profile:profiles!trainers_user_id_fkey(
-            full_name
-          )
-        )
-      `)
-      .gte('slot_date', startDate)
-      .lte('slot_date', endDate)
-      .order('start_time', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    const response = await fetch(`${this.apiUrl}/slots?start_date=${startDate}&end_date=${endDate}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch slots');
+    return await response.json();
   }
 
   async getAvailableSlots(date?: string): Promise<Slot[]> {
-    let query = this.supabase
-      .from('slots')
-      .select(`
-        *,
-        trainer:trainers(
-          id,
-          profile:profiles!trainers_user_id_fkey(
-            full_name
-          )
-        )
-      `)
-      .eq('status', 'available')
-      .neq('trainer_id', null);
-
-    if (date) {
-      query = query.eq('slot_date', date);
-    }
-
-    const { data, error } = await query.order('start_time', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    const url = date
+      ? `${this.apiUrl}/slots?date=${date}&available=true`
+      : `${this.apiUrl}/slots?available=true`;
+    const response = await fetch(url, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch available slots');
+    return await response.json();
   }
 
   async getSlotById(id: string): Promise<Slot | null> {
-    const { data, error } = await this.supabase
-      .from('slots')
-      .select(`
-        *,
-        trainer:trainers(
-          id,
-          profile:profiles!trainers_user_id_fkey(
-            full_name
-          )
-        )
-      `)
-      .eq('id', id)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data;
+    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch slot');
+    return await response.json();
   }
 
   async createSlot(slot: Partial<Slot>): Promise<Slot> {
-    const { data, error } = await this.supabase
-      .from('slots')
-      .insert(slot)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+    const response = await fetch(`${this.apiUrl}/slots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(slot)
+    });
+    if (!response.ok) throw new Error('Failed to create slot');
+    return await response.json();
   }
 
   async updateSlot(id: string, updates: Partial<Slot>): Promise<Slot> {
-    const { data, error } = await this.supabase
-      .from('slots')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updates)
+    });
+    if (!response.ok) throw new Error('Failed to update slot');
+    return await response.json();
   }
 
   async assignTrainer(slotId: string, trainerId: string): Promise<Slot> {
@@ -166,20 +107,18 @@ export class SlotService {
   }
 
   async deleteSlot(id: string): Promise<void> {
-    const { error } = await this.supabase
-      .from('slots')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to delete slot');
   }
 
   async deleteSlotsByDate(date: string): Promise<void> {
-    const { error } = await this.supabase
-      .from('slots')
-      .delete()
-      .eq('slot_date', date);
-
-    if (error) throw error;
+    const response = await fetch(`${this.apiUrl}/slots?date=${date}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to delete slots');
   }
 }
