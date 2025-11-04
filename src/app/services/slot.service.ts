@@ -11,7 +11,7 @@ export interface Slot {
   slot_date: string;
   capacity: number;
   booked_count: number;
-  status: 'available' | 'full' | 'cancelled' | 'completed';
+  status: 'available' | 'full' | 'cancelled' | 'completed' | 'disabled';
   is_auto_generated: boolean;
   created_at: string;
   updated_at: string;

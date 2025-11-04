@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
+import { TrainerService, Trainer } from '../../services/trainer.service';
 import { AuthService } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
@@ -23,13 +24,19 @@ export class BookingComponent implements OnInit, OnDestroy {
   captchaVerified = false;
   loading = false;
   errorMessage = '';
+  refreshInterval: any;
+  trainers: Trainer[] = [];
+  vehicles: any[] = [];
 
   bookingForm = {
+    trainer_id: '',
+    vehicle_id: '',
     notes: ''
   };
 
   constructor(
     private slotService: SlotService,
+    private trainerService: TrainerService,
     public authService: AuthService,
     private apiService: ApiService
   ) {}
@@ -38,20 +45,24 @@ export class BookingComponent implements OnInit, OnDestroy {
     const today = new Date();
     this.selectedDate = today.toISOString().split('T')[0];
     await this.loadSlots();
+    await this.loadTrainers();
+    await this.loadVehicles();
+    this.startAutoRefresh();
   }
 
-  ngOnDestroy() {}
+  ngOnDestroy() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+  }
 
   async loadSlots() {
     this.loading = true;
     this.errorMessage = '';
     try {
-      // Get all slots for the date, not just available ones
-      // This allows showing slots that need trainer assignment
       if (this.selectedDate) {
         const slots = await this.slotService.getSlotsByDate(this.selectedDate);
-        // Filter to show only slots with trainers (for booking) or show all with status indicators
-        this.slots = slots.filter(slot => slot.trainer_id && slot.status === 'available');
+        this.slots = slots;
       } else {
         this.slots = [];
       }
@@ -64,21 +75,47 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
+  async loadTrainers() {
+    try {
+      this.trainers = await this.trainerService.getOnDutyTrainers();
+    } catch (error) {
+      console.error('Failed to load trainers:', error);
+    }
+  }
+
+  async loadVehicles() {
+    try {
+      const response = await this.apiService.get<any[]>('/vehicles');
+      this.vehicles = response;
+    } catch (error) {
+      console.error('Failed to load vehicles:', error);
+    }
+  }
+
+  startAutoRefresh() {
+    this.refreshInterval = setInterval(() => {
+      this.loadSlots();
+    }, 10000);
+  }
+
   async onDateChange() {
     await this.loadSlots();
   }
 
   selectSlot(slot: Slot) {
+    if (slot.status === 'disabled' || slot.status === 'cancelled' || slot.booked_count >= slot.capacity) {
+      return;
+    }
+
     if (!this.authService.isAuthenticated()) {
       this.showLoginPrompt = true;
       return;
     }
 
-    if (slot.status === 'available' && slot.booked_count < slot.capacity && slot.trainer_id) {
-      this.selectedSlot = slot;
-      this.showBookingModal = true;
-      this.captchaVerified = false;
-    }
+    this.selectedSlot = slot;
+    this.bookingForm.trainer_id = slot.trainer_id || '';
+    this.showBookingModal = true;
+    this.captchaVerified = false;
   }
 
   async signInWithGoogle() {
@@ -101,7 +138,12 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async confirmBooking() {
-    if (!this.selectedSlot || !this.captchaVerified || !this.selectedSlot.trainer_id) return;
+    if (!this.selectedSlot || !this.captchaVerified) return;
+
+    if (!this.bookingForm.trainer_id || !this.bookingForm.vehicle_id) {
+      this.errorMessage = 'Please select both trainer and vehicle';
+      return;
+    }
 
     this.loading = true;
     this.errorMessage = '';
@@ -111,7 +153,12 @@ export class BookingComponent implements OnInit, OnDestroy {
         throw new Error('Not authenticated');
       }
 
-      await this.apiService.createBooking(this.selectedSlot.id, this.bookingForm.notes);
+      await this.apiService.post('/bookings', {
+        slot_id: this.selectedSlot.id,
+        trainer_id: this.bookingForm.trainer_id,
+        vehicle_id: this.bookingForm.vehicle_id,
+        notes: this.bookingForm.notes
+      });
 
       this.closeBookingModal();
       this.showConfirmation = true;
@@ -130,6 +177,8 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   resetForm() {
     this.bookingForm = {
+      trainer_id: '',
+      vehicle_id: '',
       notes: ''
     };
     this.errorMessage = '';
@@ -147,18 +196,33 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   isSlotAvailable(slot: Slot): boolean {
-    return slot.status === 'available' && slot.booked_count < slot.capacity && !!slot.trainer_id;
+    return slot.status === 'available' && slot.booked_count < slot.capacity;
   }
 
   isSlotBooked(slot: Slot): boolean {
-    return slot.booked_count >= slot.capacity || slot.status === 'full' || slot.status === 'completed';
+    return slot.booked_count > 0 && slot.booked_count < slot.capacity;
   }
 
   isSlotFull(slot: Slot): boolean {
-    return slot.booked_count >= slot.capacity;
+    return slot.booked_count >= slot.capacity || slot.status === 'full';
+  }
+
+  isSlotDisabled(slot: Slot): boolean {
+    return slot.status === 'disabled' || slot.status === 'cancelled';
   }
 
   hasNoTrainer(slot: Slot): boolean {
     return !slot.trainer_id || !slot.trainer;
+  }
+
+  getTrainerName(slot: Slot): string {
+    return slot.trainer?.profile?.full_name || 'Unassigned';
+  }
+
+  changeDate(days: number) {
+    const current = new Date(this.selectedDate);
+    current.setDate(current.getDate() + days);
+    this.selectedDate = current.toISOString().split('T')[0];
+    this.onDateChange();
   }
 }

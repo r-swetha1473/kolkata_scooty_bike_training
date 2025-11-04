@@ -8,22 +8,28 @@
 
   <section class="booking-content">
     <div class="container">
-      <div class="date-selector">
-        <label for="date">Select Date:</label>
-        <input
-          type="date"
-          id="date"
-          [(ngModel)]="selectedDate"
-          [min]="getMinDate()"
-          (change)="onDateChange()"
-          class="date-input">
+      <div class="date-navigation">
+        <button class="nav-btn" (click)="changeDate(-1)">← Previous Day</button>
+        <div class="date-selector">
+          <label for="date">Select Date:</label>
+          <input
+            type="date"
+            id="date"
+            [(ngModel)]="selectedDate"
+            [min]="getMinDate()"
+            (change)="onDateChange()"
+            class="date-input">
+        </div>
+        <button class="nav-btn" (click)="changeDate(1)">Next Day →</button>
       </div>
 
       <div class="slots-container">
         <h2 class="page-title">Available Time Slots</h2>
         <div class="legend">
-          <span class="dot available"></span> Available
-          <span class="dot booked"></span> Booked
+          <span class="legend-item"><span class="dot available"></span> Available</span>
+          <span class="legend-item"><span class="dot booked"></span> Booked</span>
+          <span class="legend-item"><span class="dot full"></span> Full</span>
+          <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
         </div>
 
         <div *ngIf="loading" class="loading-spinner">
@@ -41,23 +47,16 @@
             [class.available]="isSlotAvailable(slot)"
             [class.booked]="isSlotBooked(slot)"
             [class.full]="isSlotFull(slot)"
-            [class.no-trainer]="hasNoTrainer(slot)"
-            [class.disabled]="!isSlotAvailable(slot)"
+            [class.disabled]="isSlotDisabled(slot)"
             (click)="selectSlot(slot)">
-            <div class="slot-time">{{ formatTime(slot.start_time) }} - {{ formatTime(slot.end_time) }}</div>
-            <div class="slot-trainer">
-              <span *ngIf="slot.trainer?.profile?.full_name">{{ slot.trainer.profile.full_name }}</span>
-              <span *ngIf="!slot.trainer?.profile?.full_name" class="no-trainer-text">No Trainer Assigned</span>
+            <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
+            <div class="slot-trainer" *ngIf="slot.trainer?.profile?.full_name">
+              <span class="trainer-icon">👤</span> {{ slot.trainer.profile.full_name }}
             </div>
-            <div class="slot-status">
-              <span class="capacity">{{ slot.booked_count }}/{{ slot.capacity }}</span>
-              <span class="status-text" *ngIf="slot.status">{{ slot.status }}</span>
+            <div class="slot-trainer no-trainer-assigned" *ngIf="!slot.trainer?.profile?.full_name">
+              <span class="trainer-icon">👤</span> Unassigned
             </div>
-            <div class="slot-badge available" *ngIf="isSlotAvailable(slot)">🟢 Available</div>
-            <div class="slot-badge booked" *ngIf="isSlotBooked(slot) && !isSlotFull(slot) && !isSlotDisabled(slot)">🔴 Booked</div>
-            <div class="slot-badge full" *ngIf="isSlotFull(slot)">🔴 Full</div>
-            <div class="slot-badge disabled" *ngIf="isSlotDisabled(slot)">⚪ Disabled</div>
-            <div class="slot-badge no-trainer" *ngIf="hasNoTrainer(slot) && !isSlotBooked(slot) && isSlotAvailable(slot)">Select Trainer</div>
+            <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>
         </div>
       </div>
@@ -94,10 +93,6 @@
         {{ formatTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}
       </p>
 
-      <div *ngIf="selectedSlot" class="booking-details">
-        <p><strong>Time:</strong> {{ formatTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}</p>
-      </div>
-
       <form (ngSubmit)="confirmBooking()">
         <div class="form-group">
           <label for="trainer">Select Trainer *</label>
@@ -111,7 +106,6 @@
               {{ trainer.profile?.full_name || trainer.name }} ({{ trainer.rating }}/5 ⭐)
             </option>
           </select>
-          <small *ngIf="selectedSlot?.trainer_id">Current slot trainer: {{ getTrainerName(selectedSlot) }}</small>
         </div>
 
         <div class="form-group">
@@ -147,7 +141,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="!captchaVerified || loading">
+          [disabled]="!captchaVerified || loading || !bookingForm.trainer_id || !bookingForm.vehicle_id">
           {{ loading ? 'Booking...' : 'Confirm Booking' }}
         </button>
       </form>

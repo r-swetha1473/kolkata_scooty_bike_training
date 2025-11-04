@@ -37,6 +37,7 @@ export interface Slot {
   booked_count: number;
   status: 'available' | 'full' | 'cancelled' | 'completed' | 'disabled';
   trainer_name?: string;
+  is_auto_generated?: boolean;
 }
 
 export interface Booking {
@@ -194,5 +195,15 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/admin/dashboard`, {
       headers: this.getAuthHeaders()
     });
+  }
+
+  get<T>(path: string): Promise<T> {
+    return this.http.get<T>(`${this.apiUrl}${path}`).toPromise() as Promise<T>;
+  }
+
+  post<T>(path: string, body: any): Promise<T> {
+    return this.http.post<T>(`${this.apiUrl}${path}`, body, {
+      headers: this.getAuthHeaders()
+    }).toPromise() as Promise<T>;
   }
 }
