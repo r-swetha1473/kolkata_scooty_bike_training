@@ -35,7 +35,7 @@ export interface Slot {
   end_time: string;
   capacity: number;
   booked_count: number;
-  status: 'available' | 'full' | 'cancelled' | 'completed';
+  status: 'available' | 'full' | 'cancelled' | 'completed' | 'disabled';
   trainer_name?: string;
 }
 
@@ -50,6 +50,9 @@ export interface Booking {
   end_time?: string;
   trainer_name?: string;
   trainer_avatar?: string;
+  created_at?: string;
+  cancellation_reason?: string;
+  cancelled_at?: string;
 }
 
 @Injectable({
@@ -65,14 +68,14 @@ export class ApiService {
   }
 
   private loadUserFromToken() {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     if (token) {
       this.http.get<User>(`${this.apiUrl}/profiles/me`, {
         headers: this.getAuthHeaders()
       }).subscribe({
         next: (user) => this.currentUserSubject.next(user),
         error: () => {
-          localStorage.removeItem('auth_token');
+          localStorage.removeItem('token');
           this.currentUserSubject.next(null);
         }
       });
@@ -80,14 +83,14 @@ export class ApiService {
   }
 
   private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     return new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
   }
 
   setToken(token: string) {
-    localStorage.setItem('auth_token', token);
+    localStorage.setItem('token', token);
     this.loadUserFromToken();
   }
 
@@ -98,7 +101,7 @@ export class ApiService {
   signOut(): Observable<any> {
     return this.http.post(`${this.apiUrl}/auth/logout`, {}).pipe(
       tap(() => {
-        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token');
         this.currentUserSubject.next(null);
       })
     );
@@ -136,13 +139,19 @@ export class ApiService {
     return this.http.get<Slot[]>(url);
   }
 
-  createBooking(slotId: string, notes?: string): Observable<Booking> {
+  createBooking(slotId: string, trainerId: string, vehicleId: string, notes?: string): Observable<Booking> {
     return this.http.post<Booking>(`${this.apiUrl}/bookings`, {
       slot_id: slotId,
+      trainer_id: trainerId,
+      vehicle_id: vehicleId,
       notes: notes || ''
     }, {
       headers: this.getAuthHeaders()
     });
+  }
+
+  getVehicles(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/vehicles`);
   }
 
   getMyBookings(): Observable<Booking[]> {
@@ -154,6 +163,16 @@ export class ApiService {
   cancelBooking(bookingId: string, reason: string): Observable<any> {
     return this.http.put(`${this.apiUrl}/bookings/${bookingId}/cancel`, {
       cancellation_reason: reason
+    }, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  submitRating(bookingId: string, ratingValue: number, comments?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ratings`, {
+      booking_id: bookingId,
+      rating_value: ratingValue,
+      comments: comments || ''
     }, {
       headers: this.getAuthHeaders()
     });

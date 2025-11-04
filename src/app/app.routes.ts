@@ -27,6 +27,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/booking/booking.component').then(m => m.BookingComponent)
   },
   {
+    path: 'profile',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/profile/profile.component').then(m => m.ProfileComponent)
+  },
+  {
     path: 'admin/login',
     loadComponent: () => import('./pages/admin-login/admin-login.component').then(m => m.AdminLoginComponent)
   },

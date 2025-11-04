@@ -1,4 +1,6 @@
 import { Injectable } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface Trainer {
@@ -10,7 +12,7 @@ export interface Trainer {
   rating: number;
   total_sessions: number;
   is_active: boolean;
-  on_duty: boolean;
+  on_duty?: boolean;
   created_at: string;
   updated_at: string;
   profile?: {
@@ -25,62 +27,61 @@ export interface Trainer {
   providedIn: 'root'
 })
 export class TrainerService {
-  private apiUrl = environment.apiUrl;
+  private apiUrl = environment.apiUrl || 'http://localhost:3000/api';
 
-  constructor() {}
+  constructor(private http: HttpClient) {}
+
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token');
+    return new HttpHeaders({
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    });
+  }
 
   async getAllTrainers(): Promise<Trainer[]> {
-    const response = await fetch(`${this.apiUrl}/trainers`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch trainers');
-    return await response.json();
+    // Note: This endpoint may need to be added to backend if it doesn't exist
+    // For now, using the active trainers endpoint which exists
+    return this.getActiveTrainers();
   }
 
   async getActiveTrainers(): Promise<Trainer[]> {
-    const response = await fetch(`${this.apiUrl}/trainers?active=true`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch active trainers');
-    return await response.json();
+    return firstValueFrom(
+      this.http.get<Trainer[]>(`${this.apiUrl}/trainers`)
+    );
   }
 
   async getOnDutyTrainers(): Promise<Trainer[]> {
-    const response = await fetch(`${this.apiUrl}/trainers?active=true&on_duty=true`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch on-duty trainers');
-    return await response.json();
+    // Note: This may need a separate endpoint or filtering
+    const allTrainers = await this.getActiveTrainers();
+    return allTrainers.filter(t => t.on_duty === true);
   }
 
   async getTrainerById(id: string): Promise<Trainer | null> {
-    const response = await fetch(`${this.apiUrl}/trainers/${id}`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch trainer');
-    return await response.json();
+    try {
+      return await firstValueFrom(
+        this.http.get<Trainer>(`${this.apiUrl}/trainers/${id}`)
+      );
+    } catch (error: any) {
+      if (error.status === 404) return null;
+      throw error;
+    }
   }
 
   async createTrainer(trainer: Partial<Trainer>): Promise<Trainer> {
-    const response = await fetch(`${this.apiUrl}/trainers`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(trainer)
-    });
-    if (!response.ok) throw new Error('Failed to create trainer');
-    return await response.json();
+    return firstValueFrom(
+      this.http.post<Trainer>(`${this.apiUrl}/trainers`, trainer, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async updateTrainer(id: string, updates: Partial<Trainer>): Promise<Trainer> {
-    const response = await fetch(`${this.apiUrl}/trainers/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(updates)
-    });
-    if (!response.ok) throw new Error('Failed to update trainer');
-    return await response.json();
+    return firstValueFrom(
+      this.http.put<Trainer>(`${this.apiUrl}/trainers/${id}`, updates, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async toggleOnDuty(id: string, onDuty: boolean): Promise<Trainer> {
@@ -92,10 +93,10 @@ export class TrainerService {
   }
 
   async deleteTrainer(id: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/trainers/${id}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to delete trainer');
+    await firstValueFrom(
+      this.http.delete(`${this.apiUrl}/trainers/${id}`, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 }

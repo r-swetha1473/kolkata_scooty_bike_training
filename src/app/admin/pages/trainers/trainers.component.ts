@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TrainerService, Trainer } from '../../../services/trainer.service';
+import { AdminService } from '../../../services/admin.service';
+import { Trainer } from '../../../services/trainer.service';
 
 @Component({
   selector: 'app-admin-trainers',
@@ -14,7 +15,23 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
         <button class="btn-primary" (click)="showCreateModal()">+ Add Trainer</button>
       </div>
 
-      <table class="data-table">
+      <div class="filters-bar">
+        <input 
+          type="text" 
+          [(ngModel)]="searchTerm" 
+          (input)="filterTrainers()"
+          placeholder="Search by name, email, or specialization..." 
+          class="search-input">
+        <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
+          <option [value]="5">5 per page</option>
+          <option [value]="10">10 per page</option>
+          <option [value]="20">20 per page</option>
+          <option [value]="50">50 per page</option>
+        </select>
+      </div>
+
+      <div class="table-container" style="overflow-x:auto;">
+        <table class="data-table">
         <thead>
           <tr>
             <th>Name</th>
@@ -28,7 +45,7 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let trainer of trainers">
+          <tr *ngFor="let trainer of getPaginatedTrainers()">
             <td>{{ trainer.profile?.full_name }}</td>
             <td>{{ trainer.profile?.email }}</td>
             <td>{{ trainer.experience_years }} years</td>
@@ -74,7 +91,26 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
+
+      <div class="pagination-container" *ngIf="totalPages > 1">
+        <button 
+          class="pagination-btn" 
+          [disabled]="currentPage === 1"
+          (click)="goToPage(currentPage - 1)">
+          ← Previous
+        </button>
+        <span class="page-info">
+          Page {{ currentPage }} of {{ totalPages }} ({{ filteredTrainers.length }} trainers)
+        </span>
+        <button 
+          class="pagination-btn" 
+          [disabled]="currentPage === totalPages"
+          (click)="goToPage(currentPage + 1)">
+          Next →
+        </button>
+      </div>
 
       <div class="modal" *ngIf="showModal" (click)="closeModal($event)">
         <div class="modal-content" (click)="$event.stopPropagation()">
@@ -107,6 +143,10 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
               <label>Specialization (comma-separated)</label>
               <input type="text" [(ngModel)]="specializationInput" name="specialization" placeholder="e.g., Beginner Training, Highway Riding" />
             </div>
+          <div class="form-group">
+            <label>Rating (0 - 5)</label>
+            <input type="number" step="0.1" min="0" max="5" [(ngModel)]="trainerForm.rating" name="rating" />
+          </div>
             <div class="form-actions">
               <button type="button" class="btn-secondary" (click)="closeModal($event)">Cancel</button>
               <button type="submit" class="btn-primary">{{ editingTrainer ? 'Update' : 'Create' }}</button>
@@ -217,23 +257,41 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
     .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
     .btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 2px solid #e5e7eb; border-radius: 8px; font-weight: 600; cursor: pointer; }
     .btn-secondary:hover { background: #f9fafb; }
+    .filters-bar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
+    .search-input { flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+    .search-input:focus { outline: none; border-color: #3b82f6; }
+    .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+    .pagination-container { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 20px; }
+    .pagination-btn { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
+    .page-info { color: #6b7280; font-size: 14px; }
   `]
 })
 export class AdminTrainersComponent implements OnInit {
   trainers: Trainer[] = [];
+  filteredTrainers: Trainer[] = [];
   showModal = false;
   editingTrainer: Trainer | null = null;
   specializationInput = '';
+  searchTerm = '';
+  
+  // Pagination
+  currentPage = 1;
+  itemsPerPage = 10;
+  totalPages = 1;
+  
   trainerForm: any = {
     full_name: '',
     email: '',
     phone: '',
     bio: '',
     experience_years: 0,
-    specialization: []
+    specialization: [],
+    rating: 0
   };
 
-  constructor(private trainerService: TrainerService) {}
+  constructor(private adminService: AdminService) {}
 
   async ngOnInit() {
     await this.loadTrainers();
@@ -241,11 +299,48 @@ export class AdminTrainersComponent implements OnInit {
 
   async loadTrainers() {
     try {
-      this.trainers = await this.trainerService.getAllTrainers();
+      this.trainers = await this.adminService.getAllTrainers();
+      this.filterTrainers();
     } catch (error) {
       console.error('Failed to load trainers:', error);
       alert('Failed to load trainers');
     }
+  }
+
+  filterTrainers() {
+    const term = this.searchTerm.toLowerCase().trim();
+    if (!term) {
+      this.filteredTrainers = [...this.trainers];
+    } else {
+      this.filteredTrainers = this.trainers.filter(trainer => 
+        trainer.profile?.full_name?.toLowerCase().includes(term) ||
+        trainer.profile?.email?.toLowerCase().includes(term) ||
+        trainer.specialization?.some(s => s.toLowerCase().includes(term))
+      );
+    }
+    this.currentPage = 1;
+    this.updatePagination();
+  }
+
+  updatePagination() {
+    this.totalPages = Math.ceil(this.filteredTrainers.length / this.itemsPerPage);
+  }
+
+  getPaginatedTrainers(): Trainer[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage;
+    const end = start + this.itemsPerPage;
+    return this.filteredTrainers.slice(start, end);
+  }
+
+  goToPage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
+  onPageSizeChange() {
+    this.currentPage = 1;
+    this.updatePagination();
   }
 
   showCreateModal() {
@@ -270,7 +365,8 @@ export class AdminTrainersComponent implements OnInit {
       phone: trainer.profile?.phone || '',
       bio: trainer.bio,
       experience_years: trainer.experience_years,
-      specialization: trainer.specialization
+      specialization: trainer.specialization,
+      rating: trainer.rating || 0
     };
     this.specializationInput = trainer.specialization?.join(', ') || '';
     this.showModal = true;
@@ -284,43 +380,60 @@ export class AdminTrainersComponent implements OnInit {
 
   async saveTrainer() {
     try {
-      const data = {
-        bio: this.trainerForm.bio,
-        experience_years: this.trainerForm.experience_years,
-        specialization: this.specializationInput
-          .split(',')
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
-      };
+      const specialization = this.specializationInput
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
 
       if (this.editingTrainer) {
-        await this.trainerService.updateTrainer(this.editingTrainer.id, data);
+        const data = {
+          full_name: this.trainerForm.full_name,
+          phone: this.trainerForm.phone || null,
+          bio: this.trainerForm.bio,
+          experience_years: parseInt(this.trainerForm.experience_years) || 0,
+          specialization: specialization,
+          rating: parseFloat(this.trainerForm.rating) || 0
+        };
+        await this.adminService.updateTrainer(this.editingTrainer.id, data).toPromise();
       } else {
-        alert('Creating trainers requires profile setup. Please use the user management system.');
-        return;
+        const data = {
+          email: this.trainerForm.email,
+          full_name: this.trainerForm.full_name,
+          phone: this.trainerForm.phone || null,
+          bio: this.trainerForm.bio,
+          experience_years: parseInt(this.trainerForm.experience_years) || 0,
+          specialization: specialization,
+          rating: parseFloat(this.trainerForm.rating) || 0
+        };
+        await this.adminService.createTrainer(data).toPromise();
       }
 
       this.showModal = false;
       await this.loadTrainers();
     } catch (error: any) {
-      alert('Failed to save trainer');
+      console.error('Error saving trainer:', error);
+      alert(error.error?.error || error.error?.message || 'Failed to save trainer');
     }
   }
 
   async toggleOnDuty(trainerId: string, currentStatus: boolean) {
     try {
-      await this.trainerService.toggleOnDuty(trainerId, !currentStatus);
+      // Note: on_duty is not a standard field, but we can add it if needed
+      // For now, we'll use is_active as a proxy
+      await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
       await this.loadTrainers();
     } catch (error) {
+      console.error('Error updating duty status:', error);
       alert('Failed to update duty status');
     }
   }
 
   async toggleActive(trainerId: string, currentStatus: boolean) {
     try {
-      await this.trainerService.toggleActive(trainerId, !currentStatus);
+      await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
       await this.loadTrainers();
     } catch (error) {
+      console.error('Error updating trainer status:', error);
       alert('Failed to update trainer status');
     }
   }
@@ -331,10 +444,11 @@ export class AdminTrainersComponent implements OnInit {
     }
 
     try {
-      await this.trainerService.deleteTrainer(trainerId);
+      await this.adminService.deleteTrainer(trainerId).toPromise();
       await this.loadTrainers();
-    } catch (error) {
-      alert('Failed to delete trainer');
+    } catch (error: any) {
+      console.error('Error deleting trainer:', error);
+      alert(error.error?.error || error.error?.message || 'Failed to delete trainer');
     }
   }
 }

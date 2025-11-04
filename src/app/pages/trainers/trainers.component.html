@@ -19,9 +19,26 @@
 
   <section class="trainers-grid-section">
     <div class="container">
-      <div class="trainers-grid">
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading trainers...</p>
+      </div>
+      
+      <div *ngIf="error && !loading" class="error-state">
+        <p>{{ error }}</p>
+        <button class="btn-retry" (click)="loadTrainers()">Try Again</button>
+      </div>
+
+      <div *ngIf="!loading && !error && trainers.length === 0" class="empty-state">
+        <p>No trainers available at the moment.</p>
+      </div>
+
+      <div *ngIf="!loading && !error && trainers.length > 0" class="trainers-grid">
         <div class="trainer-card" *ngFor="let trainer of trainers" (click)="openTrainerDetails(trainer)">
-          <div class="trainer-avatar">{{ trainer.avatar }}</div>
+          <div class="trainer-avatar">
+            <img *ngIf="trainer.avatar && trainer.avatar.startsWith('http')" [src]="trainer.avatar" [alt]="trainer.name">
+            <span *ngIf="!trainer.avatar || !trainer.avatar.startsWith('http')">{{ trainer.avatar || '👨‍🏫' }}</span>
+          </div>
           <h3>{{ trainer.name }}</h3>
           <div class="trainer-designation">{{ trainer.designation }}</div>
           <div class="trainer-info">
@@ -103,7 +120,10 @@
     <div class="modal-content" (click)="$event.stopPropagation()">
       <button class="close-btn" (click)="closeTrainerDetails()">×</button>
       <div class="modal-header">
-        <div class="modal-avatar">{{ selectedTrainer.avatar }}</div>
+        <div class="modal-avatar">
+          <img *ngIf="selectedTrainer.avatar && selectedTrainer.avatar.startsWith('http')" [src]="selectedTrainer.avatar" [alt]="selectedTrainer.name">
+          <span *ngIf="!selectedTrainer.avatar || !selectedTrainer.avatar.startsWith('http')">{{ selectedTrainer.avatar || '👨‍🏫' }}</span>
+        </div>
         <div class="modal-header-text">
           <h2>{{ selectedTrainer.name }}</h2>
           <div class="modal-designation">{{ selectedTrainer.designation }}</div>

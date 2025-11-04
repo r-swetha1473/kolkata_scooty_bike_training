@@ -14,6 +14,12 @@ import { AdminService } from '../../../services/admin.service';
       </div>
 
       <div class="filters-bar">
+        <input 
+          type="text" 
+          [(ngModel)]="searchTerm" 
+          (input)="applyFilters()"
+          placeholder="Search by customer or trainer name..." 
+          class="search-input">
         <select [(ngModel)]="statusFilter" (change)="applyFilters()" class="filter-select">
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
@@ -36,10 +42,17 @@ import { AdminService } from '../../../services/admin.service';
           class="filter-input"
           placeholder="End Date">
 
+        <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
+          <option [value]="10">10 per page</option>
+          <option [value]="20">20 per page</option>
+          <option [value]="50">50 per page</option>
+          <option [value]="100">100 per page</option>
+        </select>
+
         <button class="btn-refresh" (click)="loadBookings()">🔄 Refresh</button>
       </div>
 
-      <div class="table-container">
+      <div class="table-container" style="overflow-x:auto;">
         <table class="data-table">
           <thead>
             <tr>
@@ -52,7 +65,7 @@ import { AdminService } from '../../../services/admin.service';
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let booking of bookings">
+            <tr *ngFor="let booking of getPaginatedBookings()">
               <td>
                 <div class="customer-info">
                   <div class="name">{{ booking.user?.full_name }}</div>
@@ -98,10 +111,28 @@ import { AdminService } from '../../../services/admin.service';
           </tbody>
         </table>
 
-        <div *ngIf="bookings.length === 0" class="empty-state">
+        <div *ngIf="filteredBookings.length === 0" class="empty-state">
           <div class="empty-icon">📅</div>
           <p>No bookings found</p>
         </div>
+      </div>
+
+      <div class="pagination-container" *ngIf="totalPages > 1">
+        <button 
+          class="pagination-btn" 
+          [disabled]="currentPage === 1"
+          (click)="goToPage(currentPage - 1)">
+          ← Previous
+        </button>
+        <span class="page-info">
+          Page {{ currentPage }} of {{ totalPages }} ({{ filteredBookings.length }} bookings)
+        </span>
+        <button 
+          class="pagination-btn" 
+          [disabled]="currentPage === totalPages"
+          (click)="goToPage(currentPage + 1)">
+          Next →
+        </button>
       </div>
     </div>
   `,
@@ -288,6 +319,15 @@ import { AdminService } from '../../../services/admin.service';
       text-align: center;
     }
 
+    .search-input { flex: 1; min-width: 200px; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+    .search-input:focus { outline: none; border-color: #667eea; }
+    .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+    .pagination-container { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 20px; }
+    .pagination-btn { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
+    .page-info { color: #6b7280; font-size: 14px; }
+
     .empty-icon {
       font-size: 60px;
       margin-bottom: 16px;
@@ -315,9 +355,16 @@ import { AdminService } from '../../../services/admin.service';
 })
 export class AdminBookingsComponent implements OnInit {
   bookings: any[] = [];
+  filteredBookings: any[] = [];
   statusFilter = '';
   startDateFilter = '';
   endDateFilter = '';
+  searchTerm = '';
+  
+  // Pagination
+  currentPage = 1;
+  itemsPerPage = 20;
+  totalPages = 1;
 
   constructor(private adminService: AdminService) {}
 
@@ -333,13 +380,49 @@ export class AdminBookingsComponent implements OnInit {
       if (this.endDateFilter) filters.endDate = this.endDateFilter;
 
       this.bookings = await this.adminService.getAllBookings(filters);
+      this.applyFilters();
     } catch (error) {
       console.error('Error loading bookings:', error);
     }
   }
 
   applyFilters() {
-    this.loadBookings();
+    let filtered = [...this.bookings];
+    
+    // Filter by search term
+    if (this.searchTerm) {
+      const term = this.searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(booking => {
+        const customerName = booking.user_name?.toLowerCase() || '';
+        const trainerName = booking.trainer_name?.toLowerCase() || '';
+        return customerName.includes(term) || trainerName.includes(term);
+      });
+    }
+    
+    this.filteredBookings = filtered;
+    this.currentPage = 1;
+    this.updatePagination();
+  }
+
+  updatePagination() {
+    this.totalPages = Math.ceil(this.filteredBookings.length / this.itemsPerPage);
+  }
+
+  getPaginatedBookings(): any[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage;
+    const end = start + this.itemsPerPage;
+    return this.filteredBookings.slice(start, end);
+  }
+
+  goToPage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
+  onPageSizeChange() {
+    this.currentPage = 1;
+    this.updatePagination();
   }
 
   async updateStatus(bookingId: string, status: string) {

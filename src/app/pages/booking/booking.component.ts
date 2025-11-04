@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
 import { AuthService } from '../../services/auth.service';
+import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
-import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-booking',
@@ -23,7 +23,6 @@ export class BookingComponent implements OnInit, OnDestroy {
   captchaVerified = false;
   loading = false;
   errorMessage = '';
-  private apiUrl = environment.apiUrl;
 
   bookingForm = {
     notes: ''
@@ -31,7 +30,8 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   constructor(
     private slotService: SlotService,
-    public authService: AuthService
+    public authService: AuthService,
+    private apiService: ApiService
   ) {}
 
   async ngOnInit() {
@@ -44,10 +44,21 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   async loadSlots() {
     this.loading = true;
+    this.errorMessage = '';
     try {
-      this.slots = await this.slotService.getAvailableSlots(this.selectedDate);
+      // Get all slots for the date, not just available ones
+      // This allows showing slots that need trainer assignment
+      if (this.selectedDate) {
+        const slots = await this.slotService.getSlotsByDate(this.selectedDate);
+        // Filter to show only slots with trainers (for booking) or show all with status indicators
+        this.slots = slots.filter(slot => slot.trainer_id && slot.status === 'available');
+      } else {
+        this.slots = [];
+      }
     } catch (error) {
-      this.errorMessage = 'Failed to load slots';
+      console.error('Failed to load slots:', error);
+      this.errorMessage = 'Failed to load slots. Please try again.';
+      this.slots = [];
     } finally {
       this.loading = false;
     }
@@ -96,21 +107,11 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     try {
-      const response = await fetch(`${this.apiUrl}/bookings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          slot_id: this.selectedSlot.id,
-          trainer_id: this.selectedSlot.trainer_id,
-          notes: this.bookingForm.notes
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create booking');
+      if (!this.authService.isAuthenticated()) {
+        throw new Error('Not authenticated');
       }
+
+      await this.apiService.createBooking(this.selectedSlot.id, this.bookingForm.notes);
 
       this.closeBookingModal();
       this.showConfirmation = true;
@@ -121,7 +122,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       await this.loadSlots();
     } catch (error: any) {
-      this.errorMessage = error.message || 'Failed to create booking';
+      this.errorMessage = error.error?.error || error.message || 'Failed to create booking';
     } finally {
       this.loading = false;
     }
@@ -147,5 +148,17 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   isSlotAvailable(slot: Slot): boolean {
     return slot.status === 'available' && slot.booked_count < slot.capacity && !!slot.trainer_id;
+  }
+
+  isSlotBooked(slot: Slot): boolean {
+    return slot.booked_count >= slot.capacity || slot.status === 'full' || slot.status === 'completed';
+  }
+
+  isSlotFull(slot: Slot): boolean {
+    return slot.booked_count >= slot.capacity;
+  }
+
+  hasNoTrainer(slot: Slot): boolean {
+    return !slot.trainer_id || !slot.trainer;
   }
 }

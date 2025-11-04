@@ -1,6 +1,20 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { TrainerService, Trainer } from '../../services/trainer.service';
+
+interface DisplayTrainer {
+  id: string;
+  name: string;
+  avatar: string;
+  designation: string;
+  experience: string;
+  specialization: string;
+  rating: number;
+  students: number;
+  description: string;
+  skills: string[];
+}
 
 @Component({
   selector: 'app-trainers',
@@ -9,81 +23,10 @@ import { RouterLink } from '@angular/router';
   templateUrl: './trainers.component.html',
   styleUrls: ['./trainers.component.css']
 })
-export class TrainersComponent {
-  trainers = [
-    {
-      id: 1,
-      name: 'Rajesh Kumar',
-      avatar: '👨‍🏫',
-      designation: 'Senior Instructor',
-      experience: '12 Years',
-      specialization: 'Beginner Training',
-      rating: 4.9,
-      students: 500,
-      description: 'Expert in teaching beginners with patience and precision',
-      skills: ['Safety Training', 'Basic Skills', 'License Prep']
-    },
-    {
-      id: 2,
-      name: 'Anita Sharma',
-      avatar: '👩‍🏫',
-      designation: 'Lead Trainer',
-      experience: '10 Years',
-      specialization: 'Advanced Techniques',
-      rating: 4.8,
-      students: 450,
-      description: 'Specializes in advanced riding skills and defensive techniques',
-      skills: ['Advanced Riding', 'Highway Training', 'Emergency Response']
-    },
-    {
-      id: 3,
-      name: 'Vikram Singh',
-      avatar: '👨‍🏫',
-      designation: 'Master Instructor',
-      experience: '15 Years',
-      specialization: 'All Levels',
-      rating: 5.0,
-      students: 650,
-      description: 'Versatile trainer with expertise across all skill levels',
-      skills: ['All-Round Training', 'Confidence Building', 'Test Preparation']
-    },
-    {
-      id: 4,
-      name: 'Priya Banerjee',
-      avatar: '👩‍🏫',
-      designation: 'Senior Trainer',
-      experience: '8 Years',
-      specialization: 'Women Training',
-      rating: 4.9,
-      students: 400,
-      description: 'Dedicated trainer for women-only batches',
-      skills: ['Women-Focused', 'Confidence Training', 'City Riding']
-    },
-    {
-      id: 5,
-      name: 'Amit Das',
-      avatar: '👨‍🏫',
-      designation: 'Instructor',
-      experience: '7 Years',
-      specialization: 'Traffic Management',
-      rating: 4.7,
-      students: 350,
-      description: 'Expert in teaching traffic rules and city navigation',
-      skills: ['Traffic Rules', 'City Navigation', 'Defensive Driving']
-    },
-    {
-      id: 6,
-      name: 'Sneha Roy',
-      avatar: '👩‍🏫',
-      designation: 'Instructor',
-      experience: '6 Years',
-      specialization: 'Refresher Training',
-      rating: 4.8,
-      students: 300,
-      description: 'Helps experienced riders improve their skills',
-      skills: ['Skill Enhancement', 'Refresher Courses', 'Advanced Safety']
-    }
-  ];
+export class TrainersComponent implements OnInit {
+  trainers: DisplayTrainer[] = [];
+  loading = true;
+  error: string | null = null;
 
   certifications = [
     { icon: '🏆', title: 'RTO Certified', description: 'All trainers are certified by Regional Transport Office' },
@@ -93,10 +36,10 @@ export class TrainersComponent {
   ];
 
   stats = [
-    { number: '15+', label: 'Expert Trainers' },
-    { number: '3500+', label: 'Students Trained' },
-    { number: '4.8/5', label: 'Average Rating' },
-    { number: '95%', label: 'Success Rate' }
+    { number: '0', label: 'Expert Trainers' },
+    { number: '0', label: 'Students Trained' },
+    { number: '0/5', label: 'Average Rating' },
+    { number: '100%', label: 'Success Rate' }
   ];
 
   trainingApproach = [
@@ -116,9 +59,94 @@ export class TrainersComponent {
     'Real-world experience sharing'
   ];
 
-  selectedTrainer: any = null;
+  selectedTrainer: DisplayTrainer | null = null;
 
-  openTrainerDetails(trainer: any) {
+  constructor(private trainerService: TrainerService) {}
+
+  async ngOnInit() {
+    await this.loadTrainers();
+  }
+
+  async loadTrainers() {
+    this.loading = true;
+    this.error = null;
+    try {
+      const backendTrainers = await this.trainerService.getActiveTrainers();
+      this.trainers = this.mapTrainersToDisplay(backendTrainers);
+      this.updateStats();
+    } catch (error: any) {
+      console.error('Error loading trainers:', error);
+      this.error = 'Failed to load trainers. Please try again later.';
+      this.trainers = [];
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private mapTrainersToDisplay(backendTrainers: Trainer[]): DisplayTrainer[] {
+    return backendTrainers.map(trainer => {
+      // Get designation based on experience
+      let designation = 'Instructor';
+      if (trainer.experience_years >= 15) {
+        designation = 'Master Instructor';
+      } else if (trainer.experience_years >= 12) {
+        designation = 'Senior Instructor';
+      } else if (trainer.experience_years >= 10) {
+        designation = 'Lead Trainer';
+      } else if (trainer.experience_years >= 8) {
+        designation = 'Senior Trainer';
+      }
+
+      // Get avatar - use emoji if no avatar_url, or use first letter
+      let avatar = '👨‍🏫';
+      if (trainer.profile?.avatar_url) {
+        avatar = trainer.profile.avatar_url;
+      } else if (trainer.profile?.full_name) {
+        // Use first letter as avatar if no image
+        avatar = trainer.profile.full_name.charAt(0).toUpperCase();
+      }
+
+      // Get specialization - join array or use first item
+      const specialization = trainer.specialization && trainer.specialization.length > 0
+        ? trainer.specialization.join(', ')
+        : 'General Training';
+
+      // Use specialization as skills, or create default skills
+      const skills = trainer.specialization && trainer.specialization.length > 0
+        ? trainer.specialization
+        : ['General Training', 'Safety Training', 'Basic Skills'];
+
+      return {
+        id: trainer.id,
+        name: trainer.profile?.full_name || 'Trainer',
+        avatar: avatar,
+        designation: designation,
+        experience: `${trainer.experience_years} Years`,
+        specialization: specialization,
+        rating: parseFloat(trainer.rating?.toString() || '0') || 0,
+        students: trainer.total_sessions || 0,
+        description: trainer.bio || 'Experienced trainer dedicated to your success',
+        skills: skills
+      };
+    });
+  }
+
+  private updateStats() {
+    if (this.trainers.length === 0) return;
+
+    const totalTrainers = this.trainers.length;
+    const totalStudents = this.trainers.reduce((sum, t) => sum + t.students, 0);
+    const avgRating = this.trainers.reduce((sum, t) => sum + t.rating, 0) / totalTrainers;
+
+    this.stats = [
+      { number: `${totalTrainers}+`, label: 'Expert Trainers' },
+      { number: `${totalStudents}+`, label: 'Students Trained' },
+      { number: `${avgRating.toFixed(1)}/5`, label: 'Average Rating' },
+      { number: '95%', label: 'Success Rate' }
+    ];
+  }
+
+  openTrainerDetails(trainer: DisplayTrainer) {
     this.selectedTrainer = trainer;
   }
 

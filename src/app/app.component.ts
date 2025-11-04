@@ -38,6 +38,9 @@ import { filter } from 'rxjs/operators';
                   <span class="dropdown-arrow">▼</span>
                 </button>
                 <div class="dropdown-menu" *ngIf="showUserMenu">
+                  <a routerLink="/profile" (click)="closeMenus()">
+                    <span class="menu-icon">👤</span> My Profile
+                  </a>
                   <a routerLink="/booking" (click)="closeMenus()">
                     <span class="menu-icon">📅</span> My Bookings
                   </a>
@@ -478,7 +481,10 @@ export class AppComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
-    await this.loadSettings();
+    // Subscribe to settings observable instead of calling loadSettings
+    this.settingsService.settings$.subscribe(settings => {
+      this.settings = settings;
+    });
 
     this.checkAdminRoute(this.router.url);
 
@@ -502,14 +508,6 @@ export class AppComponent implements OnInit {
     });
   }
 
-  async loadSettings() {
-    try {
-      await this.settingsService.loadSettings();
-      this.settings = this.settingsService.getSettings();
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-    }
-  }
 
   hasSocialLinks(): boolean {
     return !!(this.settings.social_facebook || this.settings.social_instagram || this.settings.social_youtube);

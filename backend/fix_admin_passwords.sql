@@ -30,3 +30,5 @@ FROM profiles
 WHERE email IN ('admin@kolkatascotty.com', 'superadmin@kolkatascotty.com')
   AND role IN ('admin', 'superadmin');
 
+
+

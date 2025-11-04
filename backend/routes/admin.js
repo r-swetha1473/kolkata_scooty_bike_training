@@ -43,26 +43,72 @@ router.get('/users', async (req, res, next) => {
   }
 });
 
+// Get comprehensive dashboard stats
+async function getDashboardStats() {
+  const stats = {};
+  
+  // Total bookings
+  const totalBookingsResult = await db.query('SELECT COUNT(*) as count FROM bookings');
+  stats.totalBookings = parseInt(totalBookingsResult.rows[0].count) || 0;
+
+  // Active slots (available slots with trainers)
+  const activeSlotsResult = await db.query(`
+    SELECT COUNT(*) as count FROM slots s
+    LEFT JOIN trainers t ON s.trainer_id = t.id
+    WHERE s.status = 'available' 
+      AND s.booked_count < s.capacity 
+      AND (t.is_active = true OR s.trainer_id IS NULL)
+      AND (s.slot_date >= CURRENT_DATE OR s.start_time::date >= CURRENT_DATE)
+  `);
+  stats.activeSlots = parseInt(activeSlotsResult.rows[0].count) || 0;
+
+  // Total active trainers
+  const activeTrainersResult = await db.query('SELECT COUNT(*) as count FROM trainers WHERE is_active = true');
+  stats.totalTrainers = parseInt(activeTrainersResult.rows[0].count) || 0;
+  stats.activeTrainers = stats.totalTrainers; // Alias for compatibility
+
+  // Today's sessions (confirmed bookings for today)
+  const todaySessionsResult = await db.query(`
+    SELECT COUNT(*) as count FROM bookings b
+    JOIN slots s ON b.slot_id = s.id
+    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
+      AND b.status = 'confirmed'
+  `);
+  stats.todaySessions = parseInt(todaySessionsResult.rows[0].count) || 0;
+
+  // Pending bookings
+  const pendingBookingsResult = await db.query(`
+    SELECT COUNT(*) as count FROM bookings 
+    WHERE status = 'pending'
+  `);
+  stats.pendingBookings = parseInt(pendingBookingsResult.rows[0].count) || 0;
+
+  // Completed today
+  const completedTodayResult = await db.query(`
+    SELECT COUNT(*) as count FROM bookings b
+    JOIN slots s ON b.slot_id = s.id
+    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
+      AND b.status = 'completed'
+  `);
+  stats.completedToday = parseInt(completedTodayResult.rows[0].count) || 0;
+
+  // Additional stats
+  const totalUsersResult = await db.query('SELECT COUNT(*) as count FROM profiles');
+  stats.totalUsers = parseInt(totalUsersResult.rows[0].count) || 0;
+
+  const upcomingBookingsResult = await db.query(`
+    SELECT COUNT(*) as count FROM bookings b
+    JOIN slots s ON b.slot_id = s.id
+    WHERE s.start_time > NOW() AND b.status = 'confirmed'
+  `);
+  stats.upcomingBookings = parseInt(upcomingBookingsResult.rows[0].count) || 0;
+
+  return stats;
+}
+
 router.get('/dashboard', async (req, res, next) => {
   try {
-    const stats = {};
-
-    const totalUsers = await db.query('SELECT COUNT(*) FROM profiles');
-    stats.totalUsers = parseInt(totalUsers.rows[0].count);
-
-    const totalBookings = await db.query('SELECT COUNT(*) FROM bookings');
-    stats.totalBookings = parseInt(totalBookings.rows[0].count);
-
-    const activeTrainers = await db.query('SELECT COUNT(*) FROM trainers WHERE is_active = true');
-    stats.activeTrainers = parseInt(activeTrainers.rows[0].count);
-
-    const upcomingBookings = await db.query(`
-      SELECT COUNT(*) FROM bookings b
-      JOIN slots s ON b.slot_id = s.id
-      WHERE s.start_time > NOW() AND b.status = 'confirmed'
-    `);
-    stats.upcomingBookings = parseInt(upcomingBookings.rows[0].count);
-
+    const stats = await getDashboardStats();
     res.json(stats);
   } catch (error) {
     next(error);
@@ -72,24 +118,7 @@ router.get('/dashboard', async (req, res, next) => {
 // Alias for dashboard
 router.get('/stats', async (req, res, next) => {
   try {
-    const stats = {};
-
-    const totalUsers = await db.query('SELECT COUNT(*) FROM profiles');
-    stats.totalUsers = parseInt(totalUsers.rows[0].count);
-
-    const totalBookings = await db.query('SELECT COUNT(*) FROM bookings');
-    stats.totalBookings = parseInt(totalBookings.rows[0].count);
-
-    const activeTrainers = await db.query('SELECT COUNT(*) FROM trainers WHERE is_active = true');
-    stats.activeTrainers = parseInt(activeTrainers.rows[0].count);
-
-    const upcomingBookings = await db.query(`
-      SELECT COUNT(*) FROM bookings b
-      JOIN slots s ON b.slot_id = s.id
-      WHERE s.start_time > NOW() AND b.status = 'confirmed'
-    `);
-    stats.upcomingBookings = parseInt(upcomingBookings.rows[0].count);
-
+    const stats = await getDashboardStats();
     res.json(stats);
   } catch (error) {
     next(error);
@@ -138,7 +167,7 @@ router.get('/trainers', async (req, res, next) => {
 // Create trainer
 router.post('/trainers', async (req, res, next) => {
   try {
-    const { email, full_name, phone, bio, experience_years, specialization } = req.body;
+    const { email, full_name, phone, bio, experience_years, specialization, rating } = req.body;
 
     if (!email || !full_name || !bio) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -158,10 +187,10 @@ router.post('/trainers', async (req, res, next) => {
       const userId = profileResult.rows[0].id;
 
       const trainerResult = await client.query(
-        `INSERT INTO trainers (user_id, bio, experience_years, specialization, is_active)
-         VALUES ($1, $2, $3, $4, true)
+        `INSERT INTO trainers (user_id, bio, experience_years, specialization, is_active, rating)
+         VALUES ($1, $2, $3, $4, true, $5)
          RETURNING *`,
-        [userId, bio, experience_years || 0, specialization || []]
+        [userId, bio, experience_years || 0, specialization || [], rating != null ? rating : 0]
       );
 
       await client.query('COMMIT');
@@ -188,7 +217,7 @@ router.post('/trainers', async (req, res, next) => {
 router.put('/trainers/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { is_active, bio, experience_years, specialization, full_name, phone } = req.body;
+    const { is_active, bio, experience_years, specialization, full_name, phone, rating } = req.body;
 
     const updates = [];
     const values = [];
@@ -209,6 +238,10 @@ router.put('/trainers/:id', async (req, res, next) => {
     if (specialization !== undefined) {
       updates.push(`specialization = $${paramCount++}`);
       values.push(specialization);
+    }
+    if (rating !== undefined) {
+      updates.push(`rating = $${paramCount++}`);
+      values.push(rating);
     }
 
     if (updates.length === 0 && !full_name && !phone) {

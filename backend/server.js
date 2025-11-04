@@ -12,6 +12,9 @@ const trainerRoutes = require('./routes/trainers');
 const slotRoutes = require('./routes/slots');
 const bookingRoutes = require('./routes/bookings');
 const adminRoutes = require('./routes/admin');
+const ratingsRoutes = require('./routes/ratings');
+const settingsRoutes = require('./routes/settings');
+const vehiclesRoutes = require('./routes/vehicles');
 
 const app = express();
 
@@ -39,18 +42,63 @@ app.use(passport.session());
 
 require('./config/passport');
 
-const limiter = rateLimit({
+// Create rate limiters
+const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
+  message: 'Too many requests, please try again later.'
 });
-app.use('/api/', limiter);
 
+// Very lenient limiter for public GET endpoints (for polling)
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5000, // Allow 5000 requests per 15 minutes for polling
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests, please try again later.'
+});
+
+// Register routes - apply limiters as middleware
 app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
+
+// Public GET endpoints with lenient limiter
+app.use('/api/trainers', (req, res, next) => {
+  if (req.method === 'GET') {
+    return publicLimiter(req, res, next);
+  }
+  return strictLimiter(req, res, next);
+});
 app.use('/api/trainers', trainerRoutes);
+
+app.use('/api/slots', (req, res, next) => {
+  if (req.method === 'GET') {
+    return publicLimiter(req, res, next);
+  }
+  return strictLimiter(req, res, next);
+});
 app.use('/api/slots', slotRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/admin', adminRoutes);
+
+app.use('/api/vehicles', (req, res, next) => {
+  if (req.method === 'GET') {
+    return publicLimiter(req, res, next);
+  }
+  return strictLimiter(req, res, next);
+});
+app.use('/api/vehicles', vehiclesRoutes);
+
+app.use('/api/settings', (req, res, next) => {
+  if (req.method === 'GET') {
+    return publicLimiter(req, res, next);
+  }
+  return strictLimiter(req, res, next);
+});
+app.use('/api/settings', settingsRoutes);
+
+// Protected routes with strict limiter
+app.use('/api/bookings', strictLimiter, bookingRoutes);
+app.use('/api/admin', strictLimiter, adminRoutes);
+app.use('/api/ratings', strictLimiter, ratingsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

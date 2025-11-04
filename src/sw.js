@@ -64,7 +64,7 @@ self.addEventListener('fetch', event => {
           }
         })
     );
-  } else if (url.hostname.includes('supabase.co')) {
+  } else if (url.hostname.includes('localhost') || url.hostname.includes('your-api-domain.com')) {
     event.respondWith(
       caches.open(API_CACHE).then(cache => {
         return cache.match(request).then(cachedResponse => {

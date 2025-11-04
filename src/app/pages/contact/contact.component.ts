@@ -27,10 +27,12 @@ export class ContactComponent implements OnInit {
 
   constructor(private settingsService: SettingsService) {}
 
-  async ngOnInit() {
-    await this.settingsService.loadSettings();
-    this.settings = this.settingsService.getSettings();
-    this.updateContactInfo();
+  ngOnInit() {
+    // Subscribe to settings observable
+    this.settingsService.settings$.subscribe(settings => {
+      this.settings = settings;
+      this.updateContactInfo();
+    });
   }
 
   updateContactInfo() {

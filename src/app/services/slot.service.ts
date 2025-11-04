@@ -1,4 +1,6 @@
 import { Injectable } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface Slot {
@@ -25,100 +27,115 @@ export interface Slot {
   providedIn: 'root'
 })
 export class SlotService {
-  private apiUrl = environment.apiUrl;
+  private apiUrl = environment.apiUrl || 'http://localhost:3000/api';
 
-  constructor() {}
+  constructor(private http: HttpClient) {}
+
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token');
+    return new HttpHeaders({
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    });
+  }
 
   async generateDailySlots(date?: string): Promise<any> {
-    const body = date ? { date } : {};
-    const response = await fetch(`${this.apiUrl}/slots/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body)
-    });
-    if (!response.ok) throw new Error('Failed to generate slots');
-    return await response.json();
+    return firstValueFrom(
+      this.http.post<any>(`${this.apiUrl}/slots/generate-daily`, { date }, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async getSlotsByDate(date: string): Promise<Slot[]> {
-    const response = await fetch(`${this.apiUrl}/slots?date=${date}`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch slots');
-    return await response.json();
+    return firstValueFrom(
+      this.http.get<Slot[]>(`${this.apiUrl}/slots/date/${date}`)
+    );
   }
 
   async getSlotsByDateRange(startDate: string, endDate: string): Promise<Slot[]> {
-    const response = await fetch(`${this.apiUrl}/slots?start_date=${startDate}&end_date=${endDate}`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch slots');
-    return await response.json();
+    // Format dates to include full day range
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    // Use the base route with query parameters as it already supports start_date and end_date
+    return firstValueFrom(
+      this.http.get<Slot[]>(`${this.apiUrl}/slots?start_date=${start.toISOString()}&end_date=${end.toISOString()}`)
+    );
   }
 
   async getAvailableSlots(date?: string): Promise<Slot[]> {
-    const url = date
-      ? `${this.apiUrl}/slots?date=${date}&available=true`
-      : `${this.apiUrl}/slots?available=true`;
-    const response = await fetch(url, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch available slots');
-    return await response.json();
+    const url = date 
+      ? `${this.apiUrl}/slots/available?date=${date}`
+      : `${this.apiUrl}/slots/available`;
+    return firstValueFrom(this.http.get<Slot[]>(url));
   }
 
   async getSlotById(id: string): Promise<Slot | null> {
-    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to fetch slot');
-    return await response.json();
+    try {
+      return await firstValueFrom(
+        this.http.get<Slot>(`${this.apiUrl}/slots/${id}`)
+      );
+    } catch (error: any) {
+      if (error.status === 404) return null;
+      throw error;
+    }
   }
 
   async createSlot(slot: Partial<Slot>): Promise<Slot> {
-    const response = await fetch(`${this.apiUrl}/slots`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(slot)
-    });
-    if (!response.ok) throw new Error('Failed to create slot');
-    return await response.json();
+    return firstValueFrom(
+      this.http.post<Slot>(`${this.apiUrl}/slots`, slot, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async updateSlot(id: string, updates: Partial<Slot>): Promise<Slot> {
-    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(updates)
-    });
-    if (!response.ok) throw new Error('Failed to update slot');
-    return await response.json();
+    return firstValueFrom(
+      this.http.put<Slot>(`${this.apiUrl}/slots/${id}`, updates, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async assignTrainer(slotId: string, trainerId: string): Promise<Slot> {
-    return this.updateSlot(slotId, { trainer_id: trainerId });
+    return firstValueFrom(
+      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/trainer`, { trainer_id: trainerId }, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async unassignTrainer(slotId: string): Promise<Slot> {
-    return this.updateSlot(slotId, { trainer_id: null });
+    return firstValueFrom(
+      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/trainer`, { trainer_id: null }, {
+        headers: this.getAuthHeaders()
+      })
+    );
+  }
+
+  async updateSlotStatus(slotId: string, status: 'available' | 'cancelled' | 'full' | 'completed'): Promise<Slot> {
+    return firstValueFrom(
+      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/status`, { status }, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async deleteSlot(id: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/slots/${id}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to delete slot');
+    await firstValueFrom(
+      this.http.delete(`${this.apiUrl}/slots/${id}`, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 
   async deleteSlotsByDate(date: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/slots?date=${date}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    if (!response.ok) throw new Error('Failed to delete slots');
+    await firstValueFrom(
+      this.http.delete(`${this.apiUrl}/slots/date/${date}`, {
+        headers: this.getAuthHeaders()
+      })
+    );
   }
 }

@@ -10,7 +10,7 @@ export interface SlotWithTrainer {
   end_time: string;
   capacity: number;
   booked_count: number;
-  status: 'available' | 'full' | 'cancelled' | 'completed';
+  status: 'available' | 'full' | 'cancelled' | 'completed' | 'disabled';
   trainer?: {
     id: string;
     user_id: string;
@@ -82,7 +82,7 @@ export class BookingService {
 
   async getMyBookings(): Promise<void> {
     try {
-      const bookings = await this.http.get<BookingWithDetails[]>('/bookings/my').toPromise();
+      const bookings = await this.http.get<BookingWithDetails[]>('/bookings/my-bookings').toPromise();
       this.bookingsSubject.next(bookings || []);
     } catch (error) {
       console.error('Error fetching bookings:', error);

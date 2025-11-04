@@ -80,20 +80,9 @@
   margin-bottom: 60px;
 }
 
-.slots-container h2 {
-  font-size: 32px;
-  color: #2c3e50;
-  margin-bottom: 20px;
-  text-align: center;
-}
+.page-title { text-align: center; font-size: 40px; font-weight: 800; color: #0f172a; margin: 16px 0 8px; }
 
-.legend {
-  display: flex;
-  justify-content: center;
-  gap: 30px;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
-}
+.legend { display: flex; gap: 24px; justify-content: center; align-items: center; color: #475569; margin: 8px 0 24px; }
 
 .legend-item {
   display: flex;
@@ -103,34 +92,18 @@
   color: #555;
 }
 
-.dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-}
+.dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
 
-.dot.available {
-  background: #27ae60;
-}
+.dot.available { background: #16a34a; }
 
-.dot.booked {
-  background: #95a5a6;
-}
+.dot.booked { background: #94a3b8; }
 
-.slots-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 15px;
-}
+.slots-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 24px; }
+@media (max-width: 1200px) { .slots-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 768px)  { .slots-grid { grid-template-columns: repeat(2, 1fr); } }
 
-.slot-card {
-  padding: 20px;
-  border-radius: 12px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s;
-  border: 2px solid transparent;
-}
+.slot-card { background:#eafff0; border:2px solid #22c55e; border-radius:16px; padding:22px 14px; text-align:center; cursor:pointer; transition:transform .12s, box-shadow .12s; }
+.slot-card:hover { transform: translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.08); }
 
 .slot-card.available {
   background: #d5f4e6;
@@ -144,23 +117,11 @@
   color: white;
 }
 
-.slot-card.booked {
-  background: #ecf0f1;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+.slot-card.booked { background:#f1f5f9; border-color:#94a3b8; cursor:not-allowed; opacity: 1; }
 
-.slot-time {
-  font-size: 20px;
-  font-weight: 700;
-  margin-bottom: 5px;
-}
+.slot-time { font-size:26px; font-weight:800; color:#0f172a; margin-bottom:6px; }
 
-.slot-status {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
+.slot-status { font-size:13px; color:#16a34a; letter-spacing:.5px; font-weight:700; text-transform: uppercase; }
 
 .info-section {
   display: grid;
@@ -467,6 +428,61 @@
 .slot-badge.booked {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.slot-badge.full {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.slot-badge.no-trainer {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.slot-card.full {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.slot-card.no-trainer {
+  background: #fee2e2;
+  border-color: #dc2626;
+  opacity: 0.7;
+}
+
+.slot-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.slot-card.disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.no-trainer-text {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.slot-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.capacity {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.status-text {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
 }
 
 .booking-details {
