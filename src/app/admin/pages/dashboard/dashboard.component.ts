@@ -75,10 +75,6 @@ import { AdminService } from '../../../services/admin.service';
             <span class="action-icon">👥</span>
             <span class="action-label">Manage Trainers</span>
           </button>
-          <button class="action-card" (click)="navigateTo('/admin/audit')">
-            <span class="action-icon">📜</span>
-            <span class="action-label">View Audit Logs</span>
-          </button>
         </div>
       </div>
     </div>

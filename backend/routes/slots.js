@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const router = express.Router();
+const events = require('../events');
 
 // Get slots with various filters
 router.get('/', async (req, res, next) => {
@@ -63,11 +64,11 @@ router.get('/', async (req, res, next) => {
       query += ` AND (
         (EXISTS (SELECT 1 FROM information_schema.columns 
                  WHERE table_name='slots' AND column_name='slot_date') 
-         AND s.slot_date = $${params.length})
+         AND s.slot_date = $${params.length}::date)
         OR 
         (NOT EXISTS (SELECT 1 FROM information_schema.columns 
                      WHERE table_name='slots' AND column_name='slot_date') 
-         AND s.start_time::date = $${params.length})
+         AND s.start_time::date = $${params.length}::date)
       )`;
     }
 
@@ -109,16 +110,20 @@ router.get('/date/:date', async (req, res, next) => {
         SELECT s.*,
                CASE WHEN s.slot_date IS NOT NULL THEN s.slot_date ELSE s.start_time::date END as slot_date,
                t.id as trainer_id,
-               json_build_object(
-                 'id', t.id,
-                 'profile', json_build_object(
-                   'full_name', p.full_name
-                 )
-               ) as trainer
+               CASE 
+                 WHEN t.id IS NOT NULL THEN
+                   json_build_object(
+                     'id', t.id,
+                     'profile', json_build_object(
+                       'full_name', p.full_name
+                     )
+                   )
+                 ELSE NULL
+               END as trainer
         FROM slots s
         LEFT JOIN trainers t ON s.trainer_id = t.id
         LEFT JOIN profiles p ON t.user_id = p.id
-        WHERE s.slot_date = $1 OR (s.slot_date IS NULL AND s.start_time::date = $1)
+        WHERE s.slot_date = $1::date OR s.start_time::date = $1::date
         ORDER BY s.start_time ASC
       `;
     } else {
@@ -126,12 +131,16 @@ router.get('/date/:date', async (req, res, next) => {
         SELECT s.*,
                s.start_time::date as slot_date,
                t.id as trainer_id,
-               json_build_object(
-                 'id', t.id,
-                 'profile', json_build_object(
-                   'full_name', p.full_name
-                 )
-               ) as trainer
+               CASE 
+                 WHEN t.id IS NOT NULL THEN
+                   json_build_object(
+                     'id', t.id,
+                     'profile', json_build_object(
+                       'full_name', p.full_name
+                     )
+                   )
+                 ELSE NULL
+               END as trainer
         FROM slots s
         LEFT JOIN trainers t ON s.trainer_id = t.id
         LEFT JOIN profiles p ON t.user_id = p.id
@@ -204,14 +213,15 @@ router.get('/available', async (req, res, next) => {
 
     if (date) {
       params.push(date);
+      // Check both slot_date and start_time::date to handle any date format
       query += ` AND (
         (EXISTS (SELECT 1 FROM information_schema.columns 
                  WHERE table_name='slots' AND column_name='slot_date') 
-         AND s.slot_date = $1)
+         AND (s.slot_date = $${params.length}::date OR s.start_time::date = $${params.length}::date))
         OR 
         (NOT EXISTS (SELECT 1 FROM information_schema.columns 
                      WHERE table_name='slots' AND column_name='slot_date') 
-         AND s.start_time::date = $1)
+         AND s.start_time::date = $${params.length}::date)
       )`;
     }
 
@@ -261,19 +271,68 @@ router.post('/', authenticate, async (req, res, next) => {
 
     const { trainer_id, start_time, end_time, capacity, status, slot_date, is_auto_generated } = req.body;
 
-    const result = await db.query(`
-      INSERT INTO slots (trainer_id, start_time, end_time, capacity, status${slot_date ? ', slot_date' : ''}${is_auto_generated !== undefined ? ', is_auto_generated' : ''})
-      VALUES ($1, $2, $3, $4, $5${slot_date ? ', $6' : ''}${is_auto_generated !== undefined ? (slot_date ? ', $7' : ', $6') : ''})
-      RETURNING *
-    `, slot_date && is_auto_generated !== undefined 
-      ? [trainer_id, start_time, end_time, capacity || 1, status || 'available', slot_date, is_auto_generated]
-      : slot_date 
-        ? [trainer_id, start_time, end_time, capacity || 1, status || 'available', slot_date]
-        : is_auto_generated !== undefined
-          ? [trainer_id, start_time, end_time, capacity || 1, status || 'available', is_auto_generated]
-          : [trainer_id, start_time, end_time, capacity || 1, status || 'available']);
+    // Auto-derive slot_date from start_time if not provided or if mismatched
+    let finalSlotDate = slot_date;
+    if (start_time) {
+      const startDate = new Date(start_time);
+      const derivedDate = startDate.toISOString().split('T')[0];
+      // Always use the date from start_time to ensure consistency
+      finalSlotDate = derivedDate;
+    }
 
-    res.status(201).json(result.rows[0]);
+    // Check if slot_date column exists
+    const hasSlotDate = await db.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='slots' AND column_name='slot_date'
+      ) as exists
+    `).then(r => r.rows[0].exists);
+
+    const hasIsAutoGenerated = await db.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='slots' AND column_name='is_auto_generated'
+      ) as exists
+    `).then(r => r.rows[0].exists);
+
+    let query;
+    let params;
+
+    if (hasSlotDate && hasIsAutoGenerated) {
+      query = `
+        INSERT INTO slots (trainer_id, start_time, end_time, capacity, status, slot_date, is_auto_generated)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `;
+      params = [trainer_id, start_time, end_time, capacity || 1, status || 'available', finalSlotDate, is_auto_generated !== undefined ? is_auto_generated : false];
+    } else if (hasSlotDate) {
+      query = `
+        INSERT INTO slots (trainer_id, start_time, end_time, capacity, status, slot_date)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `;
+      params = [trainer_id, start_time, end_time, capacity || 1, status || 'available', finalSlotDate];
+    } else if (hasIsAutoGenerated) {
+      query = `
+        INSERT INTO slots (trainer_id, start_time, end_time, capacity, status, is_auto_generated)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `;
+      params = [trainer_id, start_time, end_time, capacity || 1, status || 'available', is_auto_generated !== undefined ? is_auto_generated : false];
+    } else {
+      query = `
+        INSERT INTO slots (trainer_id, start_time, end_time, capacity, status)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      `;
+      params = [trainer_id, start_time, end_time, capacity || 1, status || 'available'];
+    }
+
+    const result = await db.query(query, params);
+
+    const created = result.rows[0];
+    res.status(201).json(created);
+    events.broadcast('slot.created', created);
   } catch (error) {
     next(error);
   }
@@ -313,7 +372,9 @@ router.put('/:id/trainer', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Slot not found' });
     }
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    res.json(updated);
+    events.broadcast('slot.assigned', updated);
   } catch (error) {
     next(error);
   }
@@ -342,7 +403,9 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Slot not found' });
     }
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    res.json(updated);
+    events.broadcast('slot.status', updated);
   } catch (error) {
     next(error);
   }
@@ -379,7 +442,9 @@ router.put('/:id/toggle', authenticate, async (req, res, next) => {
       RETURNING *
     `, [newStatus, req.params.id]);
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    res.json(updated);
+    events.broadcast('slot.toggled', updated);
   } catch (error) {
     next(error);
   }
@@ -392,7 +457,23 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { trainer_id, start_time, end_time, capacity, status, booked_count } = req.body;
+    const { trainer_id, start_time, end_time, capacity, status, booked_count, slot_date } = req.body;
+    
+    // Check if slot_date column exists
+    const hasSlotDate = await db.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='slots' AND column_name='slot_date'
+      ) as exists
+    `).then(r => r.rows[0].exists);
+
+    // Auto-derive slot_date from start_time if start_time is being updated
+    let finalSlotDate = slot_date;
+    if (start_time && hasSlotDate) {
+      const startDate = new Date(start_time);
+      finalSlotDate = startDate.toISOString().split('T')[0];
+    }
+
     const updates = [];
     const params = [];
     let paramIndex = 1;
@@ -420,6 +501,10 @@ router.put('/:id', authenticate, async (req, res, next) => {
     if (booked_count !== undefined) {
       updates.push(`booked_count = $${paramIndex++}`);
       params.push(booked_count);
+    }
+    if (hasSlotDate && finalSlotDate !== undefined) {
+      updates.push(`slot_date = $${paramIndex++}`);
+      params.push(finalSlotDate);
     }
 
     if (updates.length === 0) {
@@ -454,7 +539,9 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Slot not found' });
     }
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    res.json(updated);
+    events.broadcast('slot.updated', updated);
   } catch (error) {
     next(error);
   }
@@ -474,6 +561,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
     }
 
     res.json({ message: 'Slot deleted successfully' });
+    events.broadcast('slot.deleted', { id: req.params.id });
   } catch (error) {
     next(error);
   }
@@ -501,6 +589,7 @@ router.delete('/date/:date', authenticate, async (req, res, next) => {
     `, [date]);
 
     res.json({ message: 'Slots deleted successfully' });
+    events.broadcast('slot.bulk_deleted', { date });
   } catch (error) {
     next(error);
   }
@@ -514,9 +603,9 @@ router.post('/generate', authenticate, async (req, res, next) => {
     }
 
     const { date } = req.body;
-    const targetDate = date ? new Date(date) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
-    const dateString = targetDate.toISOString().split('T')[0];
+    // Use the provided date string directly (first 10 chars) to avoid timezone shifts
+    const dateString = (date ? String(date).slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const targetDate = new Date(dateString + 'T00:00:00');
 
     // Check column existence once
     const hasSlotDate = await db.query(`
@@ -577,7 +666,7 @@ router.post('/generate', authenticate, async (req, res, next) => {
       startHour: 9,
       startMinute: 0,
       endHour: 21,
-      endMinute: 0,
+      endMinute: 30, // Set to 9:30 PM to include the 9:00-9:30 PM slot
       intervalMinutes: 30
     };
 
@@ -635,12 +724,14 @@ router.post('/generate', authenticate, async (req, res, next) => {
       }
     }
 
-    res.json({
+    const payload = {
       success: true,
       message: `Generated ${slots.length} slots for ${dateString}`,
       slotsCreated: slots.length,
       date: dateString
-    });
+    };
+    res.json(payload);
+    events.broadcast('slot.generated', payload);
   } catch (error) {
     next(error);
   }
@@ -657,9 +748,8 @@ router.post('/generate-daily', authenticate, async (req, res, next) => {
 router.post('/ensure-daily', async (req, res, next) => {
   try {
     const { date } = req.body;
-    const targetDate = date ? new Date(date) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
-    const dateString = targetDate.toISOString().split('T')[0];
+    const dateString = (date ? String(date).slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const targetDate = new Date(dateString + 'T00:00:00');
 
     // Use database function if available, otherwise generate manually
     const hasFunction = await db.query(`
@@ -680,7 +770,7 @@ router.post('/ensure-daily', async (req, res, next) => {
       `, [dateString]);
       
       if (parseInt(result.rows[0].count) === 0) {
-        // Generate slots
+        // Generate slots (9 AM to 9 PM, 30-minute intervals)
         const generateResult = await db.query(`
           INSERT INTO slots (trainer_id, start_time, end_time, slot_date, capacity, booked_count, status, is_auto_generated)
           SELECT 

@@ -41,11 +41,6 @@ export class AdminService {
     return result || [];
   }
 
-  async getAuditLogs(): Promise<any[]> {
-    const result = await this.http.get<any[]>('/admin/audit').toPromise();
-    return result || [];
-  }
-
   async getSettings(): Promise<any> {
     return this.http.get('/admin/settings').toPromise();
   }

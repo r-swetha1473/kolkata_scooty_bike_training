@@ -7,13 +7,15 @@ router.get('/', async (req, res, next) => {
     const result = await db.query(`
       SELECT 
         t.id,
+        t.user_id,
         t.bio,
         t.experience_years,
         t.specialization,
         t.rating,
         t.total_sessions,
         t.is_active,
-        p.id as user_id,
+        t.created_at,
+        t.updated_at,
         p.full_name,
         p.avatar_url,
         p.email,
@@ -24,19 +26,24 @@ router.get('/', async (req, res, next) => {
       ORDER BY t.rating DESC, t.total_sessions DESC
     `);
 
-    // Format the response for frontend
+    // Format the response to match frontend Trainer interface
     const formattedTrainers = result.rows.map(row => ({
-      id: row.id,
-      name: row.full_name,
-      email: row.email,
-      phone: row.phone,
-      avatar: row.avatar_url || null,
-      bio: row.bio,
-      experience_years: row.experience_years,
+      id: row.id.toString(),
+      user_id: row.user_id.toString(),
+      bio: row.bio || '',
+      experience_years: row.experience_years || 0,
       specialization: row.specialization || [],
       rating: parseFloat(row.rating) || 0,
       total_sessions: row.total_sessions || 0,
-      is_active: row.is_active
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      profile: {
+        full_name: row.full_name,
+        email: row.email,
+        phone: row.phone || null,
+        avatar_url: row.avatar_url || null
+      }
     }));
 
     res.json(formattedTrainers);
@@ -51,13 +58,15 @@ router.get('/active', async (req, res, next) => {
     const result = await db.query(`
       SELECT 
         t.id,
+        t.user_id,
         t.bio,
         t.experience_years,
         t.specialization,
         t.rating,
         t.total_sessions,
         t.is_active,
-        p.id as user_id,
+        t.created_at,
+        t.updated_at,
         p.full_name,
         p.avatar_url,
         p.email,
@@ -68,19 +77,24 @@ router.get('/active', async (req, res, next) => {
       ORDER BY t.rating DESC, t.total_sessions DESC
     `);
 
-    // Format the response for frontend
+    // Format the response to match frontend Trainer interface
     const formattedTrainers = result.rows.map(row => ({
-      id: row.id,
-      name: row.full_name,
-      email: row.email,
-      phone: row.phone,
-      avatar: row.avatar_url || null,
-      bio: row.bio,
-      experience_years: row.experience_years,
+      id: row.id.toString(),
+      user_id: row.user_id.toString(),
+      bio: row.bio || '',
+      experience_years: row.experience_years || 0,
       specialization: row.specialization || [],
       rating: parseFloat(row.rating) || 0,
       total_sessions: row.total_sessions || 0,
-      is_active: row.is_active
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      profile: {
+        full_name: row.full_name,
+        email: row.email,
+        phone: row.phone || null,
+        avatar_url: row.avatar_url || null
+      }
     }));
 
     res.json(formattedTrainers);

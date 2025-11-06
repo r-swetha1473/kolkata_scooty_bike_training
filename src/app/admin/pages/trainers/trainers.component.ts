@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { Trainer } from '../../../services/trainer.service';
+import { ToastService } from '../../../services/toast.service';
 
 @Component({
   selector: 'app-admin-trainers',
@@ -31,39 +32,29 @@ import { Trainer } from '../../../services/trainer.service';
       </div>
 
       <div class="table-container" style="overflow-x:auto;">
-        <table class="data-table">
+        <table class="data-table compact-table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Email</th>
-            <th>Experience</th>
+            <th>Exp</th>
             <th>Rating</th>
             <th>Specialization</th>
             <th>Status</th>
-            <th>On Duty</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let trainer of getPaginatedTrainers()">
             <td>{{ trainer.profile?.full_name }}</td>
-            <td>{{ trainer.profile?.email }}</td>
-            <td>{{ trainer.experience_years }} years</td>
-            <td>{{ trainer.rating || 0 }} / 5</td>
-            <td>{{ trainer.specialization?.join(', ') || 'N/A' }}</td>
+            <td class="email-cell">{{ trainer.profile?.email }}</td>
+            <td>{{ trainer.experience_years }}y</td>
+            <td>{{ trainer.rating || 0 }}/5</td>
+            <td class="specialization-cell">{{ (trainer.specialization?.join(', ') || 'N/A').substring(0, 30) }}{{ (trainer.specialization?.join(', ') || '').length > 30 ? '...' : '' }}</td>
             <td>
               <span class="status-badge" [class.active]="trainer.is_active">
                 {{ trainer.is_active ? 'Active' : 'Inactive' }}
               </span>
-            </td>
-            <td>
-              <button
-                class="duty-toggle"
-                [class.on-duty]="trainer.on_duty"
-                [class.off-duty]="!trainer.on_duty"
-                (click)="toggleOnDuty(trainer.id, trainer.on_duty)">
-                {{ trainer.on_duty ? 'On Duty' : 'Off Duty' }}
-              </button>
             </td>
             <td>
               <div class="action-buttons">
@@ -94,22 +85,30 @@ import { Trainer } from '../../../services/trainer.service';
         </table>
       </div>
 
-      <div class="pagination-container" *ngIf="totalPages > 1">
+      <div class="pagination-pill" *ngIf="totalPages > 1">
         <button 
-          class="pagination-btn" 
+          class="nav-btn"
           [disabled]="currentPage === 1"
-          (click)="goToPage(currentPage - 1)">
-          ← Previous
-        </button>
-        <span class="page-info">
-          Page {{ currentPage }} of {{ totalPages }} ({{ filteredTrainers.length }} trainers)
-        </span>
+          (click)="goToPage(currentPage - 1)">‹ Prev</button>
+
+        <div class="page-numbers">
+          <button 
+            *ngFor="let page of getPageNumbers()"
+            class="page-chip"
+            [class.active]="page === currentPage"
+            [class.ellipsis]="page === '...'"
+            [disabled]="page === '...'"
+            (click)="page !== '...' && goToPage(page)">
+            {{ page }}
+          </button>
+        </div>
+
         <button 
-          class="pagination-btn" 
+          class="nav-btn"
           [disabled]="currentPage === totalPages"
-          (click)="goToPage(currentPage + 1)">
-          Next →
-        </button>
+          (click)="goToPage(currentPage + 1)">Next ›</button>
+
+        <div class="results-info">Showing {{ getShowingCount() }} of {{ filteredTrainers.length }} results</div>
       </div>
 
       <div class="modal" *ngIf="showModal" (click)="closeModal($event)">
@@ -162,86 +161,41 @@ import { Trainer } from '../../../services/trainer.service';
     .page-title { font-size: 32px; font-weight: 700; color: #1f2937; margin: 0; }
     .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
     .btn-primary:hover { transform: translateY(-2px); }
-    .data-table { width: 100%; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .data-table th, .data-table td { padding: 16px; text-align: left; }
+    .data-table { width: 100%; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-collapse: collapse; }
+    .data-table.compact-table th, .data-table.compact-table td { padding: 10px 12px; text-align: left; font-size: 13px; }
+    .data-table.compact-table th { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .data-table thead { background: #f9fafb; }
     .data-table tbody tr { border-top: 1px solid #e5e7eb; }
+    .data-table tbody tr:hover { background: #f9fafb; }
+    .email-cell { font-size: 12px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .specialization-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .status-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .status-badge { background: #fee2e2; color: #991b1b; }
     .status-badge.active { background: #d1fae5; color: #065f46; }
-    .action-buttons {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+    .action-buttons { display: flex; gap: 8px; align-items: center; }
 
-    .btn-icon {
-      width: 36px;
-      height: 36px;
-      padding: 0;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      background: #f3f4f6;
-    }
+    /* Pagination pill */
+    .pagination-pill { display:flex; align-items:center; gap:16px; justify-content: space-between; background:white; border-radius: 9999px; padding: 12px 18px; margin:24px 0; box-shadow: 0 10px 25px rgba(0,0,0,0.08), inset 0 0 0 1px #e5e7eb; flex-wrap: wrap; }
+    .nav-btn { background: none; border: none; color: #1f2937; font-weight: 600; cursor: pointer; padding: 8px 10px; border-radius: 9999px; }
+    .nav-btn:disabled { color: #9ca3af; cursor: not-allowed; }
+    .page-numbers { display: flex; gap: 8px; align-items: center; }
+    .page-chip { min-width: 36px; height: 36px; border-radius: 9999px; border: 1px solid #e5e7eb; background: white; color: #1f2937; font-weight: 600; cursor: pointer; }
+    .page-chip:hover:not(.active):not(.ellipsis) { border-color: #6366f1; color: #6366f1; }
+    .page-chip.active { background: #4f46e5; color: white; border-color: #4f46e5; box-shadow: 0 0 0 6px rgba(79,70,229,0.15); }
+    .page-chip.ellipsis { border: none; background: none; cursor: default; color: #6b7280; }
+    .results-info { color: #4b5563; font-size: 14px; margin-left: auto; }
 
-    .btn-icon .icon {
-      font-size: 16px;
-      line-height: 1;
-    }
+    .btn-icon { width: 36px; height: 36px; padding: 0; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background: #f3f4f6; }
+    .btn-icon .icon { font-size: 16px; line-height: 1; }
+    .btn-icon.btn-success { background: #10b981; color: white; }
+    .btn-icon.btn-success:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3); }
+    .btn-icon.btn-warning { background: #f59e0b; color: white; }
+    .btn-icon.btn-warning:hover { background: #d97706; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3); }
+    .btn-icon.btn-info { background: #3b82f6; color: white; }
+    .btn-icon.btn-info:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3); }
+    .btn-icon.btn-danger { background: #ef4444; color: white; }
+    .btn-icon.btn-danger:hover { background: #dc2626; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3); }
 
-    .btn-icon.btn-success {
-      background: #10b981;
-      color: white;
-    }
-
-    .btn-icon.btn-success:hover {
-      background: #059669;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
-    }
-
-    .btn-icon.btn-warning {
-      background: #f59e0b;
-      color: white;
-    }
-
-    .btn-icon.btn-warning:hover {
-      background: #d97706;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
-    }
-
-    .btn-icon.btn-info {
-      background: #3b82f6;
-      color: white;
-    }
-
-    .btn-icon.btn-info:hover {
-      background: #2563eb;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-    }
-
-    .btn-icon.btn-danger {
-      background: #ef4444;
-      color: white;
-    }
-
-    .btn-icon.btn-danger:hover {
-      background: #dc2626;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
-    }
-    .duty-toggle { padding: 6px 14px; border: none; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .duty-toggle.on-duty { background: #d1fae5; color: #065f46; }
-    .duty-toggle.on-duty:hover { background: #a7f3d0; }
-    .duty-toggle.off-duty { background: #fee2e2; color: #991b1b; }
-    .duty-toggle.off-duty:hover { background: #fecaca; }
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .modal-content { background: white; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 24px; border-bottom: 1px solid #e5e7eb; }
@@ -261,11 +215,6 @@ import { Trainer } from '../../../services/trainer.service';
     .search-input { flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
     .search-input:focus { outline: none; border-color: #3b82f6; }
     .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .pagination-container { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 20px; }
-    .pagination-btn { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
-    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
-    .page-info { color: #6b7280; font-size: 14px; }
   `]
 })
 export class AdminTrainersComponent implements OnInit {
@@ -291,7 +240,10 @@ export class AdminTrainersComponent implements OnInit {
     rating: 0
   };
 
-  constructor(private adminService: AdminService) {}
+  constructor(
+    private adminService: AdminService,
+    private toastService: ToastService
+  ) {}
 
   async ngOnInit() {
     await this.loadTrainers();
@@ -303,7 +255,7 @@ export class AdminTrainersComponent implements OnInit {
       this.filterTrainers();
     } catch (error) {
       console.error('Failed to load trainers:', error);
-      alert('Failed to load trainers');
+      this.toastService.error('Failed to load trainers');
     }
   }
 
@@ -336,6 +288,32 @@ export class AdminTrainersComponent implements OnInit {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
     }
+  }
+
+  getPageNumbers(): (number | string)[] {
+    const pages: (number | string)[] = [];
+    const total = this.totalPages;
+    const current = this.currentPage;
+    
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else if (current <= 3) {
+      for (let i = 1; i <= 4; i++) pages.push(i);
+      pages.push('...');
+      pages.push(total);
+    } else if (current >= total - 2) {
+      pages.push(1, '...');
+      for (let i = total - 3; i <= total; i++) pages.push(i);
+    } else {
+      pages.push(1, '...');
+      pages.push(current - 1, current, current + 1);
+      pages.push('...', total);
+    }
+    return pages;
+  }
+
+  getShowingCount(): number {
+    return Math.min(this.currentPage * this.itemsPerPage, this.filteredTrainers.length);
   }
 
   onPageSizeChange() {
@@ -410,21 +388,10 @@ export class AdminTrainersComponent implements OnInit {
 
       this.showModal = false;
       await this.loadTrainers();
+      this.toastService.success(this.editingTrainer ? 'Trainer updated successfully' : 'Trainer created successfully');
     } catch (error: any) {
       console.error('Error saving trainer:', error);
-      alert(error.error?.error || error.error?.message || 'Failed to save trainer');
-    }
-  }
-
-  async toggleOnDuty(trainerId: string, currentStatus: boolean) {
-    try {
-      // Note: on_duty is not a standard field, but we can add it if needed
-      // For now, we'll use is_active as a proxy
-      await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
-      await this.loadTrainers();
-    } catch (error) {
-      console.error('Error updating duty status:', error);
-      alert('Failed to update duty status');
+      this.toastService.error(error.error?.error || error.error?.message || 'Failed to save trainer');
     }
   }
 
@@ -432,9 +399,10 @@ export class AdminTrainersComponent implements OnInit {
     try {
       await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
       await this.loadTrainers();
-    } catch (error) {
+      this.toastService.success(`Trainer ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
+    } catch (error: any) {
       console.error('Error updating trainer status:', error);
-      alert('Failed to update trainer status');
+      this.toastService.error(error.error?.error || error.error?.message || 'Failed to update trainer status');
     }
   }
 
@@ -446,9 +414,10 @@ export class AdminTrainersComponent implements OnInit {
     try {
       await this.adminService.deleteTrainer(trainerId).toPromise();
       await this.loadTrainers();
+      this.toastService.success('Trainer deleted successfully');
     } catch (error: any) {
       console.error('Error deleting trainer:', error);
-      alert(error.error?.error || error.error?.message || 'Failed to delete trainer');
+      this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete trainer');
     }
   }
 }

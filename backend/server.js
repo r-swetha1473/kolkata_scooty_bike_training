@@ -17,6 +17,7 @@ const settingsRoutes = require('./routes/settings');
 const vehiclesRoutes = require('./routes/vehicles');
 
 const app = express();
+const events = require('./events');
 
 app.use(helmet());
 app.use(cors({
@@ -102,6 +103,28 @@ app.use('/api/ratings', strictLimiter, ratingsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Server-Sent Events endpoint for real-time updates
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+
+  // Send initial comment to establish stream
+  res.write(': connected\n\n');
+  events.addClient(res);
+
+  const keepAlive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch (_) {}
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    events.removeClient(res);
+    try { res.end(); } catch (_) {}
+  });
 });
 
 app.use((err, req, res, next) => {

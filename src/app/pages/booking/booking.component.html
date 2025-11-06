@@ -9,7 +9,7 @@
   <section class="booking-content">
     <div class="container">
       <div class="date-navigation">
-        <button class="nav-btn" (click)="changeDate(-1)">← Previous Day</button>
+        <button class="nav-btn" (click)="changeDate(-1)" [disabled]="isPrevDisabled()">← Previous Day</button>
         <div class="date-selector">
           <label for="date">Select Date:</label>
           <input
@@ -50,11 +50,11 @@
             [class.disabled]="isSlotDisabled(slot)"
             (click)="selectSlot(slot)">
             <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
+            <div class="slot-status-text">
+              {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotBooked(slot) ? 'BOOKED' : 'AVAILABLE')) }}
+            </div>
             <div class="slot-trainer" *ngIf="slot.trainer?.profile?.full_name">
               <span class="trainer-icon">👤</span> {{ slot.trainer.profile.full_name }}
-            </div>
-            <div class="slot-trainer no-trainer-assigned" *ngIf="!slot.trainer?.profile?.full_name">
-              <span class="trainer-icon">👤</span> Unassigned
             </div>
             <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>

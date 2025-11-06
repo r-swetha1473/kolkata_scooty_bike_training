@@ -63,10 +63,6 @@ export const routes: Routes = [
       {
         path: 'settings',
         loadComponent: () => import('./admin/pages/settings/settings.component').then(m => m.AdminSettingsComponent)
-      },
-      {
-        path: 'audit',
-        loadComponent: () => import('./admin/pages/audit/audit.component').then(m => m.AdminAuditComponent)
       }
     ]
   },

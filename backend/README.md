@@ -28,9 +28,12 @@ psql -U scotty_user -d kolkata_scotty -f schema.sql
 
 ### 4. Configure Environment
 ```bash
-cp .env.example .env
-# Edit .env with your database credentials and Google OAuth keys
+# Copy the example file (rename env.example.txt to .env)
+cp env.example.txt .env
+# Edit .env with your database credentials, Google OAuth keys, and SMTP settings
 ```
+
+**See [ENV_SETUP.md](./ENV_SETUP.md) for complete environment variable documentation.**
 
 ### 5. Install & Run
 ```bash

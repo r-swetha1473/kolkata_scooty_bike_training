@@ -10,20 +10,54 @@ router.get('/bookings', async (req, res, next) => {
   try {
     const result = await db.query(`
       SELECT b.*,
-             s.start_time, s.end_time,
-             u.full_name as user_name, u.email as user_email,
-             t.id as trainer_id,
-             p.full_name as trainer_name
+             s.start_time, s.end_time, s.slot_date,
+             u.id as user_id, u.full_name as user_name, u.email as user_email,
+             t.id as trainer_table_id,
+             p.id as trainer_profile_id, p.full_name as trainer_name
       FROM bookings b
-      JOIN slots s ON b.slot_id = s.id
-      JOIN profiles u ON b.user_id = u.id
-      JOIN trainers t ON b.trainer_id = t.id
-      JOIN profiles p ON t.user_id = p.id
-      ORDER BY s.start_time DESC
+      LEFT JOIN slots s ON b.slot_id = s.id
+      LEFT JOIN profiles u ON b.user_id = u.id
+      LEFT JOIN trainers t ON b.trainer_id = t.id
+      LEFT JOIN profiles p ON t.user_id = p.id
+      ORDER BY s.start_time DESC NULLS LAST, b.created_at DESC
       LIMIT 100
     `);
 
-    res.json(result.rows);
+    // Format response to match frontend expectations
+    const bookings = result.rows.map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      slot_id: row.slot_id,
+      trainer_id: row.trainer_id,
+      vehicle_id: row.vehicle_id,
+      status: row.status,
+      notes: row.notes,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      user: {
+        id: row.user_id,
+        full_name: row.user_name,
+        email: row.user_email
+      },
+      trainer: {
+        id: row.trainer_table_id,
+        profile: {
+          id: row.trainer_profile_id,
+          full_name: row.trainer_name
+        }
+      },
+      slot: {
+        start_time: row.start_time,
+        end_time: row.end_time,
+        slot_date: row.slot_date
+      },
+      // Also include flat fields for backward compatibility
+      user_name: row.user_name,
+      user_email: row.user_email,
+      trainer_name: row.trainer_name
+    }));
+
+    res.json(bookings);
   } catch (error) {
     next(error);
   }
@@ -504,41 +538,6 @@ router.delete('/slots/:id', async (req, res, next) => {
   }
 });
 
-// Get audit logs
-router.get('/audit', async (req, res, next) => {
-  try {
-    const result = await db.query(`
-      SELECT a.*,
-             p.full_name, p.email
-      FROM audit_logs a
-      LEFT JOIN profiles p ON a.user_id = p.id
-      ORDER BY a.created_at DESC
-      LIMIT 100
-    `);
-
-    // Format response
-    const logs = result.rows.map(row => ({
-      id: row.id,
-      user_id: row.user_id,
-      action: row.action,
-      entity_type: row.entity_type,
-      entity_id: row.entity_id,
-      old_data: row.old_data,
-      new_data: row.new_data,
-      ip_address: row.ip_address,
-      created_at: row.created_at,
-      user: row.user_id ? {
-        full_name: row.full_name,
-        email: row.email
-      } : null
-    }));
-
-    res.json(logs);
-  } catch (error) {
-    next(error);
-  }
-});
-
 // Get settings
 router.get('/settings', async (req, res, next) => {
   try {
@@ -593,15 +592,28 @@ router.put('/bookings/:id/status', async (req, res, next) => {
     const { id } = req.params;
     const { status } = req.body;
 
+    console.log(`[Admin] Updating booking ${id} status to: ${status}`);
+
     if (!status) {
       return res.status(400).json({ error: 'Status is required' });
     }
 
     const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
     }
 
+    // Check if booking exists
+    const bookingCheck = await db.query('SELECT * FROM bookings WHERE id = $1', [id]);
+    if (bookingCheck.rows.length === 0) {
+      console.error(`[Admin] Booking not found: ${id}`);
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const oldStatus = bookingCheck.rows[0].status;
+    console.log(`[Admin] Booking ${id} status change: ${oldStatus} -> ${status}`);
+
+    // Update booking status
     const result = await db.query(
       'UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
       [status, id]
@@ -611,8 +623,12 @@ router.put('/bookings/:id/status', async (req, res, next) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    res.json(result.rows[0]);
+    const updatedBooking = result.rows[0];
+    console.log(`[Admin] Booking ${id} status updated successfully to: ${updatedBooking.status}`);
+
+    res.json(updatedBooking);
   } catch (error) {
+    console.error(`[Admin] Error updating booking status:`, error);
     next(error);
   }
 });

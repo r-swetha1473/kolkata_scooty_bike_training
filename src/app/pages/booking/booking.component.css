@@ -146,7 +146,7 @@
 }
 
 .dot.booked {
-  background: #f59e0b;
+  background: #94a3b8;
 }
 
 .dot.full {
@@ -159,27 +159,27 @@
 
 .slots-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
 }
 
 @media (max-width: 1400px) {
   .slots-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
 }
 
 @media (max-width: 1024px) {
   .slots-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
   }
 }
 
 @media (max-width: 768px) {
   .slots-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
   }
 }
 
@@ -191,14 +191,15 @@
 
 .slot-card {
   background: white;
-  border: 3px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 16px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 8px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
   overflow: hidden;
+  min-height: 80px;
 }
 
 .slot-card::before {
@@ -228,12 +229,14 @@
 }
 
 .slot-card.booked {
-  background: #fffbeb;
-  border-color: #f59e0b;
+  background: #f3f4f6;
+  border-color: #cbd5e1;
+  cursor: not-allowed;
+  opacity: 0.9;
 }
 
 .slot-card.booked::before {
-  background: #f59e0b;
+  background: #cbd5e1;
 }
 
 .slot-card.full {
@@ -259,24 +262,37 @@
 }
 
 .slot-time {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 800;
   color: #0f172a;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
+.slot-status-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.slot-card.available .slot-status-text { color: #065f46; }
+.slot-card.booked .slot-status-text { color: #334155; }
+.slot-card.full .slot-status-text { color: #991b1b; }
+.slot-card.disabled .slot-status-text { color: #64748b; }
+
 .slot-trainer {
-  font-size: 12px;
+  font-size: 10px;
   color: #64748b;
-  margin: 8px 0;
+  margin: 4px 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .trainer-icon {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .no-trainer-assigned {
@@ -285,13 +301,13 @@
 }
 
 .slot-capacity {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   color: #475569;
-  margin-top: 8px;
-  padding: 4px 8px;
+  margin-top: 4px;
+  padding: 2px 6px;
   background: #f1f5f9;
-  border-radius: 6px;
+  border-radius: 4px;
   display: inline-block;
 }
 

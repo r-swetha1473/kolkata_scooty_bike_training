@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
+import { ToastService } from '../../../services/toast.service';
 
 @Component({
   selector: 'app-admin-bookings',
@@ -68,12 +69,12 @@ import { AdminService } from '../../../services/admin.service';
             <tr *ngFor="let booking of getPaginatedBookings()">
               <td>
                 <div class="customer-info">
-                  <div class="name">{{ booking.user?.full_name }}</div>
-                  <div class="email">{{ booking.user?.email }}</div>
+                  <div class="name">{{ booking.user?.full_name || booking.user_name || 'N/A' }}</div>
+                  <div class="email">{{ booking.user?.email || booking.user_email || '' }}</div>
                 </div>
               </td>
-              <td>{{ booking.trainer?.profile?.full_name }}</td>
-              <td>{{ formatDateTime(booking.slot?.start_time) }}</td>
+              <td>{{ booking.trainer?.profile?.full_name || booking.trainer_name || 'N/A' }}</td>
+              <td>{{ booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A') }}</td>
               <td>
                 <span class="status-badge" [class]="'status-' + booking.status">
                   {{ booking.status }}
@@ -117,22 +118,37 @@ import { AdminService } from '../../../services/admin.service';
         </div>
       </div>
 
-      <div class="pagination-container" *ngIf="totalPages > 1">
-        <button 
-          class="pagination-btn" 
-          [disabled]="currentPage === 1"
-          (click)="goToPage(currentPage - 1)">
-          ← Previous
-        </button>
-        <span class="page-info">
-          Page {{ currentPage }} of {{ totalPages }} ({{ filteredBookings.length }} bookings)
-        </span>
-        <button 
-          class="pagination-btn" 
-          [disabled]="currentPage === totalPages"
-          (click)="goToPage(currentPage + 1)">
-          Next →
-        </button>
+      <div class="pagination-wrapper" *ngIf="totalPages > 1">
+        <div class="pagination-container">
+          <button 
+            class="pagination-btn" 
+            [disabled]="currentPage === 1"
+            (click)="goToPage(currentPage - 1)">
+            ← Prev
+          </button>
+          <div class="pagination-info">
+            <span class="page-numbers">
+              <button 
+                *ngFor="let page of getPageNumbers()"
+                class="page-number"
+                [class.active]="page === currentPage"
+                [class.ellipsis]="page === '...'"
+                [disabled]="page === '...'"
+                (click)="page !== '...' && goToPage(page)">
+                {{ page }}
+              </button>
+            </span>
+            <span class="page-info-text">
+              Page {{ currentPage }} of {{ totalPages }} ({{ filteredBookings.length }} total)
+            </span>
+          </div>
+          <button 
+            class="pagination-btn" 
+            [disabled]="currentPage === totalPages"
+            (click)="goToPage(currentPage + 1)">
+            Next →
+          </button>
+        </div>
       </div>
     </div>
   `,
@@ -249,9 +265,15 @@ import { AdminService } from '../../../services/admin.service';
       color: #1e40af;
     }
 
+    .status-booked {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
     .status-completed {
       background: #d1fae5;
       color: #065f46;
+      border: 1px solid #10b981;
     }
 
     .status-cancelled {
@@ -322,11 +344,19 @@ import { AdminService } from '../../../services/admin.service';
     .search-input { flex: 1; min-width: 200px; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
     .search-input:focus { outline: none; border-color: #667eea; }
     .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .pagination-container { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 20px; }
-    .pagination-btn { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
-    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
-    .page-info { color: #6b7280; font-size: 14px; }
+    .pagination-wrapper { margin-top: 24px; padding: 20px 0; border-top: 1px solid #e5e7eb; }
+    .pagination-container { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .pagination-btn { padding: 8px 16px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; transform: none; }
+    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3); }
+    .pagination-info { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+    .page-numbers { display: flex; gap: 4px; align-items: center; }
+    .page-number { padding: 6px 12px; background: white; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: #4b5563; transition: all 0.2s; min-width: 36px; }
+    .page-number:hover:not(:disabled) { background: #f3f4f6; border-color: #3b82f6; color: #3b82f6; }
+    .page-number.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-color: #3b82f6; }
+    .page-number.ellipsis { border: none; background: none; cursor: default; }
+    .page-number:disabled { cursor: default; }
+    .page-info-text { color: #6b7280; font-size: 12px; }
 
     .empty-icon {
       font-size: 60px;
@@ -366,7 +396,10 @@ export class AdminBookingsComponent implements OnInit {
   itemsPerPage = 20;
   totalPages = 1;
 
-  constructor(private adminService: AdminService) {}
+  constructor(
+    private adminService: AdminService,
+    private toastService: ToastService
+  ) {}
 
   async ngOnInit() {
     await this.loadBookings();
@@ -383,6 +416,7 @@ export class AdminBookingsComponent implements OnInit {
       this.applyFilters();
     } catch (error) {
       console.error('Error loading bookings:', error);
+      this.toastService.error('Failed to load bookings');
     }
   }
 
@@ -393,9 +427,30 @@ export class AdminBookingsComponent implements OnInit {
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase().trim();
       filtered = filtered.filter(booking => {
-        const customerName = booking.user_name?.toLowerCase() || '';
-        const trainerName = booking.trainer_name?.toLowerCase() || '';
-        return customerName.includes(term) || trainerName.includes(term);
+        const customerName = (booking.user?.full_name || booking.user_name || '').toLowerCase();
+        const customerEmail = (booking.user?.email || booking.user_email || '').toLowerCase();
+        const trainerName = (booking.trainer?.profile?.full_name || booking.trainer_name || '').toLowerCase();
+        return customerName.includes(term) || customerEmail.includes(term) || trainerName.includes(term);
+      });
+    }
+    
+    // Filter by status
+    if (this.statusFilter) {
+      filtered = filtered.filter(booking => booking.status === this.statusFilter);
+    }
+    
+    // Filter by date range
+    if (this.startDateFilter) {
+      filtered = filtered.filter(booking => {
+        const bookingDate = booking.slot?.slot_date || (booking.slot?.start_time ? new Date(booking.slot.start_time).toISOString().split('T')[0] : null);
+        return bookingDate && bookingDate >= this.startDateFilter;
+      });
+    }
+    
+    if (this.endDateFilter) {
+      filtered = filtered.filter(booking => {
+        const bookingDate = booking.slot?.slot_date || (booking.slot?.start_time ? new Date(booking.slot.start_time).toISOString().split('T')[0] : null);
+        return bookingDate && bookingDate <= this.endDateFilter;
       });
     }
     
@@ -420,20 +475,66 @@ export class AdminBookingsComponent implements OnInit {
     }
   }
 
+  getPageNumbers(): (number | string)[] {
+    const pages: (number | string)[] = [];
+    const total = this.totalPages;
+    const current = this.currentPage;
+    
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (current <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(total);
+      } else if (current >= total - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = total - 3; i <= total; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(total);
+      }
+    }
+    
+    return pages;
+  }
+
   onPageSizeChange() {
     this.currentPage = 1;
     this.updatePagination();
   }
 
   async updateStatus(bookingId: string, status: string) {
-    if (!confirm(`Are you sure you want to ${status} this booking?`)) return;
+    if (!confirm(`Are you sure you want to mark this booking as ${status}?`)) return;
 
     try {
-      await this.adminService.updateBookingStatus(bookingId, status);
+      console.log(`[Booking] Updating booking ${bookingId} to status: ${status}`);
+      const result = await this.adminService.updateBookingStatus(bookingId, status).toPromise();
+      console.log(`[Booking] Update result:`, result);
+      
+      // Reload bookings to get updated data
       await this.loadBookings();
-    } catch (error) {
-      console.error('Error updating booking:', error);
-      alert('Failed to update booking status');
+      
+      // Show success message
+      const statusMessages: { [key: string]: string } = {
+        'completed': 'Booking marked as completed successfully',
+        'confirmed': 'Booking confirmed successfully',
+        'cancelled': 'Booking cancelled successfully',
+        'pending': 'Booking status set to pending',
+        'no_show': 'Booking marked as no-show'
+      };
+      
+      this.toastService.success(statusMessages[status] || `Booking ${status} successfully`);
+    } catch (error: any) {
+      console.error('[Booking] Error updating booking status:', error);
+      const errorMessage = error?.error?.error || error?.error?.message || error?.message || 'Failed to update booking status';
+      this.toastService.error(errorMessage);
     }
   }
 
@@ -453,9 +554,10 @@ export class AdminBookingsComponent implements OnInit {
     try {
       await this.adminService.deleteBooking(bookingId).toPromise();
       await this.loadBookings();
+      this.toastService.success('Booking deleted successfully');
     } catch (error: any) {
       console.error('Error deleting booking:', error);
-      alert(error.error?.error || error.error?.message || 'Failed to delete booking');
+      this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete booking');
     }
   }
 }

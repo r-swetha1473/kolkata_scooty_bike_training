@@ -6,6 +6,7 @@ import { TrainerService, Trainer } from '../../services/trainer.service';
 import { AuthService } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-booking',
@@ -25,6 +26,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   loading = false;
   errorMessage = '';
   refreshInterval: any;
+  slotEvents?: EventSource;
   trainers: Trainer[] = [];
   vehicles: any[] = [];
 
@@ -41,18 +43,97 @@ export class BookingComponent implements OnInit, OnDestroy {
     private apiService: ApiService
   ) {}
 
-  async ngOnInit() {
+  // Normalize date string to YYYY-MM-DD format
+  normalizeDate(dateStr: string | null | undefined): string {
+    if (!dateStr) {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    }
+    
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return dateStr;
+    }
+    
+    // Try to parse and convert to YYYY-MM-DD
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    } catch (e) {
+      console.warn('Failed to parse date:', dateStr);
+    }
+    
+    // Fallback to today
     const today = new Date();
-    this.selectedDate = today.toISOString().split('T')[0];
+    return today.toISOString().split('T')[0];
+  }
+
+  async ngOnInit() {
+    // Handle Google OAuth callback
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const userData = urlParams.get('user');
+    const error = urlParams.get('error');
+
+    if (error) {
+      this.errorMessage = 'Authentication failed. Please try again.';
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (token) {
+      // Store token
+      localStorage.setItem('token', token);
+      
+      // If user data is provided, use it; otherwise fetch from API
+      if (userData) {
+        try {
+          const user = JSON.parse(atob(decodeURIComponent(userData)));
+          // Update auth service with user data
+          (this.authService as any).userProfileSubject.next(user);
+        } catch (e) {
+          console.error('Failed to parse user data:', e);
+          // Fallback: fetch user from API
+          await this.loadUserProfile();
+        }
+      } else {
+        // Fetch user profile from API
+        await this.loadUserProfile();
+      }
+      
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    const today = new Date();
+    this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
     await this.loadSlots();
     await this.loadTrainers();
     await this.loadVehicles();
     this.startAutoRefresh();
+    this.subscribeToSlotEvents();
+  }
+
+  private async loadUserProfile() {
+    try {
+      const user = await this.apiService.get<any>('/auth/me');
+      if (user) {
+        (this.authService as any).userProfileSubject.next(user);
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    }
   }
 
   ngOnDestroy() {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
+    }
+    if (this.slotEvents) {
+      this.slotEvents.close();
     }
   }
 
@@ -61,8 +142,31 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     try {
       if (this.selectedDate) {
-        const slots = await this.slotService.getSlotsByDate(this.selectedDate);
-        this.slots = slots;
+        // Normalize date to YYYY-MM-DD format
+        const normalizedDate = this.normalizeDate(this.selectedDate);
+        this.selectedDate = normalizedDate;
+        
+        // Show all slots for the selected date
+        const allSlotsForDate = await this.slotService.getSlotsByDate(normalizedDate);
+        // Filter only by time for today (hide past times today)
+        const now = new Date();
+        const selected = new Date(normalizedDate + 'T00:00:00');
+        const filtered = (allSlotsForDate || []).filter(s => {
+          if (selected.toDateString() === now.toDateString()) {
+            const start = new Date(s.start_time);
+            return start.getTime() >= now.getTime();
+          }
+          return true;
+        });
+        this.slots = filtered;
+        
+        // Optional info: count unassigned for visibility
+        if (filtered.length > 0) {
+          const unassignedCount = filtered.filter(s => !s.trainer_id || !s.trainer).length;
+          if (unassignedCount > 0) {
+            console.info(`Showing ${unassignedCount} unassigned slots on ${normalizedDate}`);
+          }
+        }
       } else {
         this.slots = [];
       }
@@ -75,11 +179,40 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
+  subscribeToSlotEvents() {
+    try {
+      const url = `${environment.apiUrl}/events`;
+      this.slotEvents = new EventSource(url);
+      this.slotEvents.onmessage = async (ev) => {
+        try {
+          const payload = JSON.parse(ev.data || '{}');
+          const evt = payload.event as string;
+          const data = payload.data || {};
+          if (!evt || !evt.startsWith('slot.')) return;
+
+          // If the change affects the currently selected date, reload
+          const affectedDate = data.slot_date || (data.start_time ? new Date(data.start_time).toISOString().split('T')[0] : null) || payload.date;
+          if (!affectedDate || affectedDate === this.selectedDate) {
+            await this.loadSlots();
+          }
+        } catch (_) {}
+      };
+    } catch (e) {
+      // SSE may fail on some environments; fallback to polling already enabled
+      console.warn('SSE unavailable, using polling only');
+    }
+  }
+
   async loadTrainers() {
     try {
       this.trainers = await this.trainerService.getOnDutyTrainers();
+      if (this.trainers.length === 0) {
+        console.warn('No active trainers available');
+      }
     } catch (error) {
       console.error('Failed to load trainers:', error);
+      this.trainers = [];
+      this.errorMessage = 'Failed to load trainers. Please refresh the page.';
     }
   }
 
@@ -99,11 +232,13 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async onDateChange() {
+    // Normalize date when it changes
+    this.selectedDate = this.normalizeDate(this.selectedDate);
     await this.loadSlots();
   }
 
-  selectSlot(slot: Slot) {
-    if (slot.status === 'disabled' || slot.status === 'cancelled' || slot.booked_count >= slot.capacity) {
+  async selectSlot(slot: Slot) {
+    if (this.isSlotDisabled(slot) || this.isSlotFull(slot) || this.isSlotBooked(slot)) {
       return;
     }
 
@@ -111,6 +246,9 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.showLoginPrompt = true;
       return;
     }
+
+    // Reload trainers to ensure we have the latest data
+    await this.loadTrainers();
 
     this.selectedSlot = slot;
     this.bookingForm.trainer_id = slot.trainer_id || '';
@@ -220,9 +358,26 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   changeDate(days: number) {
-    const current = new Date(this.selectedDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const normalizedDate = this.normalizeDate(this.selectedDate);
+    const current = new Date(normalizedDate + 'T00:00:00');
     current.setDate(current.getDate() + days);
-    this.selectedDate = current.toISOString().split('T')[0];
+    current.setHours(0, 0, 0, 0);
+    // Prevent navigating to past dates
+    if (current < today) {
+      this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
+    } else {
+      this.selectedDate = this.normalizeDate(current.toISOString().split('T')[0]);
+    }
     this.onDateChange();
+  }
+
+  isPrevDisabled(): boolean {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(this.selectedDate);
+    selected.setHours(0, 0, 0, 0);
+    return selected.getTime() <= today.getTime();
   }
 }

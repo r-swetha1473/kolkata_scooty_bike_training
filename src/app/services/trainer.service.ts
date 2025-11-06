@@ -52,9 +52,9 @@ export class TrainerService {
   }
 
   async getOnDutyTrainers(): Promise<Trainer[]> {
-    // Note: This may need a separate endpoint or filtering
-    const allTrainers = await this.getActiveTrainers();
-    return allTrainers.filter(t => t.on_duty === true);
+    // Since on_duty field doesn't exist in the schema, return all active trainers
+    // This is used for booking where users can select any active trainer
+    return this.getActiveTrainers();
   }
 
   async getTrainerById(id: string): Promise<Trainer | null> {

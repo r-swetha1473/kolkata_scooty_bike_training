@@ -4,11 +4,12 @@ import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { AdminHeaderComponent } from '../components/admin-header/admin-header.component';
 import { AdminFooterComponent } from '../components/admin-footer/admin-footer.component';
+import { ToastComponent } from '../../components/toast/toast.component';
 
 @Component({
   selector: 'app-admin-layout',
   standalone: true,
-  imports: [CommonModule, RouterModule, AdminHeaderComponent, AdminFooterComponent],
+  imports: [CommonModule, RouterModule, AdminHeaderComponent, AdminFooterComponent, ToastComponent],
   template: `
     <div class="admin-layout">
       <app-admin-header></app-admin-header>
@@ -50,10 +51,6 @@ import { AdminFooterComponent } from '../components/admin-footer/admin-footer.co
             <span class="nav-icon">⚙️</span>
             <span class="nav-label">Settings</span>
           </a>
-          <a routerLink="/admin/audit" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">📋</span>
-            <span class="nav-label">Audit Logs</span>
-          </a>
         </nav>
 
         <div class="sidebar-footer">
@@ -69,6 +66,7 @@ import { AdminFooterComponent } from '../components/admin-footer/admin-footer.co
         
         <app-admin-footer></app-admin-footer>
       </div>
+      <app-toast></app-toast>
     </div>
   `,
   styles: [`

@@ -34,11 +34,15 @@ router.post('/', authenticate, async (req, res, next) => {
       throw new Error('Invalid vehicle selected');
     }
 
+    // Lock the slot row first to prevent race conditions
+    await client.query('SELECT id FROM slots WHERE id = $1 FOR UPDATE', [slot_id]);
+
+    // Fetch slot details without FOR UPDATE to avoid outer join locking issues
     const slotResult = await client.query(
-      `SELECT s.*, t.is_active as trainer_is_active 
-       FROM slots s 
-       LEFT JOIN trainers t ON s.trainer_id = t.id 
-       WHERE s.id = $1 FOR UPDATE`,
+      `SELECT s.*, 
+              (SELECT is_active FROM trainers t WHERE t.id = s.trainer_id) as trainer_is_active
+       FROM slots s
+       WHERE s.id = $1`,
       [slot_id]
     );
 

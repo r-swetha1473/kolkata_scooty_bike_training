@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../../services/slot.service';
 import { TrainerService, Trainer } from '../../../services/trainer.service';
+import { ToastService } from '../../../services/toast.service';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-admin-slots',
@@ -15,23 +17,18 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
         <div class="header-actions">
           <input 
             type="date" 
-            [(ngModel)]="slotGenerationDate" 
+            [(ngModel)]="selectedDate" 
+            (change)="onSelectedDateChange()"
             class="date-filter">
-          <button class="btn-primary" (click)="generateSlots()">🔄 Generate Daily Slots</button>
-          <select [(ngModel)]="selectedDate" (change)="loadSlotsByDate()" class="date-filter">
-            <option value="">All Dates</option>
-            <option *ngFor="let date of availableDates" [value]="date">{{ date }}</option>
-          </select>
           <button class="btn-primary" (click)="showCreateModal = true">+ Create Slot</button>
         </div>
       </div>
 
-      <div class="view-toggle">
-        <button [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">📋 List View</button>
-        <button [class.active]="viewMode === 'calendar'" (click)="viewMode = 'calendar'">📅 Calendar View</button>
+      <div class="date-heading" *ngIf="selectedDate">
+        <h2>Slots for {{ formatReadableDate(selectedDate) }}</h2>
       </div>
 
-      <div *ngIf="viewMode === 'list'" class="slots-list-container">
+      <div class="slots-list-container">
         <div class="filters-bar">
           <input 
             type="text" 
@@ -46,89 +43,29 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
             <option value="cancelled">Cancelled</option>
             <option value="completed">Completed</option>
           </select>
-          <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
-            <option [value]="10">10 per page</option>
-            <option [value]="20">20 per page</option>
-            <option [value]="50">50 per page</option>
-            <option [value]="100">100 per page</option>
-          </select>
         </div>
 
-        <div *ngIf="filteredSlots.length === 0" class="empty-state">No slots found. Generate daily slots to get started.</div>
-        <div *ngFor="let slot of getPaginatedSlots()" class="slot-card">
+        <div *ngIf="filteredSlots.length === 0" class="empty-state">
+          <div>No slots for {{ formatReadableDate(selectedDate) }}.</div>
+          <button class="btn-primary" (click)="generateSlotsForSelectedDate()">Generate Slot</button>
+        </div>
+        <div class="slots-grid" *ngIf="filteredSlots.length > 0">
+        <div *ngFor="let slot of filteredSlots" class="slot-card" [class.booked]="slot.booked_count > 0" (click)="openSlotPopup(slot)">
           <div class="slot-info">
-            <div class="slot-time">{{ formatDateTime(slot.start_time) }} - {{ formatTime(slot.end_time) }}</div>
-            <div class="slot-trainer" *ngIf="slot.trainer">
-              Trainer: {{ slot.trainer.profile?.full_name }}
-              <button class="btn-link" (click)="unassignTrainer(slot.id)">✕ Unassign</button>
+            <div class="slot-time">{{ formatTimeOnly(slot.start_time) }} – {{ formatTimeOnly(slot.end_time) }}</div>
+            <div class="slot-status-badge" [class]="'status-' + slot.status">
+              <span class="status-icon" *ngIf="slot.status === 'available'">🟢</span>
+              <span class="status-icon" *ngIf="slot.status === 'full'">🔴</span>
+              <span class="status-icon" *ngIf="slot.status === 'cancelled'">⚪</span>
+              <span class="status-icon" *ngIf="slot.status === 'disabled'">⚪</span>
+              <span class="status-icon" *ngIf="slot.status === 'completed'">✅</span>
             </div>
-            <div class="slot-trainer" *ngIf="!slot.trainer">
-              <span class="unassigned">Unassigned</span>
-              <button class="btn-link" (click)="openAssignTrainer(slot)">+ Assign Trainer</button>
+            <div class="slot-trainer-name" *ngIf="slot.trainer?.profile?.full_name">
+              {{ slot.trainer.profile.full_name }}
             </div>
-            <div class="slot-capacity">Capacity: {{ slot.booked_count }} / {{ slot.capacity }}</div>
-            <div class="slot-status-row">
-              <span class="status-badge" [class]="'status-' + slot.status">
-                <span class="status-icon" *ngIf="slot.status === 'available'">🟢</span>
-                <span class="status-icon" *ngIf="slot.status === 'full'">🔴</span>
-                <span class="status-icon" *ngIf="slot.status === 'cancelled'">⚪</span>
-                <span class="status-icon" *ngIf="slot.status === 'disabled'">⚪</span>
-                <span class="status-icon" *ngIf="slot.status === 'completed'">✅</span>
-                {{ slot.status }}
-              </span>
-              <span class="auto-tag" *ngIf="slot.is_auto_generated">Auto-generated</span>
-            </div>
-          </div>
-          <div class="slot-actions">
-            <button class="btn-edit" (click)="editSlot(slot)" [disabled]="slot.booked_count > 0">✏️ Edit</button>
-            <button class="btn-link" (click)="toggleSlotEnable(slot)" [class.active]="slot.status === 'available'" [class.disabled]="slot.status === 'disabled'">
-              {{ slot.status === 'disabled' ? '⚪ Disabled' : slot.status === 'available' ? '🟢 Enabled' : '○ Inactive' }}
-            </button>
-            <button class="btn-link" (click)="openAssignTrainer(slot)">👤 {{ slot.trainer ? 'Change Trainer' : 'Assign Trainer' }}</button>
-            <button class="btn-delete" (click)="deleteSlot(slot.id)" [disabled]="slot.booked_count > 0">🗑️ Delete</button>
+            <div class="slot-capacity-small">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>
         </div>
-
-        <div class="pagination-container" *ngIf="totalPages > 1">
-          <button 
-            class="pagination-btn" 
-            [disabled]="currentPage === 1"
-            (click)="goToPage(currentPage - 1)">
-            ← Previous
-          </button>
-          <span class="page-info">
-            Page {{ currentPage }} of {{ totalPages }} ({{ filteredSlots.length }} slots)
-          </span>
-          <button 
-            class="pagination-btn" 
-            [disabled]="currentPage === totalPages"
-            (click)="goToPage(currentPage + 1)">
-            Next →
-          </button>
-        </div>
-      </div>
-
-      <div *ngIf="viewMode === 'calendar'" class="calendar-view">
-        <div class="calendar-header">
-          <button (click)="previousWeek()">← Previous</button>
-          <span>{{ currentWeekDisplay }}</span>
-          <button (click)="nextWeek()">Next →</button>
-        </div>
-        <div class="calendar-grid">
-          <div *ngFor="let day of calendarDays" class="day-column">
-            <div class="day-header">{{ day.label }}</div>
-            <div class="day-slots">
-              <div *ngFor="let slot of day.slots" class="calendar-slot" [class.assigned]="slot.trainer_id" [class.booked]="slot.booked_count >= slot.capacity" (click)="openAssignTrainer(slot)">
-                <div class="slot-time-compact">{{ formatTimeOnly(slot.start_time) }}</div>
-                <div class="slot-trainer-compact" *ngIf="slot.trainer">
-                  {{ slot.trainer.profile?.full_name }}
-                </div>
-                <div class="slot-trainer-compact unassigned" *ngIf="!slot.trainer">Unassigned</div>
-                <div class="slot-capacity-compact">{{ slot.booked_count }}/{{ slot.capacity }}</div>
-                <div class="slot-status-compact" [class]="'status-' + slot.status">{{ slot.status }}</div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -187,6 +124,40 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
         </div>
       </div>
 
+      <!-- Main Slot Action Popup -->
+      <div *ngIf="showSlotPopup" class="modal-overlay" (click)="showSlotPopup = false">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <h2>Manage Slot</h2>
+          <div class="slot-popup-info" *ngIf="selectedSlot">
+            <div class="popup-time">{{ formatDateTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}</div>
+            <div class="popup-trainer" *ngIf="selectedSlot?.trainer?.profile?.full_name">
+              Trainer: <strong>{{ selectedSlot.trainer.profile.full_name }}</strong>
+            </div>
+            <div class="popup-capacity">Capacity: {{ selectedSlot.booked_count }} / {{ selectedSlot.capacity }}</div>
+            <div class="popup-status">Status: <span class="status-badge" [class]="'status-' + selectedSlot.status">{{ selectedSlot.status }}</span></div>
+          </div>
+          
+          <div class="popup-actions">
+            <button class="popup-action-btn" (click)="toggleSlotEnableFromPopup()">
+              <span *ngIf="selectedSlot?.status === 'disabled'">🟢 Enable Slot</span>
+              <span *ngIf="selectedSlot?.status !== 'disabled'">⚪ Disable Slot</span>
+            </button>
+            <button class="popup-action-btn" (click)="editSlotFromPopup()" [disabled]="selectedSlot?.booked_count > 0">
+              ✏️ Edit Slot
+            </button>
+            <button class="popup-action-btn" (click)="assignTrainerFromPopup()">
+              👤 {{ selectedSlot?.trainer ? 'Change Trainer' : 'Assign Trainer' }}
+            </button>
+            <button class="popup-action-btn delete" (click)="deleteSlotFromPopup()" [disabled]="selectedSlot?.booked_count > 0">
+              🗑️ Delete Slot
+            </button>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" (click)="showSlotPopup = false">Close</button>
+          </div>
+        </div>
+      </div>
+
       <div *ngIf="showEditModal" class="modal-overlay" (click)="showEditModal = false">
         <div class="modal-content" (click)="$event.stopPropagation()">
           <h2>Edit Slot</h2>
@@ -230,15 +201,22 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
     .date-filter { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
     .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: transform 0.2s; }
     .btn-primary:hover { transform: translateY(-2px); }
-    .view-toggle { display: flex; gap: 12px; margin-bottom: 24px; }
-    .view-toggle button { padding: 10px 20px; background: white; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
-    .view-toggle button.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-color: #3b82f6; }
+    .date-heading { margin: 8px 0 16px; }
+    .date-heading h2 { margin: 0; font-size: 20px; color: #111827; }
+    /* Removed view toggle; single list UI */
     .empty-state { padding: 60px; text-align: center; color: #6b7280; background: white; border-radius: 12px; }
-    .slots-list { display: grid; gap: 16px; }
-    .slot-card { background:#eafff0; padding:18px; border-radius:16px; border:2px solid #22c55e; display:flex; justify-content:space-between; align-items:center; gap:16px; }
-    .slot-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.08); }
-    .slot-time { font-weight:800; font-size:20px; margin-bottom: 8px; color: #0f172a; }
-    .slot-trainer, .slot-capacity { font-size: 14px; color: #6b7280; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .slots-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:8px; }
+    .slots-list { display: grid; gap: 10px; }
+    .slot-card { background:#eafff0; padding:8px; border-radius:10px; border:2px solid #22c55e; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-height:88px; cursor:pointer; transition:all 0.2s; }
+    .slot-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.15); transform:translateY(-2px); }
+    .slot-card.booked { background:#fee2e2; border-color:#dc2626; }
+    .slot-card.booked:hover { box-shadow:0 4px 12px rgba(220,38,38,.25); }
+    .slot-info { display:flex; flex-direction:column; align-items:center; gap:4px; width:100%; }
+    .slot-time { font-weight:700; font-size:14px; margin-bottom: 0; color: #0f172a; }
+    .slot-status-badge { display:inline-flex; align-items:center; gap:4px; }
+    .slot-trainer-name { font-size: 10px; color: #6b7280; text-align:center; font-weight:500; }
+    .slot-trainer-name.unassigned { color: #dc2626; font-weight:600; }
+    .slot-capacity-small { font-size: 10px; color: #6b7280; margin-top:2px; }
     .unassigned { color: #dc2626; font-weight: 600; }
     .btn-link { background: none; border: none; color: #3b82f6; cursor: pointer; text-decoration: underline; font-size: 13px; padding: 4px 8px; }
     .btn-link:hover { background: #eff6ff; border-radius: 4px; }
@@ -252,31 +230,13 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
     .status-cancelled, .status-disabled { background:#f1f5f9; color:#64748b; }
     .status-completed { background: #e0e7ff; color: #3730a3; }
     .auto-tag { padding: 4px 8px; background: #f3f4f6; color: #6b7280; border-radius: 8px; font-size: 11px; }
-    .slot-actions { display: flex; gap: 8px; }
-    .btn-edit, .btn-delete { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+    .slot-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .btn-edit, .btn-delete { padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 12px; }
     .btn-edit { background: #dbeafe; color: #1e40af; }
     .btn-edit:hover { background: #bfdbfe; }
     .btn-delete { background: #fee2e2; color: #991b1b; }
     .btn-delete:hover { background: #fecaca; }
-    .calendar-view { background: white; padding: 24px; border-radius: 12px; }
-    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .calendar-header button { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; }
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 16px; }
-    .day-column { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-    .day-header { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 12px; text-align: center; font-weight: 600; }
-    .day-slots { padding: 8px; max-height: 400px; overflow-y: auto; }
-    .calendar-slot { padding: 8px; margin-bottom: 8px; border-radius: 6px; background: #f9fafb; border-left: 3px solid #e5e7eb; cursor: pointer; transition: all 0.2s; }
-    .calendar-slot:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    .calendar-slot.assigned { border-left-color: #10b981; background: #d1fae5; }
-    .calendar-slot.booked { border-left-color: #f59e0b; background: #fef3c7; }
-    .slot-time-compact { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-    .slot-trainer-compact { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
-    .slot-trainer-compact.unassigned { color: #dc2626; font-weight: 600; }
-    .slot-capacity-compact { font-size: 10px; color: #6b7280; margin-top: 4px; }
-    .slot-status-compact { font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block; }
-    .slot-status-compact.status-available { background: #d1fae5; color: #065f46; }
-    .slot-status-compact.status-full { background: #fee2e2; color: #991b1b; }
-    .slot-status-compact.status-cancelled { background: #fef3c7; color: #92400e; }
+    /* Calendar view removed */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .modal-content { background: white; padding: 32px; border-radius: 16px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
     .form-group { margin-bottom: 20px; }
@@ -295,9 +255,18 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
     .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
     .page-info { color: #6b7280; font-size: 14px; }
     .slots-list-container { display: flex; flex-direction: column; }
+    .slot-popup-info { margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; }
+    .popup-time { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .popup-trainer, .popup-capacity, .popup-status { font-size: 14px; margin-bottom: 6px; }
+    .popup-actions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .popup-action-btn { padding: 12px 16px; background: white; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; font-weight: 600; text-align: left; transition: all 0.2s; }
+    .popup-action-btn:hover:not(:disabled) { background: #f3f4f6; border-color: #3b82f6; }
+    .popup-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .popup-action-btn.delete { border-color: #fee2e2; color: #991b1b; }
+    .popup-action-btn.delete:hover:not(:disabled) { background: #fee2e2; }
   `]
 })
-export class AdminSlotsComponent implements OnInit {
+export class AdminSlotsComponent implements OnInit, OnDestroy {
   slots: Slot[] = [];
   allSlots: Slot[] = [];
   filteredSlots: Slot[] = [];
@@ -306,11 +275,10 @@ export class AdminSlotsComponent implements OnInit {
   showCreateModal = false;
   showAssignModal = false;
   showEditModal = false;
+  showSlotPopup = false;
   selectedDate = '';
   availableDates: string[] = [];
-  viewMode: 'list' | 'calendar' = 'list';
-  calendarDays: any[] = [];
-  currentWeekStart = new Date();
+  // Single list view only
   selectedTrainerId = '';
   selectedSlot: any = null;
   newSlot = { trainer_id: '', start_time: '', end_time: '', capacity: 1 };
@@ -326,62 +294,126 @@ export class AdminSlotsComponent implements OnInit {
 
   constructor(
     private slotService: SlotService,
-    private trainerService: TrainerService
+    private trainerService: TrainerService,
+    private toastService: ToastService
   ) {}
 
   getDefaultDate(): string {
     return new Date().toISOString().split('T')[0];
   }
 
-  async ngOnInit() {
-    this.slotGenerationDate = this.getDefaultDate();
-    await this.loadData();
+  // Normalize date string to YYYY-MM-DD format regardless of input format
+  normalizeDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return this.getDefaultDate();
+    
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return dateStr;
+    }
+    
+    // Try to parse and convert to YYYY-MM-DD
+    try {
+      // Handle DD-MM-YYYY or MM/DD/YYYY formats
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    } catch (e) {
+      console.warn('Failed to parse date:', dateStr);
+    }
+    
+    // Fallback to today
+    return this.getDefaultDate();
   }
 
-  async loadData() {
+  async ngOnInit() {
+    this.selectedDate = this.getDefaultDate();
+    await this.loadDataForSelectedDate();
+    this.subscribeToSlotEvents();
+  }
+
+  slotEventSource?: EventSource;
+
+  subscribeToSlotEvents() {
+    try {
+      const apiUrl = environment.apiUrl || 'http://localhost:3000/api';
+      const url = `${apiUrl}/events`;
+      this.slotEventSource = new EventSource(url);
+      this.slotEventSource.onmessage = async (ev) => {
+        try {
+          const payload = JSON.parse(ev.data || '{}');
+          const evt = payload.event as string;
+          if (!evt || !evt.startsWith('slot.')) return;
+          
+          // Reload only for the selected date
+          await this.loadSlotsForSelectedDate();
+        } catch (e) {
+          console.warn('SSE parse error:', e);
+        }
+      };
+    } catch (e) {
+      console.warn('SSE unavailable for admin panel');
+    }
+  }
+
+  formatReadableDate(dateStr: string): string {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.slotEventSource) {
+      this.slotEventSource.close();
+    }
+  }
+
+  async loadDataForSelectedDate() {
     try {
       this.trainers = await this.trainerService.getAllTrainers();
       this.onDutyTrainers = await this.trainerService.getOnDutyTrainers();
-      await this.loadSlots();
-      this.updateAvailableDates();
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
-      }
+      await this.loadSlotsForSelectedDate();
     } catch (error) {
       console.error('Failed to load data:', error);
+      this.toastService.error('Failed to load data');
       this.filteredSlots = [];
-      this.updatePagination();
     }
   }
 
-  async loadSlots() {
+  async loadSlotsForSelectedDate() {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 30);
-      const end = endDate.toISOString().split('T')[0];
-      this.allSlots = await this.slotService.getSlotsByDateRange(today, end);
-      // Default to showing today's slots
-      if (!this.selectedDate) {
-        this.selectedDate = today;
-      }
-      this.slots = this.allSlots;
+      // Normalize the selected date to YYYY-MM-DD format
+      this.selectedDate = this.normalizeDate(this.selectedDate);
+      
+      const slots = await this.slotService.getSlotsByDate(this.selectedDate);
+      this.allSlots = slots || [];
+      // Filter by both slot_date and start_time::date to handle mismatched dates
+      // Normalize all dates to YYYY-MM-DD for comparison
+      this.slots = this.allSlots.filter(s => {
+        const slotDate = s.slot_date || (s.start_time ? new Date(s.start_time).toISOString().split('T')[0] : null);
+        const startDate = s.start_time ? new Date(s.start_time).toISOString().split('T')[0] : null;
+        const normalizedSlotDate = this.normalizeDate(slotDate);
+        const normalizedStartDate = this.normalizeDate(startDate);
+        return normalizedSlotDate === this.selectedDate || normalizedStartDate === this.selectedDate;
+      });
       this.filterSlots();
     } catch (error) {
       console.error('Failed to load slots:', error);
+      this.toastService.error('Failed to load slots');
+      this.filteredSlots = [];
     }
   }
 
-  async loadSlotsByDate() {
-    if (this.selectedDate) {
-      this.slots = this.allSlots.filter(s => s.slot_date === this.selectedDate);
-    } else {
-      this.slots = this.allSlots;
-    }
-    this.filterSlots();
-    if (this.viewMode === 'calendar') {
-      this.updateCalendar();
-    }
+  async onSelectedDateChange() {
+    // Normalize the date when it changes
+    this.selectedDate = this.normalizeDate(this.selectedDate);
+    await this.loadSlotsForSelectedDate();
   }
 
   filterSlots() {
@@ -403,79 +435,52 @@ export class AdminSlotsComponent implements OnInit {
     }
     
     this.filteredSlots = filtered;
-    this.currentPage = 1;
-    this.updatePagination();
   }
 
-  updatePagination() {
-    this.totalPages = Math.ceil(this.filteredSlots.length / this.itemsPerPage);
-  }
+  // Pagination removed; showing all slots for the selected date
 
-  getPaginatedSlots(): Slot[] {
-    const start = (this.currentPage - 1) * this.itemsPerPage;
-    const end = start + this.itemsPerPage;
-    return this.filteredSlots.slice(start, end);
-  }
+  // Available dates list removed with calendar-driven daily view
 
-  goToPage(page: number) {
-    if (page >= 1 && page <= this.totalPages) {
-      this.currentPage = page;
-    }
-  }
-
-  onPageSizeChange() {
-    this.currentPage = 1;
-    this.updatePagination();
-  }
-
-  updateAvailableDates() {
-    const dates = new Set<string>();
-    this.allSlots.forEach(slot => dates.add(slot.slot_date));
-    this.availableDates = Array.from(dates).sort();
-  }
-
-  async generateSlots() {
+  async generateSlotsForSelectedDate() {
+    if (!this.selectedDate) return;
     try {
-      const date = this.slotGenerationDate || this.getDefaultDate();
-      const result = await this.slotService.generateDailySlots(date);
-      
-      // Show success message
-      const message = result.message || result.success === false 
-        ? result.message 
-        : `Successfully generated ${result.slotsCreated || 24} slots for ${date}`;
-      alert(message);
-      
-      // Refresh slots data immediately
-      await this.loadSlots();
-      this.selectedDate = date;
-      await this.loadSlotsByDate();
-      // Update available dates
-      this.updateAvailableDates();
-      // Update calendar if in calendar view
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
+      // Normalize date to YYYY-MM-DD format before sending to API
+      const normalizedDate = this.normalizeDate(this.selectedDate);
+      const res = await this.slotService.generateDailySlots(normalizedDate);
+      if (res && res.success === false) {
+        this.toastService.warning(res.message || 'Slots already exist for this date.');
+      } else {
+        this.toastService.success('Slots generated successfully');
       }
+      // Update selectedDate to normalized format
+      this.selectedDate = normalizedDate;
+      await this.loadSlotsForSelectedDate();
     } catch (error: any) {
       console.error('Generate slots error:', error);
-      alert(error?.error?.message || error?.message || 'Failed to generate slots');
+      this.toastService.error(error?.error?.message || error?.message || 'Failed to generate slots');
     }
   }
 
   async createSlot() {
     try {
+      const startTime = new Date(this.newSlot.start_time);
+      const slotDate = startTime.toISOString().split('T')[0]; // Extract date from start_time
+      
       await this.slotService.createSlot({
         trainer_id: this.newSlot.trainer_id || null,
-        start_time: new Date(this.newSlot.start_time).toISOString(),
+        start_time: startTime.toISOString(),
         end_time: new Date(this.newSlot.end_time).toISOString(),
         capacity: this.newSlot.capacity,
         status: 'available',
+        slot_date: slotDate,
         is_auto_generated: false
       } as any);
       this.showCreateModal = false;
       this.newSlot = { trainer_id: '', start_time: '', end_time: '', capacity: 1 };
-      await this.loadData();
-    } catch (error) {
-      alert('Failed to create slot');
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success('Slot created successfully');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to create slot');
     }
   }
 
@@ -492,16 +497,21 @@ export class AdminSlotsComponent implements OnInit {
 
   async updateSlot() {
     try {
+      const startTime = new Date(this.editingSlot.start_time);
+      const slotDate = startTime.toISOString().split('T')[0]; // Extract date from start_time
+      
       await this.slotService.updateSlot(this.editingSlot.id, {
-        start_time: new Date(this.editingSlot.start_time).toISOString(),
+        start_time: startTime.toISOString(),
         end_time: new Date(this.editingSlot.end_time).toISOString(),
         capacity: this.editingSlot.capacity,
-        status: this.editingSlot.status
+        status: this.editingSlot.status,
+        slot_date: slotDate
       });
       this.showEditModal = false;
-      await this.loadData();
-    } catch (error) {
-      alert('Failed to update slot');
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success('Slot updated successfully');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to update slot');
     }
   }
 
@@ -518,35 +528,16 @@ export class AdminSlotsComponent implements OnInit {
       } else {
         await this.slotService.unassignTrainer(this.selectedSlot.id);
       }
-      // Update local slot immediately for real-time UI
-      const slotIndex = this.allSlots.findIndex(s => s.id === this.selectedSlot.id);
-      if (slotIndex !== -1) {
-        if (this.selectedTrainerId) {
-          const trainer = this.onDutyTrainers.find(t => t.id === this.selectedTrainerId);
-          if (trainer && trainer.profile) {
-            this.allSlots[slotIndex].trainer = {
-              id: trainer.id,
-              profile: {
-                full_name: trainer.profile.full_name
-              }
-            };
-            this.allSlots[slotIndex].trainer_id = trainer.id;
-          }
-        } else {
-          this.allSlots[slotIndex].trainer = undefined;
-          this.allSlots[slotIndex].trainer_id = undefined;
-        }
-        this.filterSlots();
-      }
+      // Refresh data to get latest from backend
+      await this.loadSlotsForSelectedDate();
+      const wasAssigned = !!this.selectedTrainerId;
       this.showAssignModal = false;
       this.selectedTrainerId = '';
       this.selectedSlot = null;
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
-      }
-    } catch (error) {
-      alert('Failed to assign trainer');
-      await this.loadData();
+      this.toastService.success(wasAssigned ? 'Trainer assigned successfully' : 'Trainer unassigned successfully');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to assign trainer');
+      await this.loadSlotsForSelectedDate();
     }
   }
 
@@ -554,19 +545,12 @@ export class AdminSlotsComponent implements OnInit {
     if (!confirm('Unassign trainer from this slot?')) return;
     try {
       await this.slotService.unassignTrainer(slotId);
-      // Update local slot immediately for real-time UI
-      const slotIndex = this.allSlots.findIndex(s => s.id === slotId);
-      if (slotIndex !== -1) {
-        this.allSlots[slotIndex].trainer = undefined;
-        this.allSlots[slotIndex].trainer_id = undefined;
-        this.filterSlots();
-      }
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
-      }
-    } catch (error) {
-      alert('Failed to unassign trainer');
-      await this.loadData();
+      // Refresh data to get latest from backend
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success('Trainer unassigned successfully');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to unassign trainer');
+      await this.loadSlotsForSelectedDate();
     }
   }
 
@@ -574,9 +558,10 @@ export class AdminSlotsComponent implements OnInit {
     if (!confirm('Delete this slot?')) return;
     try {
       await this.slotService.deleteSlot(id);
-      await this.loadData();
-    } catch (error) {
-      alert('Failed to delete slot');
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success('Slot deleted successfully');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to delete slot');
     }
   }
 
@@ -584,23 +569,18 @@ export class AdminSlotsComponent implements OnInit {
     try {
       const newStatus = slot.status === 'available' ? 'cancelled' : 'available';
       await this.slotService.updateSlotStatus(slot.id, newStatus);
-      // Update local slot immediately for real-time UI
-      const slotIndex = this.allSlots.findIndex(s => s.id === slot.id);
-      if (slotIndex !== -1) {
-        this.allSlots[slotIndex].status = newStatus;
-        this.filterSlots();
-      }
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
-      }
-    } catch (error) {
-      alert('Failed to update slot status');
-      await this.loadData();
+      // Refresh data to get latest from backend
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success(`Slot status updated to ${newStatus}`);
+    } catch (error: any) {
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to update slot status');
+      await this.loadSlotsForSelectedDate();
     }
   }
 
   async toggleSlotEnable(slot: Slot) {
     try {
+      const isCurrentlyDisabled = slot.status === 'disabled';
       // Use the new toggle endpoint
       const response = await fetch(`${this.slotService['apiUrl']}/slots/${slot.id}/toggle`, {
         method: 'PUT',
@@ -615,54 +595,16 @@ export class AdminSlotsComponent implements OnInit {
         throw new Error(error.error || 'Failed to toggle slot');
       }
       
-      const updatedSlot = await response.json();
-      
-      // Update local slot immediately for real-time UI
-      const slotIndex = this.allSlots.findIndex(s => s.id === slot.id);
-      if (slotIndex !== -1) {
-        this.allSlots[slotIndex].status = updatedSlot.status;
-        this.filterSlots();
-      }
-      if (this.viewMode === 'calendar') {
-        this.updateCalendar();
-      }
+      // Refresh data to get latest from backend
+      await this.loadSlotsForSelectedDate();
+      this.toastService.success(`Slot ${isCurrentlyDisabled ? 'enabled' : 'disabled'} successfully`);
     } catch (error: any) {
-      alert(error.message || 'Failed to toggle slot');
-      await this.loadData();
+      this.toastService.error(error.message || error?.error?.error || error?.error?.message || 'Failed to toggle slot');
+      await this.loadSlotsForSelectedDate();
     }
   }
 
-  updateCalendar() {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(this.currentWeekStart);
-      date.setDate(date.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      days.push({
-        label: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-        date: dateStr,
-        slots: this.slots.filter(s => s.slot_date === dateStr)
-      });
-    }
-    this.calendarDays = days;
-  }
-
-  get currentWeekDisplay(): string {
-    const start = new Date(this.currentWeekStart);
-    const end = new Date(this.currentWeekStart);
-    end.setDate(end.getDate() + 6);
-    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  }
-
-  previousWeek() {
-    this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7);
-    this.updateCalendar();
-  }
-
-  nextWeek() {
-    this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7);
-    this.updateCalendar();
-  }
+  // Calendar helpers removed
 
   formatDateTime(date: string) {
     return new Date(date).toLocaleString('en-US', {
@@ -685,5 +627,38 @@ export class AdminSlotsComponent implements OnInit {
       hour: 'numeric',
       minute: '2-digit'
     });
+  }
+
+  openSlotPopup(slot: Slot) {
+    this.selectedSlot = slot;
+    this.showSlotPopup = true;
+  }
+
+  toggleSlotEnableFromPopup() {
+    if (this.selectedSlot) {
+      this.toggleSlotEnable(this.selectedSlot);
+      this.showSlotPopup = false;
+    }
+  }
+
+  editSlotFromPopup() {
+    if (this.selectedSlot) {
+      this.editSlot(this.selectedSlot);
+      this.showSlotPopup = false;
+    }
+  }
+
+  assignTrainerFromPopup() {
+    if (this.selectedSlot) {
+      this.openAssignTrainer(this.selectedSlot);
+      this.showSlotPopup = false;
+    }
+  }
+
+  async deleteSlotFromPopup() {
+    if (this.selectedSlot) {
+      this.showSlotPopup = false;
+      await this.deleteSlot(this.selectedSlot.id);
+    }
   }
 }

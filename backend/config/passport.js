@@ -27,27 +27,31 @@ passport.use(new GoogleStrategy({
           [email]
         );
 
-        if (result.rows.length === 0) {
-          // Create new user
-          result = await db.query(
-            `INSERT INTO profiles (email, full_name, google_id, provider_id, auth_provider, avatar_url, role)
-             VALUES ($1, $2, $3, $4, 'google', $5, 'customer')
-             RETURNING *`,
-            [email, name, googleId, googleId, avatarUrl]
-          );
-        } else {
-          // Update existing user with Google info
-          result = await db.query(
-            `UPDATE profiles 
-             SET google_id = $1, provider_id = $1, auth_provider = 'google', avatar_url = $2 
-             WHERE email = $3 
-             RETURNING *`,
-            [googleId, avatarUrl, email]
-          );
-        }
+      if (result.rows.length === 0) {
+        // Create new user
+        console.log(`[Google Auth] Creating new user: ${email}`);
+        result = await db.query(
+          `INSERT INTO profiles (email, full_name, google_id, provider_id, auth_provider, avatar_url, role)
+           VALUES ($1, $2, $3, $4, 'google', $5, 'customer')
+           RETURNING *`,
+          [email, name, googleId, googleId, avatarUrl]
+        );
+        console.log(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
       } else {
-        // Update provider_id if not set (migration helper)
-        if (!result.rows[0].provider_id) {
+        // Update existing user with Google info
+        console.log(`[Google Auth] Updating existing user: ${email}`);
+        result = await db.query(
+          `UPDATE profiles 
+           SET google_id = $1, provider_id = $1, auth_provider = 'google', avatar_url = COALESCE($2, avatar_url)
+           WHERE email = $3 
+           RETURNING *`,
+          [googleId, avatarUrl, email]
+        );
+        console.log(`[Google Auth] User updated with ID: ${result.rows[0].id}`);
+      }
+    } else {
+      // Update provider_id if not set (migration helper)
+      if (!result.rows[0].provider_id) {
           result = await db.query(
             `UPDATE profiles 
              SET provider_id = $1, auth_provider = 'google', avatar_url = COALESCE(avatar_url, $2)
@@ -64,8 +68,11 @@ passport.use(new GoogleStrategy({
         }
       }
 
-      return done(null, result.rows[0]);
+      const user = result.rows[0];
+      console.log(`[Google Auth] Authentication successful for user: ${user.email}, ID: ${user.id}`);
+      return done(null, user);
     } catch (error) {
+      console.error('[Google Auth] Error during authentication:', error);
       return done(error, null);
     }
   }

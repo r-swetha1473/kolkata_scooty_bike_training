@@ -81,15 +81,45 @@ router.get('/google',
 
 router.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  (req, res) => {
-    const token = jwt.sign(
-      { userId: req.user.id, email: req.user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+  async (req, res) => {
+    try {
+      // Ensure user data is stored (passport should have done this, but verify)
+      if (!req.user || !req.user.id) {
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:4200'}/booking?error=auth_failed`);
+      }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
-    res.redirect(`${frontendUrl}/booking?token=${token}`);
+      // Fetch fresh user data from database to ensure we have latest
+      console.log(`[Google OAuth Callback] Fetching user data for ID: ${req.user.id}`);
+      const userResult = await db.query('SELECT * FROM profiles WHERE id = $1', [req.user.id]);
+      if (userResult.rows.length === 0) {
+        console.error(`[Google OAuth Callback] User not found in database: ${req.user.id}`);
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:4200'}/booking?error=user_not_found`);
+      }
+
+      const user = userResult.rows[0];
+      console.log(`[Google OAuth Callback] User found: ${user.email}, ID: ${user.id}, Role: ${user.role}`);
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: user.id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      // Remove sensitive data before sending
+      const { password_hash, ...userWithoutPassword } = user;
+
+      // Encode user data as base64 to pass in URL
+      const userData = Buffer.from(JSON.stringify(userWithoutPassword)).toString('base64');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+      
+      // Redirect with both token and user data
+      res.redirect(`${frontendUrl}/booking?token=${token}&user=${encodeURIComponent(userData)}`);
+    } catch (error) {
+      console.error('Google OAuth callback error:', error);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+      res.redirect(`${frontendUrl}/booking?error=auth_error`);
+    }
   }
 );
 

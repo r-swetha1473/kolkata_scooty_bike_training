@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../services/toast.service';
 
 @Component({
   selector: 'app-admin-users',
@@ -119,7 +120,8 @@ export class AdminUsersComponent implements OnInit {
 
   constructor(
     private adminService: AdminService,
-    public auth: AuthService
+    public auth: AuthService,
+    private toastService: ToastService
   ) {}
 
   async ngOnInit() {
@@ -132,6 +134,7 @@ export class AdminUsersComponent implements OnInit {
       this.filterUsers();
     } catch (error) {
       console.error('Failed to load users:', error);
+      this.toastService.error('Failed to load users');
     }
   }
 
@@ -181,8 +184,14 @@ export class AdminUsersComponent implements OnInit {
 
   async updateRole(userId: string, role: string) {
     if (!confirm(`Update user role to ${role}?`)) return;
-    await this.adminService.updateUserRole(userId, role);
-    await this.loadUsers();
+    try {
+      await this.adminService.updateUserRole(userId, role);
+      await this.loadUsers();
+      this.toastService.success(`User role updated to ${role} successfully`);
+    } catch (error: any) {
+      console.error('Error updating user role:', error);
+      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to update user role');
+    }
   }
 
   formatDate(date: string) {
