@@ -8,8 +8,28 @@ Write-Host ""
 if (Test-Path "backend\node_modules\pg") {
     Write-Host "Using backend's database connection..." -ForegroundColor Cyan
     Set-Location backend
+    
+    # Apply migration
     node apply_migration.js
+    
+    $MigrationExitCode = $LASTEXITCODE
     Set-Location ..
+    
+    if ($MigrationExitCode -eq 0) {
+        Write-Host ""
+        Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+        Write-Host "  Setup Complete!" -ForegroundColor Green
+        Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "You can now log in to the admin panel with:" -ForegroundColor Yellow
+        Write-Host "  Email:    admin@kolkatascotty.com" -ForegroundColor White
+        Write-Host "  Password: admin123" -ForegroundColor White
+        Write-Host ""
+        Write-Host "⚠️  IMPORTANT: Change the password after first login!" -ForegroundColor Yellow
+        Write-Host ""
+    } else {
+        Write-Host "Migration completed with warnings. Check output above." -ForegroundColor Yellow
+    }
 } elseif (Get-Command psql -ErrorAction SilentlyContinue) {
     $MigrationFile = "supabase\migrations\20250103000000_migrate_to_direct_postgresql.sql"
     $DatabaseUrl = $env:DATABASE_URL
@@ -30,6 +50,10 @@ if (Test-Path "backend\node_modules\pg") {
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Migration applied successfully!" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "To create admin user, run:" -ForegroundColor Yellow
+        Write-Host "  cd backend && npm install && node create_admin.js" -ForegroundColor White
+        Write-Host ""
     } else {
         Write-Host "Migration failed!" -ForegroundColor Red
         exit 1

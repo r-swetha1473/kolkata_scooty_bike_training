@@ -5,6 +5,34 @@
 MIGRATION_FILE="${1:-supabase/migrations/20250103000000_migrate_to_direct_postgresql.sql}"
 DATABASE_URL="${DATABASE_URL}"
 
+# Check if Node.js backend is available
+if [ -d "backend/node_modules" ] && [ -f "backend/apply_migration.js" ]; then
+    echo "Using backend's database connection..."
+    echo ""
+    cd backend
+    node apply_migration.js
+    EXIT_CODE=$?
+    cd ..
+    
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  Setup Complete!"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "You can now log in to the admin panel with:"
+        echo "  Email:    admin@kolkatascotty.com"
+        echo "  Password: admin123"
+        echo ""
+        echo "⚠️  IMPORTANT: Change the password after first login!"
+        echo ""
+    else
+        echo "Migration completed with warnings. Check output above."
+    fi
+    exit $EXIT_CODE
+fi
+
+# Fallback to psql if Node.js backend not available
 if [ -z "$DATABASE_URL" ]; then
     echo "Error: DATABASE_URL environment variable is not set."
     echo "Please set it or pass it as a parameter:"
@@ -25,14 +53,18 @@ if command -v psql &> /dev/null; then
     
     if [ $? -eq 0 ]; then
         echo "✓ Migration applied successfully!"
+        echo ""
+        echo "To create admin user, run:"
+        echo "  cd backend && npm install && node create_admin.js"
+        echo ""
     else
         echo "✗ Migration failed!"
         exit 1
     fi
 else
     echo "psql not found. Please install PostgreSQL client tools."
-    echo "Or use the Node.js migration script:"
-    echo "  node apply_postgresql_migration.js"
+    echo "Or install backend dependencies and use:"
+    echo "  cd backend && npm install && node apply_migration.js"
     exit 1
 fi
 

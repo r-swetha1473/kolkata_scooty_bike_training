@@ -25,8 +25,14 @@ Option A: Using provided PostgreSQL scripts (no Supabase)
 3) The script will:
    - Connect to the database
    - Apply SQL in supabase/migrations/*_migrate_to_direct_postgresql.sql and other required statements
-4) Verify tables:
-   - psql "$CONNECTION_STRING" -c "\dt"
+   - Automatically create a default admin user with credentials:
+     * Email: admin@kolkatascotty.com
+     * Password: admin123
+     * Role: superadmin
+4) After migration, you can log in to the admin panel immediately
+5) ⚠️ IMPORTANT: Change the default password after first login!
+6) To create additional admin users manually:
+   cd backend && node create_admin.js [email] [password] [role]
 
 Option B: Supabase-compatible SQL (manual)
 - Apply SQL under supabase/migrations/ directly using psql or a GUI (DBeaver/pgAdmin).
