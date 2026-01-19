@@ -12,7 +12,6 @@ import { AuthService } from '../../../services/auth.service';
       <div class="header-container">
         <div class="header-left">
           <div class="logo">
-            <span class="logo-icon">🏍️</span>
             <div class="logo-text">
               <h1>Kolkata Scotty</h1>
               <span class="logo-subtitle">Admin Panel</span>
@@ -23,7 +22,11 @@ import { AuthService } from '../../../services/auth.service';
         <div class="header-right">
           <div class="header-actions">
             <button class="action-btn" (click)="goToSite()" title="Go to main site">
-              <span class="icon">🌐</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
               <span class="text">Site</span>
             </button>
             
@@ -34,15 +37,25 @@ import { AuthService } from '../../../services/auth.service';
                   <span class="user-name">{{ profile.full_name }}</span>
                   <span class="user-role">{{ profile.role | titlecase }}</span>
                 </div>
-                <span class="dropdown-icon" [class.rotated]="showUserMenu">▼</span>
+                <svg class="dropdown-icon" [class.rotated]="showUserMenu" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
               </button>
               <div class="dropdown-menu" *ngIf="showUserMenu">
                 <div class="dropdown-item" (click)="goToSite()">
-                  <span class="menu-icon">🌐</span>
+                  <svg class="menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
                   <span>Back to Site</span>
                 </div>
                 <div class="dropdown-item" (click)="logout()">
-                  <span class="menu-icon">🚪</span>
+                  <svg class="menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
                   <span>Logout</span>
                 </div>
               </div>
@@ -54,9 +67,9 @@ import { AuthService } from '../../../services/auth.service';
   `,
   styles: [`
     .admin-header {
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      background: #FFFFFF;
+      border-bottom: 1px solid #E5E7EB;
+      box-shadow: none;
       position: fixed;
       top: 0;
       left: 0;
@@ -86,21 +99,17 @@ import { AuthService } from '../../../services/auth.service';
       gap: 12px;
     }
 
-    .logo-icon {
-      font-size: 32px;
-    }
-
     .logo-text h1 {
       margin: 0;
       font-size: 20px;
       font-weight: 700;
-      color: #1f2937;
+      color: #111827;
       line-height: 1.2;
     }
 
     .logo-subtitle {
       font-size: 12px;
-      color: #6b7280;
+      color: #6B7280;
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -122,19 +131,20 @@ import { AuthService } from '../../../services/auth.service';
       align-items: center;
       gap: 8px;
       padding: 8px 16px;
-      background: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      color: #4b5563;
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: var(--border-radius-md);
+      color: #4B5563;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all var(--transition-base);
     }
 
     .action-btn:hover {
-      background: #e5e7eb;
-      color: #1f2937;
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+      color: #111827;
     }
 
     .action-btn .icon {
@@ -150,27 +160,27 @@ import { AuthService } from '../../../services/auth.service';
       align-items: center;
       gap: 12px;
       padding: 8px 16px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .user-btn:hover {
-      background: #f3f4f6;
-      border-color: #d1d5db;
+      background: #F9FAFB;
+      border-color: #D1D5DB;
     }
 
     .user-avatar {
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #F3F4F6;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
+      color: #4B5563;
       font-weight: 600;
       font-size: 14px;
       flex-shrink: 0;
@@ -186,19 +196,19 @@ import { AuthService } from '../../../services/auth.service';
     .user-name {
       font-size: 14px;
       font-weight: 600;
-      color: #1f2937;
+      color: #111827;
       line-height: 1.2;
     }
 
     .user-role {
       font-size: 12px;
-      color: #6b7280;
+      color: #6B7280;
       line-height: 1.2;
     }
 
     .dropdown-icon {
       font-size: 10px;
-      color: #6b7280;
+      color: #6B7280;
       transition: transform 0.2s;
       margin-left: 4px;
     }
@@ -211,10 +221,10 @@ import { AuthService } from '../../../services/auth.service';
       position: absolute;
       top: calc(100% + 8px);
       right: 0;
-      background: white;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
       min-width: 200px;
       overflow: hidden;
       z-index: 1000;
@@ -237,22 +247,25 @@ import { AuthService } from '../../../services/auth.service';
       align-items: center;
       gap: 12px;
       padding: 12px 16px;
-      color: #4b5563;
+      color: #4B5563;
       font-size: 14px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background var(--transition-fast);
     }
 
     .dropdown-item:hover {
-      background: #f9fafb;
+      background: #F9FAFB;
     }
 
     .dropdown-item:first-child {
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #E5E7EB;
     }
 
     .menu-icon {
-      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+      flex-shrink: 0;
     }
 
     @media (max-width: 768px) {

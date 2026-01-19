@@ -113,7 +113,10 @@ router.get('/:id', async (req, res, next) => {
     `, [req.params.id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Trainer not found' });
+      const error = new Error('Trainer not found');
+      error.status = 404;
+      error.errorCode = 'TRAINER_NOT_FOUND';
+      return next(error);
     }
 
     res.json(result.rows[0]);

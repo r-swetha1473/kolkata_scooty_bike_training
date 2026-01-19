@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpService } from './http.service';
 import { AuthService } from './auth.service';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 
 export interface SlotWithTrainer {
   id: string;
@@ -62,7 +62,7 @@ export class BookingService {
 
   async getSlotsByDate(date: string): Promise<void> {
     try {
-      const slots = await this.http.get<SlotWithTrainer[]>(`/slots?date=${date}`).toPromise();
+      const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>(`/slots?date=${date}`));
       this.slotsSubject.next(slots || []);
     } catch (error) {
       console.error('Error fetching slots:', error);
@@ -72,7 +72,7 @@ export class BookingService {
 
   async getAllSlots(): Promise<void> {
     try {
-      const slots = await this.http.get<SlotWithTrainer[]>('/slots').toPromise();
+      const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>('/slots'));
       this.slotsSubject.next(slots || []);
     } catch (error) {
       console.error('Error fetching all slots:', error);
@@ -82,7 +82,7 @@ export class BookingService {
 
   async getMyBookings(): Promise<void> {
     try {
-      const bookings = await this.http.get<BookingWithDetails[]>('/bookings/my-bookings').toPromise();
+      const bookings = await firstValueFrom(this.http.get<BookingWithDetails[]>('/bookings/my-bookings'));
       this.bookingsSubject.next(bookings || []);
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -92,11 +92,11 @@ export class BookingService {
 
   async createBooking(slotId: string, trainerId: string, notes: string): Promise<BookingWithDetails> {
     try {
-      const booking = await this.http.post<BookingWithDetails>('/bookings', {
+      const booking = await firstValueFrom(this.http.post<BookingWithDetails>('/bookings', {
         slot_id: slotId,
         trainer_id: trainerId,
         notes
-      }).toPromise();
+      }));
 
       if (!booking) {
         throw new Error('Failed to create booking');
@@ -111,7 +111,7 @@ export class BookingService {
 
   async cancelBooking(bookingId: string, reason: string): Promise<void> {
     try {
-      await this.http.post(`/bookings/${bookingId}/cancel`, { reason }).toPromise();
+      await firstValueFrom(this.http.put(`/bookings/${bookingId}/cancel`, { cancellation_reason: reason }));
     } catch (error) {
       console.error('Error cancelling booking:', error);
       throw error;
@@ -120,7 +120,7 @@ export class BookingService {
 
   async loadSlots(): Promise<SlotWithTrainer[]> {
     try {
-      const slots = await this.http.get<SlotWithTrainer[]>('/slots').toPromise();
+      const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>('/slots'));
       this.slotsSubject.next(slots || []);
       return slots || [];
     } catch (error) {
@@ -131,7 +131,7 @@ export class BookingService {
 
   async getActiveTrainers(): Promise<any[]> {
     try {
-      const trainers = await this.http.get<any[]>('/trainers/active').toPromise();
+      const trainers = await firstValueFrom(this.http.get<any[]>('/trainers/active'));
       return trainers || [];
     } catch (error) {
       console.error('Error loading trainers:', error);

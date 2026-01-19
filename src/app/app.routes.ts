@@ -61,8 +61,16 @@ export const routes: Routes = [
         loadComponent: () => import('./admin/pages/users/users.component').then(m => m.AdminUsersComponent)
       },
       {
+        path: 'vehicles',
+        loadComponent: () => import('./admin/pages/vehicles/vehicles.component').then(m => m.AdminVehiclesComponent)
+      },
+      {
         path: 'settings',
         loadComponent: () => import('./admin/pages/settings/settings.component').then(m => m.AdminSettingsComponent)
+      },
+      {
+        path: 'audit-logs',
+        loadComponent: () => import('./admin/pages/audit-logs/audit-logs.component').then(m => m.AdminAuditLogsComponent)
       }
     ]
   },

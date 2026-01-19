@@ -11,8 +11,10 @@ export class HttpService {
 
   constructor(private http: HttpClient) {}
 
+  // TODO: Migrate to httpOnly cookies for secure token storage
+  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private getHeaders(): HttpHeaders {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return new HttpHeaders({
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })

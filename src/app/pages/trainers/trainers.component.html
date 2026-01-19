@@ -1,15 +1,17 @@
 <div class="trainers-page">
-  <section class="trainers-hero">
+  <section class="page-hero">
     <div class="container">
-      <h1 class="fade-in">Meet Our Expert Trainers</h1>
-      <p class="fade-in-delay">Learn from certified professionals dedicated to your success</p>
+      <div class="hero-content">
+        <h1 class="hero-title">Meet Our Expert Trainers</h1>
+        <p class="hero-subtitle">Learn from certified professionals dedicated to your success. Our experienced instructors bring years of expertise to every training session.</p>
+      </div>
     </div>
   </section>
 
-  <section class="stats">
+  <section class="stats-band">
     <div class="container">
       <div class="stats-grid">
-        <div class="stat-card" *ngFor="let stat of stats">
+        <div class="stat-item" *ngFor="let stat of stats">
           <div class="stat-number">{{ stat.number }}</div>
           <div class="stat-label">{{ stat.label }}</div>
         </div>
@@ -37,21 +39,31 @@
         <div class="trainer-card" *ngFor="let trainer of trainers" (click)="openTrainerDetails(trainer)">
           <div class="trainer-avatar">
             <img *ngIf="trainer.avatar && trainer.avatar.startsWith('http')" [src]="trainer.avatar" [alt]="trainer.name">
-            <span *ngIf="!trainer.avatar || !trainer.avatar.startsWith('http')">{{ trainer.avatar || '👨‍🏫' }}</span>
+            <span *ngIf="!trainer.avatar || !trainer.avatar.startsWith('http')">{{ getInitials(trainer.name) }}</span>
           </div>
           <h3>{{ trainer.name }}</h3>
           <div class="trainer-designation">{{ trainer.designation }}</div>
           <div class="trainer-info">
             <div class="info-item">
-              <span class="icon">💼</span>
+              <svg class="info-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+              </svg>
               <span>{{ trainer.experience }}</span>
             </div>
             <div class="info-item">
-              <span class="icon">⭐</span>
+              <svg class="info-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
               <span>{{ trainer.rating }}/5</span>
             </div>
             <div class="info-item">
-              <span class="icon">👥</span>
+              <svg class="info-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
               <span>{{ trainer.students }}+ students</span>
             </div>
           </div>
@@ -68,12 +80,30 @@
     </div>
   </section>
 
-  <section class="certifications">
+  <section class="certifications-section">
     <div class="container">
-      <h2 class="section-title">Trainer Certifications</h2>
+      <div class="section-header">
+        <h2 class="section-title">Trainer Certifications</h2>
+        <p class="section-subtitle">All our trainers meet the highest professional standards</p>
+      </div>
       <div class="certifications-grid">
         <div class="cert-card" *ngFor="let cert of certifications">
-          <div class="cert-icon">{{ cert.icon }}</div>
+          <div class="cert-icon-wrapper">
+            <svg *ngIf="cert.icon === 'certified'" class="cert-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <svg *ngIf="cert.icon === 'licensed'" class="cert-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            <svg *ngIf="cert.icon === 'training'" class="cert-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+            </svg>
+            <svg *ngIf="cert.icon === 'quality'" class="cert-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
           <h3>{{ cert.title }}</h3>
           <p>{{ cert.description }}</p>
         </div>
@@ -81,9 +111,12 @@
     </div>
   </section>
 
-  <section class="approach">
+  <section class="approach-section">
     <div class="container">
-      <h2 class="section-title">Our Training Approach</h2>
+      <div class="section-header">
+        <h2 class="section-title">Our Training Approach</h2>
+        <p class="section-subtitle">A structured methodology for effective learning</p>
+      </div>
       <div class="approach-grid">
         <div class="approach-card" *ngFor="let step of trainingApproach">
           <div class="step-number">{{ step.step }}</div>
@@ -94,24 +127,29 @@
     </div>
   </section>
 
-  <section class="qualities">
+  <section class="qualities-section">
     <div class="container">
-      <h2 class="section-title">What Makes Our Trainers Special?</h2>
+      <div class="section-header">
+        <h2 class="section-title">What Makes Our Trainers Special?</h2>
+        <p class="section-subtitle">Qualities that set our instructors apart</p>
+      </div>
       <div class="qualities-grid">
         <div class="quality-item" *ngFor="let quality of qualities">
-          <span class="check">✓</span>
+          <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
           <span>{{ quality }}</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="cta">
+  <section class="cta-section">
     <div class="container">
       <div class="cta-content">
         <h2>Start Learning with the Best</h2>
-        <p>Book your session and experience professional training</p>
-        <a routerLink="/booking" class="btn btn-primary btn-large">Book Now</a>
+        <p>Book your session and experience professional training from certified instructors</p>
+        <a routerLink="/booking" class="btn btn-primary btn-large">Book Your Training Session</a>
       </div>
     </div>
   </section>
@@ -122,7 +160,7 @@
       <div class="modal-header">
         <div class="modal-avatar">
           <img *ngIf="selectedTrainer.avatar && selectedTrainer.avatar.startsWith('http')" [src]="selectedTrainer.avatar" [alt]="selectedTrainer.name">
-          <span *ngIf="!selectedTrainer.avatar || !selectedTrainer.avatar.startsWith('http')">{{ selectedTrainer.avatar || '👨‍🏫' }}</span>
+          <span *ngIf="!selectedTrainer.avatar || !selectedTrainer.avatar.startsWith('http')">{{ getInitials(selectedTrainer.name) }}</span>
         </div>
         <div class="modal-header-text">
           <h2>{{ selectedTrainer.name }}</h2>

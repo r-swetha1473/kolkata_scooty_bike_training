@@ -7,6 +7,7 @@ import { AuthService } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
+import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
 
 @Component({
   selector: 'app-booking',
@@ -33,6 +34,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   bookingForm = {
     trainer_id: '',
     vehicle_id: '',
+    phone: '',
     notes: ''
   };
 
@@ -74,36 +76,13 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    // Handle Google OAuth callback
+    // Note: Google OAuth now redirects to /profile with httpOnly cookie, not /booking
+    // This code handles error redirects from OAuth failures
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const userData = urlParams.get('user');
     const error = urlParams.get('error');
 
     if (error) {
       this.errorMessage = 'Authentication failed. Please try again.';
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (token) {
-      // Store token
-      localStorage.setItem('token', token);
-      
-      // If user data is provided, use it; otherwise fetch from API
-      if (userData) {
-        try {
-          const user = JSON.parse(atob(decodeURIComponent(userData)));
-          // Update auth service with user data
-          (this.authService as any).userProfileSubject.next(user);
-        } catch (e) {
-          console.error('Failed to parse user data:', e);
-          // Fallback: fetch user from API
-          await this.loadUserProfile();
-        }
-      } else {
-        // Fetch user profile from API
-        await this.loadUserProfile();
-      }
-      
       // Clean URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -149,15 +128,26 @@ export class BookingComponent implements OnInit, OnDestroy {
         // Show all slots for the selected date
         const allSlotsForDate = await this.slotService.getSlotsByDate(normalizedDate);
         // Filter only by time for today (hide past times today)
-        const now = new Date();
-        const selected = new Date(normalizedDate + 'T00:00:00');
-        const filtered = (allSlotsForDate || []).filter(s => {
-          if (selected.toDateString() === now.toDateString()) {
-            const start = new Date(s.start_time);
-            return start.getTime() >= now.getTime();
-          }
-          return true;
+        const today = getToday();
+        let filtered = (allSlotsForDate || []);
+        
+        if (normalizedDate === today) {
+          // Filter out past slots for today
+          const now = new Date();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          filtered = filtered.filter(s => {
+            const slotMinutes = timeToMinutes(s.start_time);
+            return slotMinutes >= currentMinutes;
+          });
+        }
+        
+        // Sort slots by start time (numerically using minutes)
+        filtered.sort((a, b) => {
+          const timeA = timeToMinutes(a.start_time);
+          const timeB = timeToMinutes(b.start_time);
+          return timeA - timeB;
         });
+        
         this.slots = filtered;
         
         // Optional info: count unassigned for visibility
@@ -191,7 +181,7 @@ export class BookingComponent implements OnInit, OnDestroy {
           if (!evt || !evt.startsWith('slot.')) return;
 
           // If the change affects the currently selected date, reload
-          const affectedDate = data.slot_date || (data.start_time ? new Date(data.start_time).toISOString().split('T')[0] : null) || payload.date;
+          const affectedDate = data.slot_date || extractDateFromDateTime(data.start_time) || payload.date;
           if (!affectedDate || affectedDate === this.selectedDate) {
             await this.loadSlots();
           }
@@ -250,6 +240,16 @@ export class BookingComponent implements OnInit, OnDestroy {
     // Reload trainers to ensure we have the latest data
     await this.loadTrainers();
 
+    // Load user profile to pre-populate phone number if available
+    try {
+      const user = await this.apiService.get<any>('/auth/me');
+      if (user && user.phone && !user.phone.startsWith('GOOGLE_')) {
+        this.bookingForm.phone = user.phone;
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    }
+
     this.selectedSlot = slot;
     this.bookingForm.trainer_id = slot.trainer_id || '';
     this.showBookingModal = true;
@@ -283,6 +283,11 @@ export class BookingComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (!this.bookingForm.phone || !/^[0-9]{10}$/.test(this.bookingForm.phone)) {
+      this.errorMessage = 'Please enter a valid 10-digit mobile number';
+      return;
+    }
+
     this.loading = true;
     this.errorMessage = '';
 
@@ -295,6 +300,7 @@ export class BookingComponent implements OnInit, OnDestroy {
         slot_id: this.selectedSlot.id,
         trainer_id: this.bookingForm.trainer_id,
         vehicle_id: this.bookingForm.vehicle_id,
+        phone: this.bookingForm.phone,
         notes: this.bookingForm.notes
       });
 
@@ -317,6 +323,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.bookingForm = {
       trainer_id: '',
       vehicle_id: '',
+      phone: '',
       notes: ''
     };
     this.errorMessage = '';
@@ -326,11 +333,8 @@ export class BookingComponent implements OnInit, OnDestroy {
     return new Date().toISOString().split('T')[0];
   }
 
-  formatTime(dateString: string): string {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  formatTime(datetime: string): string {
+    return formatTimeToAMPM(datetime);
   }
 
   isSlotAvailable(slot: Slot): boolean {
@@ -357,18 +361,30 @@ export class BookingComponent implements OnInit, OnDestroy {
     return slot.trainer?.profile?.full_name || 'Unassigned';
   }
 
+  // PHASE 3: Use centralized date utilities
   changeDate(days: number) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const normalizedDate = this.normalizeDate(this.selectedDate);
-    const current = new Date(normalizedDate + 'T00:00:00');
-    current.setDate(current.getDate() + days);
-    current.setHours(0, 0, 0, 0);
+    if (!this.selectedDate) {
+      this.selectedDate = getToday();
+      this.onDateChange();
+      return;
+    }
+    
+    const normalizedDate = normalizeDate(this.selectedDate);
+    if (!normalizedDate) {
+      this.selectedDate = getToday();
+      this.onDateChange();
+      return;
+    }
+    
+    // Add/subtract days using utility
+    const newDate = addDays(normalizedDate, days);
+    const today = getToday();
+    
     // Prevent navigating to past dates
-    if (current < today) {
-      this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
+    if (newDate < today) {
+      this.selectedDate = today;
     } else {
-      this.selectedDate = this.normalizeDate(current.toISOString().split('T')[0]);
+      this.selectedDate = newDate;
     }
     this.onDateChange();
   }

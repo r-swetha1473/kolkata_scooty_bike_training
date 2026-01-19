@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
+import { firstValueFrom } from 'rxjs';
+import { extractDateFromDateTime } from '../../../utils/date.utils';
 
 @Component({
   selector: 'app-admin-bookings',
@@ -10,51 +12,78 @@ import { ToastService } from '../../../services/toast.service';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="bookings-page">
-      <div class="page-header">
-        <h1 class="page-title">Manage Bookings</h1>
+      <div class="admin-page-header">
+        <h1 class="admin-page-title">Manage Bookings</h1>
       </div>
 
-      <div class="filters-bar">
-        <input 
-          type="text" 
-          [(ngModel)]="searchTerm" 
-          (input)="applyFilters()"
-          placeholder="Search by customer or trainer name..." 
-          class="search-input">
-        <select [(ngModel)]="statusFilter" (change)="applyFilters()" class="filter-select">
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+      <div class="admin-filters-bar">
+        <div class="admin-filters-content">
+          <div class="admin-filter-group admin-search-group">
+            <svg class="admin-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input 
+              type="text" 
+              [(ngModel)]="searchTerm" 
+              (input)="applyFilters()"
+              placeholder="Search customer, trainer, phone, booking ID..." 
+              class="admin-search-input">
+          </div>
 
-        <input
-          type="date"
-          [(ngModel)]="startDateFilter"
-          (change)="applyFilters()"
-          class="filter-input"
-          placeholder="Start Date">
+          <select [(ngModel)]="statusFilter" (change)="applyFilters()" class="admin-select">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
 
-        <input
-          type="date"
-          [(ngModel)]="endDateFilter"
-          (change)="applyFilters()"
-          class="filter-input"
-          placeholder="End Date">
+          <div class="admin-filter-group">
+            <select [(ngModel)]="datePreset" (change)="onDatePresetChange()" class="admin-select">
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="last7">Last 7 days</option>
+              <option value="thisMonth">This month</option>
+              <option value="custom">Custom</option>
+            </select>
+            <div class="date-inputs" *ngIf="datePreset === 'custom'">
+              <input
+                type="date"
+                [(ngModel)]="startDateFilter"
+                (change)="applyFilters()"
+                class="admin-select date-input">
+              <span class="date-separator">–</span>
+              <input
+                type="date"
+                [(ngModel)]="endDateFilter"
+                (change)="applyFilters()"
+                class="admin-select date-input">
+            </div>
+          </div>
 
-        <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
-          <option [value]="10">10 per page</option>
-          <option [value]="20">20 per page</option>
-          <option [value]="50">50 per page</option>
-          <option [value]="100">100 per page</option>
-        </select>
+          <button class="admin-btn admin-btn-secondary" (click)="resetFilters()" title="Reset filters">
+            <svg class="admin-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <polyline points="23 20 23 14 17 14"></polyline>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+            </svg>
+            Reset
+          </button>
 
-        <button class="btn-refresh" (click)="loadBookings()">🔄 Refresh</button>
+          <button class="admin-btn admin-btn-secondary" (click)="loadBookings()" title="Refresh data">
+            <svg class="admin-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div class="table-container" style="overflow-x:auto;">
-        <table class="data-table">
+      <div class="admin-table-container">
+        <table class="admin-data-table">
           <thead>
             <tr>
               <th>Customer</th>
@@ -87,24 +116,24 @@ import { ToastService } from '../../../services/toast.service';
                     *ngIf="booking.status === 'pending'"
                     class="btn-action btn-confirm"
                     (click)="updateStatus(booking.id, 'confirmed')">
-                    ✓ Confirm
+                    Confirm
                   </button>
                   <button
                     *ngIf="booking.status === 'confirmed'"
                     class="btn-action btn-complete"
                     (click)="updateStatus(booking.id, 'completed')">
-                    ✓ Complete
+                    Complete
                   </button>
                   <button
                     *ngIf="['pending', 'confirmed'].includes(booking.status)"
                     class="btn-action btn-cancel"
                     (click)="updateStatus(booking.id, 'cancelled')">
-                    ✕ Cancel
+                    Cancel
                   </button>
                   <button
                     class="btn-action btn-delete"
                     (click)="deleteBooking(booking.id)">
-                    🗑️ Delete
+                    Delete
                   </button>
                 </div>
               </td>
@@ -113,40 +142,49 @@ import { ToastService } from '../../../services/toast.service';
         </table>
 
         <div *ngIf="filteredBookings.length === 0" class="empty-state">
-          <div class="empty-icon">📅</div>
           <p>No bookings found</p>
         </div>
       </div>
 
-      <div class="pagination-wrapper" *ngIf="totalPages > 1">
-        <div class="pagination-container">
+      <div class="admin-pagination" *ngIf="filteredBookings.length > 0">
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ filteredBookings.length }} bookings</span>
+          <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="admin-page-size-select">
+            <option [value]="10">10</option>
+            <option [value]="20">20</option>
+            <option [value]="50">50</option>
+            <option [value]="100">100</option>
+          </select>
+        </div>
+        <div class="admin-pagination-controls" *ngIf="totalPages > 1">
           <button 
-            class="pagination-btn" 
+            class="admin-pagination-btn" 
             [disabled]="currentPage === 1"
-            (click)="goToPage(currentPage - 1)">
-            ← Prev
+            (click)="goToPage(currentPage - 1)"
+            title="Previous page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
           </button>
-          <div class="pagination-info">
-            <span class="page-numbers">
-              <button 
-                *ngFor="let page of getPageNumbers()"
-                class="page-number"
-                [class.active]="page === currentPage"
-                [class.ellipsis]="page === '...'"
-                [disabled]="page === '...'"
-                (click)="page !== '...' && goToPage(page)">
-                {{ page }}
-              </button>
-            </span>
-            <span class="page-info-text">
-              Page {{ currentPage }} of {{ totalPages }} ({{ filteredBookings.length }} total)
-            </span>
-          </div>
+          <ng-container *ngFor="let page of getPageNumbers()">
+            <button
+              *ngIf="typeof page === 'number'"
+              class="admin-pagination-btn"
+              [class.active]="page === currentPage"
+              (click)="goToPage(page)"
+              [title]="'Go to page ' + page">
+              {{ page }}
+            </button>
+            <span *ngIf="page === '...'" class="admin-page-ellipsis">...</span>
+          </ng-container>
           <button 
-            class="pagination-btn" 
+            class="admin-pagination-btn" 
             [disabled]="currentPage === totalPages"
-            (click)="goToPage(currentPage + 1)">
-            Next →
+            (click)="goToPage(currentPage + 1)"
+            title="Next page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
         </div>
       </div>
@@ -157,227 +195,155 @@ import { ToastService } from '../../../services/toast.service';
       max-width: 1400px;
     }
 
-    .page-header {
-      margin-bottom: 24px;
-    }
-
-    .page-title {
-      font-size: 32px;
-      font-weight: 700;
-      color: #1f2937;
-      margin: 0;
-    }
-
-    .filters-bar {
+    .date-inputs {
       display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
     }
 
-    .filter-select, .filter-input {
-      padding: 10px 16px;
-      border: 2px solid #e5e7eb;
-      border-radius: 8px;
+    .date-input {
+      width: 28%;
+      max-width: 200px;
+      min-width: 150px;
+    }
+
+    .date-separator {
+      color: var(--admin-text-secondary);
       font-size: 14px;
-      transition: border-color 0.2s;
-    }
-
-    .filter-select:focus, .filter-input:focus {
-      outline: none;
-      border-color: #667eea;
-    }
-
-    .btn-refresh {
-      padding: 10px 20px;
-      background: #667eea;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .btn-refresh:hover {
-      background: #5568d3;
-    }
-
-    .table-container {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
-    }
-
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .data-table thead {
-      background: #f9fafb;
-    }
-
-    .data-table th {
-      padding: 16px;
-      text-align: left;
-      font-size: 14px;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .data-table td {
-      padding: 16px;
-      border-top: 1px solid #e5e7eb;
-      font-size: 14px;
-      color: #1f2937;
+      padding: 0 2px;
     }
 
     .customer-info .name {
       font-weight: 600;
       margin-bottom: 4px;
+      color: #1F2937;
     }
 
     .customer-info .email {
       font-size: 12px;
-      color: #6b7280;
+      color: #6B7280;
     }
 
     .status-badge {
-      padding: 4px 12px;
+      padding: 4px 10px;
       border-radius: 12px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
 
     .status-pending {
-      background: #fef3c7;
-      color: #92400e;
+      background: #FEF3C7;
+      color: #92400E;
     }
 
     .status-confirmed {
-      background: #dbeafe;
-      color: #1e40af;
+      background: #DBEAFE;
+      color: #1E40AF;
     }
 
     .status-booked {
-      background: #fee2e2;
-      color: #991b1b;
+      background: #FEE2E2;
+      color: #991B1B;
     }
 
     .status-completed {
-      background: #d1fae5;
-      color: #065f46;
-      border: 1px solid #10b981;
+      background: #D1FAE5;
+      color: #065F46;
     }
 
     .status-cancelled {
-      background: #fee2e2;
-      color: #991b1b;
+      background: #FEE2E2;
+      color: #991B1B;
     }
 
     .actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
     }
 
     .btn-action {
-      padding: 6px 12px;
+      padding: 5px 10px;
       border: none;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
 
     .btn-confirm {
-      background: #dbeafe;
-      color: #1e40af;
+      background: #DBEAFE;
+      color: #1E40AF;
     }
 
     .btn-confirm:hover {
-      background: #3b82f6;
+      background: #3B82F6;
       color: white;
+      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+      transform: translateY(-1px);
     }
 
     .btn-complete {
-      background: #d1fae5;
-      color: #065f46;
+      background: #D1FAE5;
+      color: #065F46;
     }
 
     .btn-complete:hover {
-      background: #10b981;
+      background: #10B981;
       color: white;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+      transform: translateY(-1px);
     }
 
     .btn-cancel {
-      background: #fee2e2;
-      color: #991b1b;
+      background: #FEE2E2;
+      color: #991B1B;
     }
 
     .btn-cancel:hover {
-      background: #ef4444;
+      background: #EF4444;
       color: white;
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+      transform: translateY(-1px);
     }
 
     .btn-delete {
-      background: #fef3c7;
-      color: #92400e;
+      background: #FEF3C7;
+      color: #92400E;
     }
 
     .btn-delete:hover {
-      background: #f59e0b;
+      background: #F59E0B;
       color: white;
+      box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+      transform: translateY(-1px);
     }
 
     .empty-state {
       padding: 60px 20px;
       text-align: center;
-    }
-
-    .search-input { flex: 1; min-width: 200px; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .search-input:focus { outline: none; border-color: #667eea; }
-    .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .pagination-wrapper { margin-top: 24px; padding: 20px 0; border-top: 1px solid #e5e7eb; }
-    .pagination-container { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .pagination-btn { padding: 8px 16px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
-    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; transform: none; }
-    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3); }
-    .pagination-info { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
-    .page-numbers { display: flex; gap: 4px; align-items: center; }
-    .page-number { padding: 6px 12px; background: white; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: #4b5563; transition: all 0.2s; min-width: 36px; }
-    .page-number:hover:not(:disabled) { background: #f3f4f6; border-color: #3b82f6; color: #3b82f6; }
-    .page-number.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-color: #3b82f6; }
-    .page-number.ellipsis { border: none; background: none; cursor: default; }
-    .page-number:disabled { cursor: default; }
-    .page-info-text { color: #6b7280; font-size: 12px; }
-
-    .empty-icon {
-      font-size: 60px;
-      margin-bottom: 16px;
+      background: var(--admin-bg);
+      border-radius: var(--admin-radius);
+      border: 1px dashed var(--admin-border);
+      box-shadow: var(--admin-shadow-sm);
     }
 
     .empty-state p {
-      color: #6b7280;
-      font-size: 16px;
+      color: var(--admin-text-secondary);
+      font-size: 14px;
     }
 
-    @media (max-width: 768px) {
-      .filters-bar {
-        flex-direction: column;
-      }
 
-      .table-container {
+    @media (max-width: 768px) {
+      .admin-table-container {
         overflow-x: auto;
       }
 
-      .data-table {
+      .admin-data-table {
         min-width: 800px;
       }
     }
@@ -390,6 +356,7 @@ export class AdminBookingsComponent implements OnInit {
   startDateFilter = '';
   endDateFilter = '';
   searchTerm = '';
+  datePreset = 'all';
   
   // Pagination
   currentPage = 1;
@@ -430,7 +397,13 @@ export class AdminBookingsComponent implements OnInit {
         const customerName = (booking.user?.full_name || booking.user_name || '').toLowerCase();
         const customerEmail = (booking.user?.email || booking.user_email || '').toLowerCase();
         const trainerName = (booking.trainer?.profile?.full_name || booking.trainer_name || '').toLowerCase();
-        return customerName.includes(term) || customerEmail.includes(term) || trainerName.includes(term);
+        const phone = (booking.user?.phone || booking.user_phone || '').toLowerCase();
+        const bookingId = (booking.id || '').toLowerCase();
+        return customerName.includes(term) || 
+               customerEmail.includes(term) || 
+               trainerName.includes(term) ||
+               phone.includes(term) ||
+               bookingId.includes(term);
       });
     }
     
@@ -442,14 +415,14 @@ export class AdminBookingsComponent implements OnInit {
     // Filter by date range
     if (this.startDateFilter) {
       filtered = filtered.filter(booking => {
-        const bookingDate = booking.slot?.slot_date || (booking.slot?.start_time ? new Date(booking.slot.start_time).toISOString().split('T')[0] : null);
+        const bookingDate = booking.slot?.slot_date || extractDateFromDateTime(booking.slot?.start_time);
         return bookingDate && bookingDate >= this.startDateFilter;
       });
     }
     
     if (this.endDateFilter) {
       filtered = filtered.filter(booking => {
-        const bookingDate = booking.slot?.slot_date || (booking.slot?.start_time ? new Date(booking.slot.start_time).toISOString().split('T')[0] : null);
+        const bookingDate = booking.slot?.slot_date || extractDateFromDateTime(booking.slot?.start_time);
         return bookingDate && bookingDate <= this.endDateFilter;
       });
     }
@@ -510,12 +483,63 @@ export class AdminBookingsComponent implements OnInit {
     this.updatePagination();
   }
 
+  onDatePresetChange() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    switch (this.datePreset) {
+      case 'today':
+        const todayStr = today.toISOString().split('T')[0];
+        this.startDateFilter = todayStr;
+        this.endDateFilter = todayStr;
+        break;
+      case 'last7':
+        const last7 = new Date(today);
+        last7.setDate(last7.getDate() - 6);
+        this.startDateFilter = last7.toISOString().split('T')[0];
+        this.endDateFilter = today.toISOString().split('T')[0];
+        break;
+      case 'thisMonth':
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        this.startDateFilter = firstDay.toISOString().split('T')[0];
+        this.endDateFilter = today.toISOString().split('T')[0];
+        break;
+      case 'all':
+        this.startDateFilter = '';
+        this.endDateFilter = '';
+        break;
+      case 'custom':
+        // Keep existing dates or leave empty
+        break;
+    }
+    this.applyFilters();
+  }
+
+  resetFilters() {
+    this.searchTerm = '';
+    this.statusFilter = '';
+    this.datePreset = 'all';
+    this.startDateFilter = '';
+    this.endDateFilter = '';
+    this.currentPage = 1;
+    this.applyFilters();
+  }
+
+  getStartIndex(): number {
+    return this.filteredBookings.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
+  }
+
+  getEndIndex(): number {
+    const end = this.currentPage * this.itemsPerPage;
+    return end > this.filteredBookings.length ? this.filteredBookings.length : end;
+  }
+
   async updateStatus(bookingId: string, status: string) {
     if (!confirm(`Are you sure you want to mark this booking as ${status}?`)) return;
 
     try {
       console.log(`[Booking] Updating booking ${bookingId} to status: ${status}`);
-      const result = await this.adminService.updateBookingStatus(bookingId, status).toPromise();
+      const result = await firstValueFrom(this.adminService.updateBookingStatus(bookingId, status));
       console.log(`[Booking] Update result:`, result);
       
       // Reload bookings to get updated data
@@ -552,7 +576,7 @@ export class AdminBookingsComponent implements OnInit {
     }
 
     try {
-      await this.adminService.deleteBooking(bookingId).toPromise();
+      await firstValueFrom(this.adminService.deleteBooking(bookingId));
       await this.loadBookings();
       this.toastService.success('Booking deleted successfully');
     } catch (error: any) {

@@ -29,7 +29,10 @@ router.post('/', authenticate, async (req, res, next) => {
 
     const { booking_id, rating_value, comments } = req.body;
     if (!booking_id || !rating_value) {
-      return res.status(400).json({ error: 'booking_id and rating_value are required' });
+      const error = new Error('booking_id and rating_value are required');
+      error.status = 400;
+      error.errorCode = 'MISSING_REQUIRED_FIELDS';
+      return next(error);
     }
 
     // Validate booking belongs to user and is completed
@@ -41,12 +44,18 @@ router.post('/', authenticate, async (req, res, next) => {
     );
     if (bookingRes.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Booking not found' });
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
     }
     const booking = bookingRes.rows[0];
     if (booking.status !== 'completed') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Only completed bookings can be rated' });
+      const error = new Error('Only completed bookings can be rated');
+      error.status = 400;
+      error.errorCode = 'INVALID_BOOKING_STATUS';
+      return next(error);
     }
 
     // Insert rating (one per booking)

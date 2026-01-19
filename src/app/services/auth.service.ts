@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpService } from './http.service';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
 export interface UserProfile {
@@ -32,17 +32,37 @@ export class AuthService {
     this.loadUserFromToken();
   }
 
+  // Load user from token (sessionStorage) or httpOnly cookie
   private loadUserFromToken() {
-    const token = localStorage.getItem('token');
+    // Check sessionStorage first (for email/password login)
+    const token = sessionStorage.getItem('token');
     if (token) {
       this.http.get<UserProfile>('/auth/me').subscribe({
         next: (user) => this.userProfileSubject.next(user),
         error: () => {
-          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
+          this.userProfileSubject.next(null);
+        }
+      });
+    } else {
+      // No sessionStorage token - check for httpOnly cookie (from Google OAuth)
+      // Make API call with credentials to check if cookie exists
+      this.http.get<UserProfile>('/auth/me').subscribe({
+        next: (user) => {
+          // User authenticated via cookie - update state
+          this.userProfileSubject.next(user);
+        },
+        error: () => {
+          // No valid cookie or token - user not authenticated
           this.userProfileSubject.next(null);
         }
       });
     }
+  }
+
+  // Public method to reload user profile (useful after OAuth redirect)
+  reloadUserProfile(): void {
+    this.loadUserFromToken();
   }
 
   signInWithGoogle(): void {
@@ -51,9 +71,10 @@ export class AuthService {
 
   async signInWithEmailPassword(email: string, password: string): Promise<UserProfile | null> {
     try {
-      const response = await this.http.post<AuthResponse>('/auth/login', { email, password }).toPromise();
+      const response = await firstValueFrom(this.http.post<AuthResponse>('/auth/login', { email, password }));
       if (response && response.token) {
-        localStorage.setItem('token', response.token);
+        // TODO: Migrate to httpOnly cookies - backend already supports cookie-based auth
+        sessionStorage.setItem('token', response.token);
         this.userProfileSubject.next(response.user);
         return response.user;
       }
@@ -65,11 +86,11 @@ export class AuthService {
 
   async signOut(): Promise<void> {
     try {
-      await this.http.post('/auth/logout', {}).toPromise();
+      await firstValueFrom(this.http.post('/auth/logout', {}));
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       this.userProfileSubject.next(null);
       this.router.navigate(['/']);
     }
@@ -103,7 +124,7 @@ export class AuthService {
   }
 
   async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
-    const updatedProfile = await this.http.put<UserProfile>('/profiles/me', updates).toPromise();
+    const updatedProfile = await firstValueFrom(this.http.put<UserProfile>('/profiles/me', updates));
     if (updatedProfile) {
       this.userProfileSubject.next(updatedProfile);
       return updatedProfile;

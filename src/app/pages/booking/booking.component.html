@@ -1,35 +1,70 @@
 <div class="booking-page">
-  <section class="booking-hero">
+  <section class="page-hero">
     <div class="container">
-      <h1 class="fade-in">Book Your Training Slot</h1>
-      <p class="fade-in-delay">Choose your preferred date and time</p>
+      <div class="hero-content">
+        <h1 class="hero-title">Book Your Training Slot</h1>
+        <p class="hero-subtitle">Choose your preferred date and time. Select a trainer and vehicle to begin your training journey.</p>
+      </div>
     </div>
   </section>
 
   <section class="booking-content">
     <div class="container">
-      <div class="date-navigation">
-        <button class="nav-btn" (click)="changeDate(-1)" [disabled]="isPrevDisabled()">← Previous Day</button>
-        <div class="date-selector">
-          <label for="date">Select Date:</label>
-          <input
-            type="date"
-            id="date"
-            [(ngModel)]="selectedDate"
-            [min]="getMinDate()"
-            (change)="onDateChange()"
-            class="date-input">
+      <div class="booking-steps">
+        <div class="step-indicator">
+          <div class="step active">
+            <div class="step-number">1</div>
+            <div class="step-label">Select Date</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" [class.active]="selectedSlot">
+            <div class="step-number">2</div>
+            <div class="step-label">Choose Slot</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" [class.active]="showBookingModal">
+            <div class="step-number">3</div>
+            <div class="step-label">Confirm</div>
+          </div>
         </div>
-        <button class="nav-btn" (click)="changeDate(1)">Next Day →</button>
       </div>
 
-      <div class="slots-container">
-        <h2 class="page-title">Available Time Slots</h2>
-        <div class="legend">
-          <span class="legend-item"><span class="dot available"></span> Available</span>
-          <span class="legend-item"><span class="dot booked"></span> Booked</span>
-          <span class="legend-item"><span class="dot full"></span> Full</span>
-          <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
+      <div class="date-navigation-card">
+        <div class="date-navigation">
+          <button class="nav-btn" (click)="changeDate(-1)" [disabled]="isPrevDisabled()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            Previous Day
+          </button>
+          <div class="date-selector">
+            <label for="date">Select Date:</label>
+            <input
+              type="date"
+              id="date"
+              [(ngModel)]="selectedDate"
+              [min]="getMinDate()"
+              (change)="onDateChange()"
+              class="date-input">
+          </div>
+          <button class="nav-btn" (click)="changeDate(1)">
+            Next Day
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="slots-container-card">
+        <div class="slots-header">
+          <h2 class="page-title">Available Time Slots</h2>
+          <div class="legend">
+            <span class="legend-item"><span class="dot available"></span> Available</span>
+            <span class="legend-item"><span class="dot booked"></span> Booked</span>
+            <span class="legend-item"><span class="dot full"></span> Full</span>
+            <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
+          </div>
         </div>
 
         <div *ngIf="loading" class="loading-spinner">
@@ -54,7 +89,11 @@
               {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotBooked(slot) ? 'BOOKED' : 'AVAILABLE')) }}
             </div>
             <div class="slot-trainer" *ngIf="slot.trainer?.profile?.full_name">
-              <span class="trainer-icon">👤</span> {{ slot.trainer.profile.full_name }}
+              <svg class="trainer-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              {{ slot.trainer.profile.full_name }}
             </div>
             <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>
@@ -63,22 +102,73 @@
 
       <div class="info-section">
         <div class="info-card">
-          <h3>📋 Booking Information</h3>
+          <div class="info-card-header">
+            <svg class="info-card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            <h3>Booking Information</h3>
+          </div>
           <ul>
-            <li>Each session is 30 minutes</li>
-            <li>Arrive 10 minutes early</li>
-            <li>Bring your learner's license</li>
-            <li>Wear comfortable clothes</li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Each session is 30 minutes</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Arrive 10 minutes early</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Bring your learner's license</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Wear comfortable clothes</span>
+            </li>
           </ul>
         </div>
 
         <div class="info-card">
-          <h3>💡 Important Notes</h3>
+          <div class="info-card-header">
+            <svg class="info-card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <h3>Important Notes</h3>
+          </div>
           <ul>
-            <li>Free cancellation 24 hours before</li>
-            <li>Safety gear provided</li>
-            <li>Trainer assigned based on availability</li>
-            <li>Confirmation via SMS</li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Free cancellation 24 hours before</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Safety gear provided</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Trainer assigned based on availability</span>
+            </li>
+            <li>
+              <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Confirmation via SMS</span>
+            </li>
           </ul>
         </div>
       </div>
@@ -123,6 +213,20 @@
         </div>
 
         <div class="form-group">
+          <label for="phone">Mobile Number *</label>
+          <input
+            type="tel"
+            id="phone"
+            [(ngModel)]="bookingForm.phone"
+            name="phone"
+            placeholder="Enter your mobile number"
+            pattern="[0-9]{10}"
+            maxlength="10"
+            required>
+          <small class="form-hint">10-digit mobile number (e.g., 9876543210)</small>
+        </div>
+
+        <div class="form-group">
           <label for="notes">Notes (Optional)</label>
           <textarea
             id="notes"
@@ -141,7 +245,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="!captchaVerified || loading || !bookingForm.trainer_id || !bookingForm.vehicle_id">
+          [disabled]="!captchaVerified || loading || !bookingForm.trainer_id || !bookingForm.vehicle_id || !bookingForm.phone">
           {{ loading ? 'Booking...' : 'Confirm Booking' }}
         </button>
       </form>
@@ -167,6 +271,9 @@
   </div>
 
   <div class="toast success" [class.show]="showConfirmation">
-    ✓ Booking confirmed! We'll send you a confirmation SMS shortly.
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+    Booking confirmed! We'll send you a confirmation SMS shortly.
   </div>
 </div>

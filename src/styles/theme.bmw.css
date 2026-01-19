@@ -1,0 +1,1119 @@
+/* BMW-Inspired Theme System
+ * Complete design system based on BMW brand principles
+ * White backgrounds, BMW blue for actions, neutral grays, soft shadows
+ */
+
+/* ============================================
+   EXTENDED COLOR SYSTEM
+   ============================================ */
+
+:root {
+  /* Brand Colors (BMW Blue - Accent Only) */
+  --primary-blue: #0066B1; /* BMW blue – accent only */
+  --dark-blue: #003A8F;
+  --bmw-primary: var(--primary-blue);
+  --bmw-secondary: var(--dark-blue);
+  --bmw-white: #FFFFFF;
+  --bmw-black: #111827;
+
+  /* Background Hierarchy (Premium White Space) */
+  --bg-white: #FFFFFF;
+  --bg-light: #F5F7FA;
+  --bg-dark: #111827;
+  --bg-sidebar: #1F2937; /* Dark neutral for sidebar */
+  --bg-primary: var(--bg-white); /* Main content areas */
+  --bg-secondary: var(--bg-light); /* Section backgrounds */
+  --bg-tertiary: #F3F4F6; /* Disabled states, inactive elements */
+  --bg-hover: #F5F7FA; /* Hover states for interactive elements */
+
+  /* Text Color Hierarchy (Premium Design) */
+  --text-primary: #111827; /* Main headings, important text */
+  --text-secondary: #4B5563; /* Body text, descriptions */
+  --text-muted: #9CA3AF; /* Placeholders, hints, disabled */
+  --text-tertiary: var(--text-muted);
+  --text-on-blue: var(--bg-white); /* Text on BMW blue backgrounds */
+
+  /* Border Colors */
+  --border-light: #E5E7EB; /* Standard borders, dividers */
+  --border-primary: var(--border-light);
+  --border-secondary: #D1D5DB; /* Subtle separations */
+  --border-accent: var(--primary-blue); /* Active, selected, focus states */
+  --border-disabled: #E5E7EB; /* Disabled element borders */
+
+  /* Danger Color */
+  --danger: #DC2626;
+
+  /* Status Colors (Functional Only) */
+  --status-success: #16A34A; /* Success messages, available states */
+  --status-success-bg: #D1FAE5; /* Success background */
+  --status-success-text: #065F46; /* Success text */
+  
+  --status-error: var(--danger); /* Errors, warnings, unavailable */
+  --status-error-bg: #FEE2E2; /* Error background */
+  --status-error-text: #991B1B; /* Error text */
+  
+  --status-warning: #F59E0B; /* Warnings, pending states */
+  --status-warning-bg: #FEF3C7; /* Warning background */
+  --status-warning-text: #92400E; /* Warning text */
+  
+  --status-info: var(--primary-blue); /* Informational (uses BMW blue) */
+  --status-info-bg: #DBEAFE; /* Info background */
+  --status-info-text: #1E40AF; /* Info text */
+
+  /* Shadow System (Soft, Subtle) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-blue: 0 4px 12px rgba(0, 102, 177, 0.12); /* BMW blue shadow */
+  --shadow-focus: 0 0 0 3px rgba(0, 102, 177, 0.1); /* Focus ring */
+
+  /* Transition System */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
+
+/* ============================================
+   TYPOGRAPHY SCALE
+   ============================================ */
+
+/* Base Typography */
+body {
+  font-family: var(--font-family-base);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Heading Hierarchy */
+h1, .h1 {
+  font-size: 3.5rem; /* 56px */
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-lg) 0;
+}
+
+h2, .h2 {
+  font-size: 2.625rem; /* 42px */
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-lg) 0;
+}
+
+h3, .h3 {
+  font-size: 2rem; /* 32px */
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+h4, .h4 {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+h5, .h5 {
+  font-size: 1.25rem; /* 20px */
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+h6, .h6 {
+  font-size: 1.125rem; /* 18px */
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+/* Body Text Scale */
+.text-lg {
+  font-size: 1.125rem; /* 18px */
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.text-base {
+  font-size: 1rem; /* 16px */
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.text-sm {
+  font-size: 0.875rem; /* 14px */
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.text-xs {
+  font-size: 0.75rem; /* 12px */
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* Label Styles */
+label, .label {
+  font-size: 0.875rem; /* 14px */
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+  display: block;
+  margin-bottom: var(--spacing-sm);
+}
+
+.label-sm {
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Text Utilities */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+.text-on-blue { color: var(--text-on-blue); }
+
+.font-bold { font-weight: 700; }
+.font-semibold { font-weight: 600; }
+.font-medium { font-weight: 500; }
+.font-normal { font-weight: 400; }
+
+/* ============================================
+   BUTTON SYSTEM
+   ============================================ */
+
+/* Base Button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family-button);
+  font-weight: 600;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  text-decoration: none;
+  white-space: nowrap;
+  min-height: 44px; /* Touch target */
+}
+
+.btn:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primary Button (BMW Blue) */
+.btn-primary {
+  background: var(--primary-blue);
+  color: var(--text-on-blue);
+  padding: 12px 24px;
+  font-size: 1rem; /* 16px */
+  border-radius: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--bmw-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--bmw-secondary);
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background: var(--border-primary);
+  color: var(--text-tertiary);
+}
+
+/* Secondary Button (White with Blue Border) */
+.btn-secondary {
+  background: var(--bg-white);
+  color: var(--primary-blue);
+  border: 2px solid var(--primary-blue);
+  padding: 10px 22px; /* Adjusted for border */
+  font-size: 1rem;
+  border-radius: 8px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--primary-blue);
+  color: var(--text-on-blue);
+  border-color: var(--primary-blue);
+}
+
+.btn-secondary:active:not(:disabled) {
+  background: var(--bmw-secondary);
+  border-color: var(--bmw-secondary);
+}
+
+.btn-secondary:disabled {
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  border-color: var(--border-disabled);
+}
+
+/* Tertiary/Ghost Button */
+.btn-tertiary {
+  background: transparent;
+  color: var(--primary-blue);
+  border: 1px solid var(--border-light);
+  padding: 10px 20px;
+  font-size: 0.875rem; /* 14px */
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.btn-tertiary:hover:not(:disabled) {
+  background: var(--bg-light);
+  border-color: var(--border-secondary);
+}
+
+.btn-tertiary:active:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+/* Text Button */
+.btn-text {
+  background: transparent;
+  color: var(--primary-blue);
+  border: none;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  min-height: 36px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  border-radius: 8px;
+}
+
+.btn-text:hover:not(:disabled) {
+  text-decoration-color: var(--primary-blue);
+  background: var(--bg-light);
+}
+
+/* Button Sizes */
+.btn-lg {
+  padding: 16px 32px;
+  font-size: 1.125rem; /* 18px */
+  min-height: 52px;
+}
+
+.btn-md {
+  padding: 12px 24px;
+  font-size: 1rem;
+  min-height: 44px;
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  min-height: 36px;
+}
+
+/* Icon Button */
+.btn-icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--border-radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.btn-icon-sm {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+
+.btn-icon-lg {
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+}
+
+/* Status Buttons */
+.btn-success {
+  background: var(--status-success);
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-error {
+  background: var(--status-error);
+  color: white;
+}
+
+.btn-error:hover:not(:disabled) {
+  background: #DC2626;
+}
+
+.btn-warning {
+  background: var(--status-warning);
+  color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #D97706;
+}
+
+/* Danger Button - Grey outline, red only on hover */
+.btn-danger {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 2px solid var(--border-light);
+  padding: 10px 20px;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  transition: all var(--transition-base);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--text-on-blue);
+  border-color: var(--danger);
+}
+
+/* ============================================
+   CARD SYSTEM
+   ============================================ */
+
+/* Base Card */
+.card {
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-xl);
+  transition: all var(--transition-base);
+}
+
+/* Primary Card (Standard Content Card) */
+.card-primary {
+  background: var(--bg-primary);
+  border: none;
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: none;
+  transition: all var(--transition-base);
+}
+
+.card-primary:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Secondary Card (Elevated, Accent Border) */
+.card-secondary {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-base);
+}
+
+.card-secondary:hover {
+  box-shadow: var(--shadow-xl);
+  border-color: var(--dark-blue);
+  transform: translateY(-2px);
+}
+
+/* Tertiary Card (Flat, Subtle) */
+.card-tertiary {
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: none;
+}
+
+/* Stat Card (Dashboard Metrics) */
+.card-stat {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  transition: all var(--transition-base);
+}
+
+.card-stat:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--dark-blue);
+  transform: translateY(-2px);
+}
+
+.card-stat-icon {
+  font-size: 2rem; /* 32px */
+  opacity: 0.8;
+  color: var(--bmw-primary);
+}
+
+.card-stat-value {
+  font-size: 2.25rem; /* 36px */
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.card-stat-label {
+  font-size: 0.875rem; /* 14px */
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* Booking Card (Actionable Items) */
+.card-booking {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+}
+
+.card-booking:hover {
+  border-color: var(--dark-blue);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.card-booking.past {
+  opacity: 0.7;
+  border-color: var(--border-primary);
+}
+
+/* Card Structure */
+.card-header {
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.card-body {
+  margin-bottom: var(--spacing-lg);
+}
+
+.card-footer {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-primary);
+}
+
+.card-title {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.card-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+textarea,
+select {
+  width: 100%;
+  padding: 12px 16px;
+  font-family: var(--font-family-base);
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  transition: all var(--transition-base);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-color: var(--border-disabled);
+  cursor: not-allowed;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   STATUS BADGES
+   ============================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.badge-success {
+  background: var(--status-success-bg);
+  color: var(--status-success-text);
+}
+
+.badge-error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+}
+
+.badge-warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
+.badge-info {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+
+.badge-primary {
+  background: var(--bmw-primary);
+  color: var(--text-on-blue);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Background Utilities */
+.bg-primary { background: var(--bg-primary); }
+.bg-secondary { background: var(--bg-secondary); }
+.bg-tertiary { background: var(--bg-tertiary); }
+.bg-hover { background: var(--bg-hover); }
+
+/* Border Utilities */
+.border { border: 1px solid var(--border-primary); }
+.border-accent { border: 1px solid var(--border-accent); }
+.border-secondary { border: 1px solid var(--border-secondary); }
+.border-top { border-top: 1px solid var(--border-primary); }
+.border-bottom { border-bottom: 1px solid var(--border-primary); }
+
+/* Shadow Utilities */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+.shadow-blue { box-shadow: var(--shadow-blue); }
+.shadow-none { box-shadow: none; }
+
+/* Spacing Utilities (using theme.base.css variables) */
+.m-0 { margin: 0; }
+.mt-sm { margin-top: var(--spacing-sm); }
+.mt-md { margin-top: var(--spacing-md); }
+.mt-lg { margin-top: var(--spacing-lg); }
+.mt-xl { margin-top: var(--spacing-xl); }
+.mb-sm { margin-bottom: var(--spacing-sm); }
+.mb-md { margin-bottom: var(--spacing-md); }
+.mb-lg { margin-bottom: var(--spacing-lg); }
+.mb-xl { margin-bottom: var(--spacing-xl); }
+
+.p-0 { padding: 0; }
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+/* Display Utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm { gap: var(--spacing-sm); }
+.gap-md { gap: var(--spacing-md); }
+.gap-lg { gap: var(--spacing-lg); }
+
+/* Focus States (Accessibility) */
+.focus-ring:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* ============================================
+   RESPONSIVE TYPOGRAPHY
+   ============================================ */
+
+@media (max-width: 768px) {
+  h1, .h1 {
+    font-size: 2.5rem; /* 40px */
+  }
+  
+  h2, .h2 {
+    font-size: 2rem; /* 32px */
+  }
+  
+  h3, .h3 {
+    font-size: 1.75rem; /* 28px */
+  }
+  
+  h4, .h4 {
+    font-size: 1.25rem; /* 20px */
+  }
+}
+
+/* ============================================
+   ENHANCED INTERACTION STATES
+   ============================================ */
+
+/* Subtle Hover Effects (BMW Minimal) */
+a:not(.btn):hover {
+  color: var(--primary-blue);
+  transition: color var(--transition-fast);
+}
+
+/* Card Hover Enhancement */
+.card-primary:hover,
+.card-secondary:hover,
+.card-booking:hover {
+  border-color: var(--border-accent);
+}
+
+/* Link Hover (Subtle Underline) */
+a:not(.btn):not(.btn-text):hover {
+  text-decoration: underline;
+  text-decoration-color: var(--primary-blue);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Table Styles - Premium Enterprise Design */
+.data-table {
+  width: 100%;
+  background: var(--bg-white);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  border-collapse: collapse;
+}
+
+.data-table thead {
+  background: var(--bg-light);
+}
+
+.data-table th {
+  padding: 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.data-table td {
+  padding: 16px;
+  border-top: 1px solid var(--border-light);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: rgba(245, 247, 250, 0.3);
+}
+
+/* Table Row Hover */
+.data-table tbody tr:hover {
+  background: var(--bg-light);
+  transition: background var(--transition-fast);
+}
+
+/* Input Group Hover */
+.form-group:hover label {
+  color: var(--text-primary);
+}
+
+/* Icon Button Hover */
+.btn-icon:hover:not(:disabled) {
+  background: var(--bg-hover);
+  transform: scale(1.05);
+}
+
+/* Badge Hover */
+.badge:hover {
+  opacity: 0.9;
+  transition: opacity var(--transition-fast);
+}
+
+/* ============================================
+   ENHANCED FOCUS STATES (Accessibility)
+   ============================================ */
+
+/* Keyboard Navigation Focus */
+*:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm);
+}
+
+/* Button Focus Enhancement */
+.btn:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Input Focus Enhancement */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 0;
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Link Focus */
+a:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm);
+  text-decoration: underline;
+}
+
+/* Card Focus (for keyboard navigation) */
+.card:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-focus);
+}
+
+/* ============================================
+   ENHANCED DISABLED STATES
+   ============================================ */
+
+/* Disabled Button Enhancement */
+.btn:disabled,
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-color: var(--border-disabled);
+}
+
+/* Disabled Input Specific */
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-color: var(--border-disabled);
+}
+
+/* Disabled Link */
+a:disabled,
+a.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+
+/* Disabled Card */
+.card.disabled,
+.card:disabled {
+  opacity: 0.6;
+  background: var(--bg-tertiary);
+  border-color: var(--border-disabled);
+  pointer-events: none;
+}
+
+/* ============================================
+   EMPTY STATES (Minimal & Helpful)
+   ============================================ */
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-4xl) var(--spacing-xl);
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  border: 1px dashed var(--border-secondary);
+}
+
+.empty-state-icon {
+  font-size: 4rem; /* 64px */
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.4;
+  color: var(--text-tertiary);
+}
+
+.empty-state-title {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-message {
+  font-size: 1rem; /* 16px */
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-lg);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+}
+
+.empty-state-action {
+  margin-top: var(--spacing-lg);
+}
+
+/* Empty State Variants */
+.empty-state.minimal {
+  border: none;
+  background: transparent;
+  padding: var(--spacing-3xl) var(--spacing-lg);
+}
+
+.empty-state.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============================================
+   LOADING STATES (Subtle Spinners)
+   ============================================ */
+
+.loading-state {
+  text-align: center;
+  padding: var(--spacing-4xl) var(--spacing-xl);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--bg-tertiary);
+  border-top-color: var(--bmw-primary);
+  border-radius: var(--border-radius-full);
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto var(--spacing-md);
+}
+
+.loading-spinner-sm {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+.loading-spinner-lg {
+  width: 56px;
+  height: 56px;
+  border-width: 4px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-size: 0.875rem; /* 14px */
+  margin-top: var(--spacing-md);
+}
+
+/* Skeleton Loading (Minimal) */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: var(--border-radius-md);
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-text {
+  height: 1em;
+  margin-bottom: var(--spacing-sm);
+}
+
+.skeleton-title {
+  height: 1.5em;
+  width: 60%;
+  margin-bottom: var(--spacing-md);
+}
+
+.skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius-full);
+}
+
+/* ============================================
+   ERROR STATES (Subtle & Clear)
+   ============================================ */
+
+.error-state {
+  text-align: center;
+  padding: var(--spacing-4xl) var(--spacing-xl);
+  background: var(--status-error-bg);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--status-error);
+}
+
+.error-state-icon {
+  font-size: 3rem; /* 48px */
+  margin-bottom: var(--spacing-md);
+  color: var(--status-error);
+  opacity: 0.8;
+}
+
+.error-state-title {
+  font-size: 1.25rem; /* 20px */
+  font-weight: 600;
+  color: var(--status-error-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.error-state-message {
+  font-size: 0.875rem; /* 14px */
+  color: var(--status-error-text);
+  margin-bottom: var(--spacing-lg);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ============================================
+   SUBTLE INTERACTION ENHANCEMENTS
+   ============================================ */
+
+/* Smooth Scroll Behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection Color */
+::selection {
+  background: var(--primary-blue);
+  color: var(--text-on-blue);
+}
+
+::-moz-selection {
+  background: var(--primary-blue);
+  color: var(--text-on-blue);
+}
+
+/* Subtle Active States */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  transition: transform var(--transition-fast);
+}
+
+/* Subtle Scale on Interactive Elements */
+.interactive:hover:not(:disabled) {
+  transform: scale(1.02);
+  transition: transform var(--transition-fast);
+}
+
+/* Subtle Opacity Transition for Icons */
+.icon-hover:hover {
+  opacity: 0.8;
+  transition: opacity var(--transition-fast);
+}
+
+/* Table Cell Hover (Subtle) */
+td:hover {
+  background: var(--bg-hover);
+}
+
+/* Form Field Enhancement on Hover */
+input:hover:not(:disabled):not(:focus),
+textarea:hover:not(:disabled):not(:focus),
+select:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-secondary);
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+  .btn,
+  .card-primary,
+  .card-secondary {
+    box-shadow: none;
+    border: 1px solid var(--border-primary);
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-primary);
+  }
+
+  .empty-state,
+  .loading-state,
+  .error-state {
+    border: 1px solid var(--border-primary);
+    box-shadow: none;
+  }
+}

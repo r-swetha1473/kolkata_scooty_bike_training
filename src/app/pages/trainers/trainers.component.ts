@@ -29,10 +29,10 @@ export class TrainersComponent implements OnInit {
   error: string | null = null;
 
   certifications = [
-    { icon: '🏆', title: 'RTO Certified', description: 'All trainers are certified by Regional Transport Office' },
-    { icon: '📜', title: 'Licensed Professionals', description: 'Valid driving licenses and instructor permits' },
-    { icon: '🎓', title: 'Continuous Training', description: 'Regular skill upgrades and workshops' },
-    { icon: '⭐', title: 'Quality Assured', description: 'Monitored performance and student feedback' }
+    { icon: 'certified', title: 'RTO Certified', description: 'All trainers are certified by Regional Transport Office' },
+    { icon: 'licensed', title: 'Licensed Professionals', description: 'Valid driving licenses and instructor permits' },
+    { icon: 'training', title: 'Continuous Training', description: 'Regular skill upgrades and workshops' },
+    { icon: 'quality', title: 'Quality Assured', description: 'Monitored performance and student feedback' }
   ];
 
   stats = [
@@ -152,5 +152,10 @@ export class TrainersComponent implements OnInit {
 
   closeTrainerDetails() {
     this.selectedTrainer = null;
+  }
+
+  getInitials(name: string): string {
+    if (!name) return '';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
   }
 }

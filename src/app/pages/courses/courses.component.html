@@ -1,8 +1,10 @@
 <div class="courses-page">
-  <section class="courses-hero">
+  <section class="page-hero">
     <div class="container">
-      <h1 class="fade-in">Our Training Courses</h1>
-      <p class="fade-in-delay">Comprehensive programs designed for every skill level</p>
+      <div class="hero-content">
+        <h1 class="hero-title">Our Training Courses</h1>
+        <p class="hero-subtitle">Comprehensive programs designed for every skill level. From beginners to advanced riders, we have the perfect course for you.</p>
+      </div>
     </div>
   </section>
 
@@ -11,13 +13,38 @@
       <div class="courses-grid">
         <div class="course-card" *ngFor="let course of courses" [class.popular]="course.popular">
           <div class="popular-badge" *ngIf="course.popular">Most Popular</div>
-          <div class="course-icon">{{ course.icon }}</div>
+          <div class="course-icon-wrapper">
+            <svg *ngIf="course.icon === 'beginner'" class="course-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+            </svg>
+            <svg *ngIf="course.icon === 'intermediate'" class="course-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="5.5" cy="17.5" r="3.5"></circle>
+              <circle cx="18.5" cy="17.5" r="3.5"></circle>
+              <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"></path>
+              <path d="M12 17.5V14l-3-3 4-3 2 3h3"></path>
+            </svg>
+            <svg *ngIf="course.icon === 'advanced'" class="course-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
           <h3>{{ course.name }}</h3>
-          <div class="course-duration">{{ course.duration }}</div>
-          <div class="course-price">{{ course.price }}</div>
+          <div class="course-meta">
+            <div class="course-duration">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              {{ course.duration }}
+            </div>
+            <div class="course-price">{{ course.price }}</div>
+          </div>
           <ul class="course-features">
             <li *ngFor="let feature of course.features">
-              <span class="check">✓</span> {{ feature }}
+              <svg class="check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>{{ feature }}</span>
             </li>
           </ul>
           <a routerLink="/booking" class="btn btn-enroll">Enroll Now</a>
@@ -26,12 +53,38 @@
     </div>
   </section>
 
-  <section class="benefits">
+  <section class="benefits-section">
     <div class="container">
-      <h2 class="section-title">Why Choose Our Courses?</h2>
+      <div class="section-header">
+        <h2 class="section-title">Why Choose Our Courses?</h2>
+        <p class="section-subtitle">What makes our training programs stand out</p>
+      </div>
       <div class="benefits-grid">
         <div class="benefit-card" *ngFor="let benefit of benefits">
-          <div class="benefit-icon">{{ benefit.icon }}</div>
+          <div class="benefit-icon-wrapper">
+            <svg *ngIf="benefit.icon === 'instructors'" class="benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <svg *ngIf="benefit.icon === 'bikes'" class="benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="5.5" cy="17.5" r="3.5"></circle>
+              <circle cx="18.5" cy="17.5" r="3.5"></circle>
+              <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"></path>
+              <path d="M12 17.5V14l-3-3 4-3 2 3h3"></path>
+            </svg>
+            <svg *ngIf="benefit.icon === 'schedule'" class="benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <svg *ngIf="benefit.icon === 'practical'" class="benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polygon points="10 8 16 12 10 16 10 8"></polygon>
+            </svg>
+          </div>
           <h3>{{ benefit.title }}</h3>
           <p>{{ benefit.description }}</p>
         </div>
@@ -39,28 +92,57 @@
     </div>
   </section>
 
-  <section class="curriculum">
+  <section class="curriculum-section">
     <div class="container">
-      <h2 class="section-title">Course Curriculum</h2>
-      <p class="section-subtitle">A structured approach to learning bike riding</p>
+      <div class="section-header">
+        <h2 class="section-title">Course Curriculum</h2>
+        <p class="section-subtitle">A structured approach to learning bike riding</p>
+      </div>
       <div class="curriculum-grid">
         <div class="curriculum-card" *ngFor="let item of curriculum">
           <div class="module-tag">{{ item.module }}</div>
           <h3>{{ item.title }}</h3>
           <ul>
-            <li *ngFor="let topic of item.topics">{{ topic }}</li>
+            <li *ngFor="let topic of item.topics">
+              <svg class="topic-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>{{ topic }}</span>
+            </li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="additional-services">
+  <section class="services-section">
     <div class="container">
-      <h2 class="section-title">Additional Services</h2>
+      <div class="section-header">
+        <h2 class="section-title">Additional Services</h2>
+        <p class="section-subtitle">Comprehensive support beyond standard training</p>
+      </div>
       <div class="services-grid">
         <div class="service-card" *ngFor="let service of additionalServices">
-          <div class="service-icon">{{ service.icon }}</div>
+          <div class="service-icon-wrapper">
+            <svg *ngIf="service.icon === 'license'" class="service-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            <svg *ngIf="service.icon === 'refresher'" class="service-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <svg *ngIf="service.icon === 'corporate'" class="service-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="8.5" cy="7" r="4"></circle>
+              <path d="M20 8v6M23 11h-6"></path>
+            </svg>
+            <svg *ngIf="service.icon === 'women'" class="service-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
           <h3>{{ service.title }}</h3>
           <p>{{ service.description }}</p>
         </div>
@@ -68,9 +150,12 @@
     </div>
   </section>
 
-  <section class="faq">
+  <section class="faq-section">
     <div class="container">
-      <h2 class="section-title">Frequently Asked Questions</h2>
+      <div class="section-header">
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-subtitle">Common questions about our courses</p>
+      </div>
       <div class="faq-grid">
         <div class="faq-card" *ngFor="let faq of faqs">
           <h3>{{ faq.question }}</h3>
@@ -80,12 +165,12 @@
     </div>
   </section>
 
-  <section class="cta">
+  <section class="cta-section">
     <div class="container">
       <div class="cta-content">
         <h2>Ready to Start Learning?</h2>
         <p>Choose your course and book your first session today!</p>
-        <a routerLink="/booking" class="btn btn-primary btn-large">Book Your Slot</a>
+        <a routerLink="/booking" class="btn btn-primary btn-large">Book Your Training Session</a>
       </div>
     </div>
   </section>

@@ -29,7 +29,7 @@ import { filter } from 'rxjs/operators';
               <a routerLink="/courses" routerLinkActive="active" (click)="closeMenu()">Courses</a>
               <a routerLink="/trainers" routerLinkActive="active" (click)="closeMenu()">Trainers</a>
               <a routerLink="/contact" routerLinkActive="active" (click)="closeMenu()">Contact</a>
-              <a routerLink="/booking" routerLinkActive="active" class="btn-book" (click)="closeMenu()">Book Now</a>
+              <a routerLink="/booking" routerLinkActive="active" class="btn-login btn-book" (click)="closeMenu()">Book Now</a>
 
               <div class="user-menu" *ngIf="authService.isAuthenticated$ | async; else loginButton">
                 <button class="user-btn" (click)="toggleUserMenu($event)">
@@ -51,7 +51,7 @@ import { filter } from 'rxjs/operators';
               </div>
               <ng-template #loginButton>
                 <button class="btn-login" (click)="signIn()">
-                  <svg width="18" height="18" viewBox="0 0 24 24" style="margin-right: 8px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" class="icon-spacing">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                     <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -135,15 +135,16 @@ import { filter } from 'rxjs/operators';
       top: 0;
       left: 0;
       right: 0;
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--bg-primary);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: none;
+      border-bottom: 1px solid var(--border-primary);
       z-index: 1000;
-      transition: all 0.3s ease;
+      transition: all var(--transition-slow);
     }
 
     .header.scrolled {
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--shadow-lg);
     }
 
     .container {
@@ -156,19 +157,19 @@ import { filter } from 'rxjs/operators';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 15px 0;
+      padding: 24px 0;
     }
 
     .logo h2 {
       margin: 0;
       font-size: 24px;
-      color: #2c3e50;
+      color: var(--text-primary);
       font-weight: 700;
     }
 
     .logo span {
       font-size: 12px;
-      color: #e74c3c;
+      color: var(--text-secondary);
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -182,14 +183,18 @@ import { filter } from 'rxjs/operators';
 
     .nav a {
       text-decoration: none;
-      color: #2c3e50;
+      color: var(--text-secondary);
       font-weight: 500;
-      transition: color 0.3s;
+      transition: color var(--transition-base);
       position: relative;
     }
 
     .nav a:hover {
-      color: #e74c3c;
+      color: var(--primary-blue);
+    }
+
+    .nav a.active {
+      color: var(--primary-blue);
     }
 
     .nav a.active::after {
@@ -199,41 +204,49 @@ import { filter } from 'rxjs/operators';
       left: 0;
       right: 0;
       height: 2px;
-      background: #e74c3c;
+      background: var(--bmw-primary);
     }
 
     .btn-book {
-      background: #e74c3c;
-      color: white !important;
+      background: var(--bg-white);
+      color: var(--primary-blue) !important;
       padding: 10px 25px;
-      border-radius: 25px;
-      transition: all 0.3s;
+      border-radius: 8px;
+      border: 2px solid var(--primary-blue);
+      transition: all var(--transition-base);
+      font-weight: 600;
     }
 
     .btn-book:hover {
-      background: #c0392b;
+      background: var(--primary-blue);
+      color: var(--text-on-blue) !important;
       transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+      box-shadow: var(--shadow-blue);
+    }
+
+    .icon-spacing {
+      margin-right: var(--spacing-sm);
     }
 
     .btn-login {
       display: flex;
       align-items: center;
-      background: white;
-      color: #2c3e50;
-      border: 2px solid #e74c3c;
+      background: var(--bg-primary);
+      color: var(--bmw-primary);
+      border: 2px solid var(--primary-blue);
       padding: 10px 20px;
-      border-radius: 25px;
+      border-radius: var(--border-radius-3xl);
       cursor: pointer;
-      font-weight: 500;
-      transition: all 0.3s;
+      font-weight: 600;
+      transition: all var(--transition-base);
     }
 
     .btn-login:hover {
-      background: #e74c3c;
-      color: white;
+      background: var(--bmw-secondary);
+      color: var(--text-on-blue);
+      border-color: var(--bmw-secondary);
       transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+      box-shadow: var(--shadow-blue);
     }
 
     .user-menu {
@@ -244,18 +257,19 @@ import { filter } from 'rxjs/operators';
       display: flex;
       align-items: center;
       gap: 8px;
-      background: #f8f9fa;
-      border: 2px solid #e74c3c;
+      background: var(--bg-white);
+      color: var(--text-primary);
+      border: 1px solid var(--border-light);
       padding: 8px 15px;
-      border-radius: 25px;
+      border-radius: 8px;
       cursor: pointer;
       font-weight: 500;
-      transition: all 0.3s;
+      transition: all var(--transition-base);
     }
 
     .user-btn:hover {
-      background: #e74c3c;
-      color: white;
+      background: var(--bg-light);
+      border-color: var(--border-light);
     }
 
     .user-avatar {
@@ -264,8 +278,8 @@ import { filter } from 'rxjs/operators';
       justify-content: center;
       width: 32px;
       height: 32px;
-      background: #e74c3c;
-      color: white;
+      background: var(--primary-blue);
+      color: var(--text-on-blue);
       border-radius: 50%;
       font-weight: 600;
       font-size: 14px;
@@ -287,9 +301,9 @@ import { filter } from 'rxjs/operators';
       position: absolute;
       top: calc(100% + 10px);
       right: 0;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+      background: var(--bg-primary);
+      border-radius: var(--border-radius-md);
+      box-shadow: var(--shadow-lg);
       min-width: 200px;
       overflow: hidden;
       animation: slideDown 0.3s ease;
@@ -313,7 +327,7 @@ import { filter } from 'rxjs/operators';
       align-items: center;
       gap: 10px;
       padding: 12px 20px;
-      color: #2c3e50;
+      color: var(--text-primary);
       text-decoration: none;
       transition: background 0.2s;
       width: 100%;
@@ -326,11 +340,14 @@ import { filter } from 'rxjs/operators';
 
     .dropdown-menu a:hover,
     .dropdown-item:hover {
-      background: #f8f9fa;
+      background: var(--bg-hover);
     }
 
     .menu-icon {
-      font-size: 18px;
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+      flex-shrink: 0;
     }
 
     .menu-toggle {
@@ -346,37 +363,50 @@ import { filter } from 'rxjs/operators';
     .menu-toggle span {
       width: 25px;
       height: 3px;
-      background: #2c3e50;
+      background: var(--text-primary);
       transition: all 0.3s;
     }
 
     .footer {
-      background: #2c3e50;
-      color: white;
-      padding: 50px 0 20px;
+      background: #1F2937;
+      color: #FFFFFF;
+      padding: 60px 0 30px;
       margin-top: 80px;
     }
 
     .footer-content {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 40px;
-      margin-bottom: 30px;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 40px;
+    }
+
+    .footer-col:first-child {
+      max-width: 350px;
     }
 
     .footer-col h3 {
-      color: #e74c3c;
-      margin-bottom: 15px;
+      color: #FFFFFF;
+      margin-bottom: 20px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
     }
 
     .footer-col h4 {
-      margin-bottom: 15px;
-      font-size: 18px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFFFFF;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .footer-col p {
-      line-height: 1.6;
-      opacity: 0.9;
+      line-height: 1.7;
+      color: #9CA3AF;
+      font-size: 15px;
+      margin-bottom: 16px;
     }
 
     .footer-col ul {
@@ -385,46 +415,50 @@ import { filter } from 'rxjs/operators';
     }
 
     .footer-col ul li {
-      margin-bottom: 10px;
-      opacity: 0.9;
+      margin-bottom: 12px;
+      color: #9CA3AF;
+      font-size: 15px;
     }
 
     .footer-col a {
-      color: white;
+      color: #9CA3AF;
       text-decoration: none;
-      transition: color 0.3s;
+      transition: color 0.2s ease;
     }
 
     .footer-col a:hover {
-      color: #e74c3c;
+      color: #FFFFFF;
     }
 
     .social-links {
       display: flex;
-      gap: 15px;
-      margin-top: 15px;
+      gap: 12px;
+      margin-top: 20px;
     }
 
     .social-link {
       display: inline-block;
       padding: 8px 16px;
-      background: rgba(231, 76, 60, 0.1);
-      border-radius: 20px;
-      transition: all 0.3s;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      transition: all 0.2s ease;
       font-size: 14px;
+      color: #9CA3AF;
     }
 
     .social-link:hover {
-      background: #e74c3c;
-      color: white !important;
-      transform: translateY(-2px);
+      background: var(--primary-blue);
+      color: #FFFFFF !important;
+      border-color: var(--primary-blue);
     }
 
     .footer-bottom {
       text-align: center;
-      padding-top: 20px;
+      padding-top: 30px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
-      opacity: 0.8;
+      color: #6B7280;
+      font-size: 14px;
     }
 
     @media (max-width: 768px) {
@@ -438,7 +472,7 @@ import { filter } from 'rxjs/operators';
         left: -100%;
         width: 100%;
         height: calc(100vh - 70px);
-        background: white;
+        background: var(--primary-color);
         flex-direction: column;
         padding: 40px 20px;
         transition: left 0.3s;
@@ -451,7 +485,11 @@ import { filter } from 'rxjs/operators';
 
       .footer-content {
         grid-template-columns: 1fr;
-        gap: 30px;
+        gap: 40px;
+      }
+
+      .footer-col:first-child {
+        max-width: 100%;
       }
     }
   `]
@@ -492,6 +530,11 @@ export class AppComponent implements OnInit {
       .pipe(filter(event => event instanceof NavigationEnd))
       .subscribe((event: any) => {
         this.checkAdminRoute(event.url);
+        // After OAuth redirect to /profile, reload user profile if not loaded
+        if (event.url === '/profile' && !this.authService.isAuthenticated()) {
+          // Try to load user from httpOnly cookie
+          this.authService.reloadUserProfile();
+        }
       });
 
     window.addEventListener('scroll', () => {

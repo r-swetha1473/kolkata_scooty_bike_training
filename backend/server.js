@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const passport = require('passport');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
@@ -15,6 +16,9 @@ const adminRoutes = require('./routes/admin');
 const ratingsRoutes = require('./routes/ratings');
 const settingsRoutes = require('./routes/settings');
 const vehiclesRoutes = require('./routes/vehicles');
+const recognitionRoutes = require('./routes/recognition');
+const adminManagementRoutes = require('./routes/adminManagement');
+const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 const events = require('./events');
@@ -24,6 +28,7 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:4200',
   credentials: true
 }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -99,7 +104,9 @@ app.use('/api/settings', settingsRoutes);
 // Protected routes with strict limiter
 app.use('/api/bookings', strictLimiter, bookingRoutes);
 app.use('/api/admin', strictLimiter, adminRoutes);
+app.use('/api/admin-management', strictLimiter, adminManagementRoutes);
 app.use('/api/ratings', strictLimiter, ratingsRoutes);
+app.use('/api/recognition', strictLimiter, recognitionRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -127,12 +134,8 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
-});
+// Error handling middleware (must be last)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

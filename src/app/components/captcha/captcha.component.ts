@@ -52,40 +52,41 @@ import { FormsModule } from '@angular/forms';
     .captcha-input {
       flex: 1;
       padding: 12px;
-      border: 2px solid #ddd;
-      border-radius: 8px;
+      border: 2px solid var(--border-primary);
+      border-radius: var(--border-radius-md);
       font-size: 16px;
-      transition: all 0.3s;
+      transition: all var(--transition-base);
     }
 
     .captcha-input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: var(--border-accent);
+      box-shadow: var(--shadow-focus);
     }
 
     .captcha-input.error {
-      border-color: #ef4444;
-      background-color: #fef2f2;
+      border-color: var(--status-error);
+      background-color: var(--status-error-bg);
     }
 
     .captcha-refresh {
       padding: 12px 16px;
-      background: #667eea;
-      color: white;
+      background: var(--bmw-primary);
+      color: var(--text-on-blue);
       border: none;
-      border-radius: 8px;
+      border-radius: var(--border-radius-md);
       font-size: 20px;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all var(--transition-base);
     }
 
     .captcha-refresh:hover {
-      background: #5568d3;
+      background: var(--bmw-secondary);
       transform: rotate(180deg);
     }
 
     .captcha-error {
-      color: #ef4444;
+      color: var(--status-error);
       font-size: 14px;
       margin-top: 5px;
     }

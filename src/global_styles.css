@@ -1,3 +1,12 @@
+/* Import theme base variables */
+@import './styles/theme.base.css';
+
+/* Import BMW theme system */
+@import './styles/theme.bmw.css';
+
+/* Import Admin Design System */
+@import './styles/admin.design-system.css';
+
 * {
   margin: 0;
   padding: 0;
@@ -5,10 +14,10 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-family-base);
   line-height: 1.6;
-  color: #333;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
   overflow-x: hidden;
 }
 
@@ -22,9 +31,28 @@ img {
 }
 
 button {
-  font-family: inherit;
+  font-family: var(--font-family-button);
 }
 
 a {
   color: inherit;
+}
+
+/* Loading screen styles */
+.loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: var(--font-family-base);
+  color: var(--bmw-primary);
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
 }

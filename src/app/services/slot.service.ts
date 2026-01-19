@@ -15,6 +15,13 @@ export interface Slot {
   is_auto_generated: boolean;
   created_at: string;
   updated_at: string;
+  // PHASE 4: Vehicle-specific capacity and bookings
+  electric_capacity?: number;
+  petrol_capacity?: number;
+  bike_capacity?: number;
+  electric_booked?: number;
+  petrol_booked?: number;
+  bike_booked?: number;
   trainer?: {
     id: string;
     profile: {
@@ -31,8 +38,10 @@ export class SlotService {
 
   constructor(private http: HttpClient) {}
 
+  // TODO: Migrate to httpOnly cookies for secure token storage
+  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return new HttpHeaders({
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
@@ -134,6 +143,26 @@ export class SlotService {
   async deleteSlotsByDate(date: string): Promise<void> {
     await firstValueFrom(
       this.http.delete(`${this.apiUrl}/slots/date/${date}`, {
+        headers: this.getAuthHeaders()
+      })
+    );
+  }
+
+  // PHASE 3: Get next available date without slots
+  async getNextAvailableDate(startDate?: string): Promise<{ success: boolean; nextAvailableDate: string | null; daysAhead?: number }> {
+    const params = startDate ? { start_date: startDate } : {};
+    return firstValueFrom(
+      this.http.get<{ success: boolean; nextAvailableDate: string | null; daysAhead?: number }>(
+        `${this.apiUrl}/slots/next-available-date`,
+        { params, headers: this.getAuthHeaders() }
+      )
+    );
+  }
+
+  // PHASE 4: Update vehicle capacity for a slot
+  async updateVehicleCapacity(slotId: string, capacities: { electric_capacity?: number; petrol_capacity?: number; bike_capacity?: number }): Promise<Slot> {
+    return firstValueFrom(
+      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/vehicle-capacity`, capacities, {
         headers: this.getAuthHeaders()
       })
     );

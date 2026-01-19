@@ -1,6 +1,17 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate, authorize } = require('../middleware/auth');
+const {
+  validateBookingStatusUpdate,
+  validateTrainerCreation,
+  validateTrainerUpdate,
+  validateUserUpdate,
+  validateUserRoleUpdate,
+  validateUserCreation,
+  validateSettingsUpdate,
+  validateSlotCreation,
+  validateSlotUpdate
+} = require('../validators');
 const router = express.Router();
 
 router.use(authenticate);
@@ -65,13 +76,164 @@ router.get('/bookings', async (req, res, next) => {
 
 router.get('/users', async (req, res, next) => {
   try {
+    const { role, search } = req.query;
+    
+    let query = `
+      SELECT 
+        p.id, 
+        p.email, 
+        p.full_name, 
+        p.phone, 
+        p.google_id,
+        p.role, 
+        p.created_at,
+        p.total_bookings,
+        p.last_booking_date,
+        p.weekly_booking_count,
+        p.weekly_reset_date,
+        COUNT(b.id) FILTER (WHERE b.status NOT IN ('cancelled')) as active_bookings
+      FROM profiles p
+      LEFT JOIN bookings b ON p.id = b.user_id
+    `;
+    
+    const params = [];
+    const conditions = [];
+    
+    if (role) {
+      params.push(role);
+      conditions.push(`p.role = $${params.length}`);
+    }
+    
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(
+        p.full_name ILIKE $${params.length} OR 
+        p.email ILIKE $${params.length} OR 
+        p.phone ILIKE $${params.length}
+      )`);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += `
+      GROUP BY p.id, p.email, p.full_name, p.phone, p.google_id, p.role, p.created_at, 
+               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date
+      ORDER BY p.created_at DESC
+    `;
+
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customers only (with booking stats)
+router.get('/customers', async (req, res, next) => {
+  try {
+    const { search } = req.query;
+    
+    let query = `
+      SELECT 
+        p.id, 
+        p.email, 
+        p.full_name, 
+        p.phone, 
+        p.created_at,
+        p.total_bookings,
+        p.last_booking_date,
+        p.weekly_booking_count,
+        p.weekly_reset_date,
+        COUNT(b.id) FILTER (WHERE b.status = 'confirmed') as confirmed_bookings,
+        COUNT(b.id) FILTER (WHERE b.status = 'completed') as completed_bookings,
+        COUNT(b.id) FILTER (WHERE b.status = 'cancelled') as cancelled_bookings
+      FROM profiles p
+      LEFT JOIN bookings b ON p.id = b.user_id
+      WHERE p.role = 'customer'
+    `;
+    
+    const params = [];
+    
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND (
+        p.full_name ILIKE $${params.length} OR 
+        p.email ILIKE $${params.length} OR 
+        p.phone ILIKE $${params.length}
+      )`;
+    }
+    
+    query += `
+      GROUP BY p.id, p.email, p.full_name, p.phone, p.created_at, 
+               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date
+      ORDER BY p.created_at DESC
+    `;
+
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Export customers to CSV
+router.get('/customers/export', async (req, res, next) => {
+  try {
+    const { format = 'csv' } = req.query;
+    
     const result = await db.query(`
-      SELECT id, email, full_name, phone, role, created_at
-      FROM profiles
-      ORDER BY created_at DESC
+      SELECT 
+        p.full_name as "Full Name",
+        p.phone as "Phone",
+        p.email as "Email",
+        p.total_bookings as "Total Bookings",
+        p.last_booking_date as "Last Booking Date",
+        p.weekly_booking_count as "Weekly Booking Count",
+        p.created_at as "Registration Date"
+      FROM profiles p
+      WHERE p.role = 'customer'
+      ORDER BY p.created_at DESC
     `);
 
-    res.json(result.rows);
+    if (format === 'csv') {
+      if (result.rows.length === 0) {
+        const error = new Error('No customers found');
+        error.status = 404;
+        error.errorCode = 'NO_CUSTOMERS_FOUND';
+        return next(error);
+      }
+
+      // Generate CSV
+      const headers = Object.keys(result.rows[0]);
+      const csvRows = [
+        headers.join(','),
+        ...result.rows.map(row => 
+          headers.map(header => {
+            const value = row[header];
+            // Escape commas and quotes in CSV
+            if (value === null || value === undefined) return '';
+            const stringValue = String(value);
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+              return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+            return stringValue;
+          }).join(',')
+        )
+      ];
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="customers_${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csvRows.join('\n'));
+    } else if (format === 'json') {
+      res.json(result.rows);
+    } else {
+      const error = new Error('Invalid format. Use "csv" or "json"');
+      error.status = 400;
+      error.errorCode = 'INVALID_FORMAT';
+      return next(error);
+    }
   } catch (error) {
     next(error);
   }
@@ -199,23 +361,29 @@ router.get('/trainers', async (req, res, next) => {
 });
 
 // Create trainer
-router.post('/trainers', async (req, res, next) => {
+router.post('/trainers', validateTrainerCreation, async (req, res, next) => {
   try {
     const { email, full_name, phone, bio, experience_years, specialization, rating } = req.body;
 
     if (!email || !full_name || !bio) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      const error = new Error('Missing required fields');
+      error.status = 400;
+      error.errorCode = 'MISSING_REQUIRED_FIELDS';
+      return next(error);
     }
 
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
 
+      // Phone is required - generate default if not provided for trainers
+      const finalPhone = phone || `TRAINER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       const profileResult = await client.query(
         `INSERT INTO profiles (email, full_name, phone, role)
          VALUES ($1, $2, $3, 'trainer')
          RETURNING id`,
-        [email, full_name, phone || null]
+        [email, full_name, finalPhone]
       );
 
       const userId = profileResult.rows[0].id;
@@ -241,14 +409,17 @@ router.post('/trainers', async (req, res, next) => {
     }
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Email already exists' });
+      const error = new Error('Email already exists');
+      error.status = 409;
+      error.errorCode = 'DUPLICATE_EMAIL';
+      return next(error);
     }
     next(error);
   }
 });
 
 // Update trainer
-router.put('/trainers/:id', async (req, res, next) => {
+router.put('/trainers/:id', validateTrainerUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { is_active, bio, experience_years, specialization, full_name, phone, rating } = req.body;
@@ -279,7 +450,10 @@ router.put('/trainers/:id', async (req, res, next) => {
     }
 
     if (updates.length === 0 && !full_name && !phone) {
-      return res.status(400).json({ error: 'No fields to update' });
+      const error = new Error('No fields to update');
+      error.status = 400;
+      error.errorCode = 'NO_FIELDS_TO_UPDATE';
+      return next(error);
     }
 
     const client = await db.pool.connect();
@@ -321,7 +495,10 @@ router.put('/trainers/:id', async (req, res, next) => {
 
       if (result.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Trainer not found' });
+        const error = new Error('Trainer not found');
+        error.status = 404;
+        error.errorCode = 'TRAINER_NOT_FOUND';
+        return next(error);
       }
 
       await client.query('COMMIT');
@@ -369,25 +546,28 @@ router.delete('/trainers/:id', async (req, res, next) => {
     );
 
     if (parseInt(bookingsCheck.rows[0].count) > 0) {
-      return res.status(400).json({
-        error: 'Cannot delete trainer with existing bookings',
-        message: 'Please cancel or complete all bookings for this trainer first'
-      });
+      const error = new Error('Cannot delete trainer with existing bookings. Please cancel or complete all bookings for this trainer first');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_TRAINER';
+      return next(error);
     }
 
     const result = await db.query('DELETE FROM trainers WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Trainer not found' });
+      const error = new Error('Trainer not found');
+      error.status = 404;
+      error.errorCode = 'TRAINER_NOT_FOUND';
+      return next(error);
     }
 
     res.json({ message: 'Trainer deleted successfully' });
   } catch (error) {
     if (error.code === '23503') {
-      return res.status(400).json({
-        error: 'Cannot delete trainer',
-        message: 'This trainer has related data that must be removed first'
-      });
+      const error = new Error('Cannot delete trainer. This trainer has related data that must be removed first');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_TRAINER';
+      return next(error);
     }
     next(error);
   }
@@ -434,12 +614,15 @@ router.get('/slots', async (req, res, next) => {
 });
 
 // Create slot
-router.post('/slots', async (req, res, next) => {
+router.post('/slots', validateSlotCreation, async (req, res, next) => {
   try {
     const { trainer_id, start_time, end_time, capacity } = req.body;
 
     if (!trainer_id || !start_time || !end_time || !capacity) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      const error = new Error('Missing required fields');
+      error.status = 400;
+      error.errorCode = 'MISSING_REQUIRED_FIELDS';
+      return next(error);
     }
 
     const result = await db.query(`
@@ -451,14 +634,17 @@ router.post('/slots', async (req, res, next) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error.code === '23505') { // Unique constraint violation
-      return res.status(409).json({ error: 'Slot already exists at this time' });
+      const error = new Error('Slot already exists at this time');
+      error.status = 409;
+      error.errorCode = 'DUPLICATE_SLOT';
+      return next(error);
     }
     next(error);
   }
 });
 
 // Update slot
-router.put('/slots/:id', async (req, res, next) => {
+router.put('/slots/:id', validateSlotUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { start_time, end_time, capacity, status } = req.body;
@@ -485,7 +671,10 @@ router.put('/slots/:id', async (req, res, next) => {
     }
 
     if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
+      const error = new Error('No fields to update');
+      error.status = 400;
+      error.errorCode = 'NO_FIELDS_TO_UPDATE';
+      return next(error);
     }
 
     values.push(id);
@@ -494,7 +683,10 @@ router.put('/slots/:id', async (req, res, next) => {
     const result = await db.query(query, values);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Slot not found' });
+      const error = new Error('Slot not found');
+      error.status = 404;
+      error.errorCode = 'SLOT_NOT_FOUND';
+      return next(error);
     }
 
     res.json(result.rows[0]);
@@ -514,25 +706,28 @@ router.delete('/slots/:id', async (req, res, next) => {
     );
 
     if (parseInt(bookingsCheck.rows[0].count) > 0) {
-      return res.status(400).json({
-        error: 'Cannot delete slot with existing bookings',
-        message: 'Please cancel all bookings for this slot first'
-      });
+      const error = new Error('Cannot delete slot with existing bookings. Please cancel all bookings for this slot first');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_SLOT';
+      return next(error);
     }
 
     const result = await db.query('DELETE FROM slots WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Slot not found' });
+      const error = new Error('Slot not found');
+      error.status = 404;
+      error.errorCode = 'SLOT_NOT_FOUND';
+      return next(error);
     }
 
     res.json({ message: 'Slot deleted successfully' });
   } catch (error) {
     if (error.code === '23503') {
-      return res.status(400).json({
-        error: 'Cannot delete slot',
-        message: 'This slot has related bookings that must be removed first'
-      });
+      const error = new Error('Cannot delete slot. This slot has related bookings that must be removed first');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_SLOT';
+      return next(error);
     }
     next(error);
   }
@@ -561,7 +756,7 @@ router.get('/settings', async (req, res, next) => {
 });
 
 // Update settings
-router.put('/settings', async (req, res, next) => {
+router.put('/settings', validateSettingsUpdate, async (req, res, next) => {
   try {
     const settings = req.body;
     const userId = req.user.id;
@@ -587,7 +782,7 @@ router.put('/settings', async (req, res, next) => {
 });
 
 // Update booking status
-router.put('/bookings/:id/status', async (req, res, next) => {
+router.put('/bookings/:id/status', validateBookingStatusUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -595,19 +790,28 @@ router.put('/bookings/:id/status', async (req, res, next) => {
     console.log(`[Admin] Updating booking ${id} status to: ${status}`);
 
     if (!status) {
-      return res.status(400).json({ error: 'Status is required' });
+      const error = new Error('Status is required');
+      error.status = 400;
+      error.errorCode = 'STATUS_REQUIRED';
+      return next(error);
     }
 
     const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      const error = new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+      error.status = 400;
+      error.errorCode = 'INVALID_STATUS';
+      return next(error);
     }
 
     // Check if booking exists
     const bookingCheck = await db.query('SELECT * FROM bookings WHERE id = $1', [id]);
     if (bookingCheck.rows.length === 0) {
       console.error(`[Admin] Booking not found: ${id}`);
-      return res.status(404).json({ error: 'Booking not found' });
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
     }
 
     const oldStatus = bookingCheck.rows[0].status;
@@ -620,7 +824,10 @@ router.put('/bookings/:id/status', async (req, res, next) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
     }
 
     const updatedBooking = result.rows[0];
@@ -641,7 +848,10 @@ router.delete('/bookings/:id', async (req, res, next) => {
     const result = await db.query('DELETE FROM bookings WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
     }
 
     res.status(200).json({ message: 'Booking deleted successfully' });
@@ -651,57 +861,164 @@ router.delete('/bookings/:id', async (req, res, next) => {
 });
 
 // Create admin user (superadmin only)
-router.post('/users', async (req, res, next) => {
+router.post('/users', validateUserCreation, async (req, res, next) => {
   try {
     if (req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Only superadmins can create admin users' });
+      const error = new Error('Only superadmins can create admin users');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const { email, full_name, phone, role } = req.body;
 
     if (!email || !full_name || !role) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      const error = new Error('Missing required fields');
+      error.status = 400;
+      error.errorCode = 'MISSING_REQUIRED_FIELDS';
+      return next(error);
+    }
+
+    // Phone is required - generate default if not provided
+    if (!phone) {
+      const error = new Error('Phone number is required');
+      error.status = 400;
+      error.errorCode = 'PHONE_REQUIRED';
+      return next(error);
     }
 
     const validRoles = ['customer', 'trainer', 'admin', 'superadmin'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ error: 'Invalid role' });
+      const error = new Error('Invalid role');
+      error.status = 400;
+      error.errorCode = 'INVALID_ROLE';
+      return next(error);
     }
 
     const result = await db.query(
       `INSERT INTO profiles (email, full_name, phone, role)
        VALUES ($1, $2, $3, $4)
        RETURNING id, email, full_name, phone, role, created_at`,
-      [email, full_name, phone || null, role]
+      [email, full_name, phone, role]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Email already exists' });
+      const error = new Error('Email already exists');
+      error.status = 409;
+      error.errorCode = 'DUPLICATE_EMAIL';
+      return next(error);
+    }
+    next(error);
+  }
+});
+
+// Update user (admin can edit customer details)
+router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { full_name, phone, email, total_bookings, weekly_booking_count } = req.body;
+
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (full_name !== undefined) {
+      updates.push(`full_name = $${paramIndex++}`);
+      params.push(full_name);
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${paramIndex++}`);
+      params.push(phone);
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${paramIndex++}`);
+      params.push(email);
+    }
+    if (total_bookings !== undefined) {
+      updates.push(`total_bookings = $${paramIndex++}`);
+      params.push(total_bookings);
+    }
+    if (weekly_booking_count !== undefined) {
+      updates.push(`weekly_booking_count = $${paramIndex++}`);
+      params.push(weekly_booking_count);
+    }
+
+    if (updates.length === 0) {
+      const error = new Error('No fields to update');
+      error.status = 400;
+      error.errorCode = 'NO_FIELDS_TO_UPDATE';
+      return next(error);
+    }
+
+    updates.push(`updated_at = NOW()`);
+    params.push(id);
+
+    const result = await db.query(
+      `UPDATE profiles SET ${updates.join(', ')} WHERE id = $${paramIndex} 
+       RETURNING id, email, full_name, phone, role, created_at, total_bookings, last_booking_date, weekly_booking_count`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
+    }
+
+    // Log audit
+    await db.query(`
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_data)
+      VALUES ($1, 'update', 'profile', $2, $3)
+    `, [req.user.id, id, JSON.stringify(result.rows[0])]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') { // Unique constraint violation
+      const error = new Error('Phone number or email already exists');
+      error.status = 409;
+      error.errorCode = 'DUPLICATE_CONTACT';
+      return next(error);
     }
     next(error);
   }
 });
 
 // Update user role (superadmin only)
-router.put('/users/:id/role', async (req, res, next) => {
+router.put('/users/:id/role', validateUserRoleUpdate, async (req, res, next) => {
   try {
     if (req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Only superadmins can change user roles' });
+      const error = new Error('Only superadmins can change user roles');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const { id } = req.params;
     const { role } = req.body;
 
     if (!role) {
-      return res.status(400).json({ error: 'Role is required' });
+      const error = new Error('Role is required');
+      error.status = 400;
+      error.errorCode = 'ROLE_REQUIRED';
+      return next(error);
     }
 
     const validRoles = ['customer', 'trainer', 'admin', 'superadmin'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ error: 'Invalid role' });
+      const error = new Error('Invalid role');
+      error.status = 400;
+      error.errorCode = 'INVALID_ROLE';
+      return next(error);
     }
+
+    // Get old data for audit
+    const oldData = await db.query(
+      'SELECT role FROM profiles WHERE id = $1',
+      [id]
+    );
 
     const result = await db.query(
       'UPDATE profiles SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, full_name, phone, role, created_at',
@@ -709,8 +1026,17 @@ router.put('/users/:id/role', async (req, res, next) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
     }
+
+    // Log audit
+    await db.query(`
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_data, new_data)
+      VALUES ($1, 'update_role', 'profile', $2, $3, $4)
+    `, [req.user.id, id, JSON.stringify(oldData.rows[0] || {}), JSON.stringify(result.rows[0])]);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -722,29 +1048,97 @@ router.put('/users/:id/role', async (req, res, next) => {
 router.delete('/users/:id', async (req, res, next) => {
   try {
     if (req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Only superadmins can delete users' });
+      const error = new Error('Only superadmins can delete users');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const { id } = req.params;
 
     if (id === req.user.id) {
-      return res.status(400).json({ error: 'Cannot delete your own account' });
+      const error = new Error('Cannot delete your own account');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_OWN_ACCOUNT';
+      return next(error);
     }
+
+    // Get old data for audit
+    const oldData = await db.query('SELECT * FROM profiles WHERE id = $1', [id]);
 
     const result = await db.query('DELETE FROM profiles WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
     }
+
+    // Log audit
+    await db.query(`
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_data)
+      VALUES ($1, 'delete', 'profile', $2, $3)
+    `, [req.user.id, id, JSON.stringify(oldData.rows[0] || {})]);
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     if (error.code === '23503') {
-      return res.status(400).json({
-        error: 'Cannot delete user',
-        message: 'This user has related data that must be removed first'
-      });
+      const error = new Error('Cannot delete user. This user has related data that must be removed first');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_USER';
+      return next(error);
     }
+    next(error);
+  }
+});
+
+// Get admin audit logs (admin only)
+router.get('/audit-logs', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
+    }
+
+    const { limit = 100, offset = 0, entity_type, action_type, admin_id } = req.query;
+    
+    let query = `
+      SELECT 
+        al.*,
+        p.full_name as admin_name,
+        p.email as admin_email
+      FROM admin_audit_log al
+      LEFT JOIN profiles p ON al.admin_id = p.id
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    let paramIndex = 1;
+    
+    if (entity_type) {
+      params.push(entity_type);
+      query += ` AND al.entity_type = $${paramIndex++}`;
+    }
+    
+    if (action_type) {
+      params.push(action_type);
+      query += ` AND al.action_type = $${paramIndex++}`;
+    }
+    
+    if (admin_id) {
+      params.push(admin_id);
+      query += ` AND al.admin_id = $${paramIndex++}`;
+    }
+    
+    query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    params.push(parseInt(limit), parseInt(offset));
+
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
     next(error);
   }
 });

@@ -1,0 +1,52 @@
+// Export all validators for easy importing
+const { validateLogin } = require('./auth.validator');
+const { validateBookingCreation } = require('./booking.validator');
+const { validateSlotCreation, validateSlotUpdate } = require('./slot.validator');
+const {
+  validateBookingStatusUpdate,
+  validateTrainerCreation,
+  validateTrainerUpdate,
+  validateUserUpdate,
+  validateUserRoleUpdate,
+  validateUserCreation,
+  validateSettingsUpdate,
+  validateSettingUpdate
+} = require('./admin.validator');
+const {
+  validateAdminCreation,
+  validateAdminUpdate,
+  validatePasswordReset,
+  validatePasswordChange
+} = require('./adminManagement.validator');
+const { handleValidationErrors } = require('./common');
+
+module.exports = {
+  // Auth validators
+  validateLogin,
+  
+  // Booking validators
+  validateBookingCreation,
+  
+  // Slot validators
+  validateSlotCreation,
+  validateSlotUpdate,
+  
+  // Admin validators
+  validateBookingStatusUpdate,
+  validateTrainerCreation,
+  validateTrainerUpdate,
+  validateUserUpdate,
+  validateUserRoleUpdate,
+  validateUserCreation,
+  validateSettingsUpdate,
+  validateSettingUpdate,
+  
+  // Admin management validators
+  validateAdminCreation,
+  validateAdminUpdate,
+  validatePasswordReset,
+  validatePasswordChange,
+  
+  // Common utilities
+  handleValidationErrors
+};

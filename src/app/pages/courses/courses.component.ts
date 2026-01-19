@@ -14,7 +14,7 @@ export class CoursesComponent {
     {
       id: 1,
       name: 'Beginner Course',
-      icon: '🎓',
+      icon: 'beginner',
       duration: '2 Weeks',
       price: '₹3,999',
       features: ['Basic bike handling', 'Traffic rules', 'Safety training', 'Practice sessions', 'License preparation'],
@@ -23,7 +23,7 @@ export class CoursesComponent {
     {
       id: 2,
       name: 'Intermediate Course',
-      icon: '🏍️',
+      icon: 'intermediate',
       duration: '3 Weeks',
       price: '₹5,999',
       features: ['Advanced techniques', 'City riding', 'Highway training', 'Emergency handling', 'Test preparation', 'Certificate'],
@@ -32,7 +32,7 @@ export class CoursesComponent {
     {
       id: 3,
       name: 'Advanced Course',
-      icon: '⚡',
+      icon: 'advanced',
       duration: '4 Weeks',
       price: '₹8,999',
       features: ['Professional skills', 'Long-distance riding', 'Night riding', 'Adverse conditions', 'Advanced safety', 'Premium support'],
@@ -41,10 +41,10 @@ export class CoursesComponent {
   ];
 
   benefits = [
-    { icon: '👨‍🏫', title: 'Expert Instructors', description: 'Learn from certified professionals' },
-    { icon: '🏍️', title: 'Modern Bikes', description: 'Train on latest bike models' },
-    { icon: '📋', title: 'Flexible Schedule', description: 'Choose your convenient time' },
-    { icon: '🎯', title: 'Practical Focus', description: 'Hands-on training approach' }
+    { icon: 'instructors', title: 'Expert Instructors', description: 'Learn from certified professionals' },
+    { icon: 'bikes', title: 'Modern Bikes', description: 'Train on latest bike models' },
+    { icon: 'schedule', title: 'Flexible Schedule', description: 'Choose your convenient time' },
+    { icon: 'practical', title: 'Practical Focus', description: 'Hands-on training approach' }
   ];
 
   curriculum = [
@@ -63,9 +63,9 @@ export class CoursesComponent {
   ];
 
   additionalServices = [
-    { title: 'License Assistance', description: 'Complete support for RTO procedures and license tests', icon: '📝' },
-    { title: 'Refresher Training', description: 'Special sessions for riders who want to brush up skills', icon: '🔄' },
-    { title: 'Corporate Training', description: 'Customized programs for organizations and groups', icon: '🏢' },
-    { title: 'Women-Only Batches', description: 'Dedicated batches for women riders', icon: '👩' }
+    { title: 'License Assistance', description: 'Complete support for RTO procedures and license tests', icon: 'license' },
+    { title: 'Refresher Training', description: 'Special sessions for riders who want to brush up skills', icon: 'refresher' },
+    { title: 'Corporate Training', description: 'Customized programs for organizations and groups', icon: 'corporate' },
+    { title: 'Women-Only Batches', description: 'Dedicated batches for women riders', icon: 'women' }
   ];
 }

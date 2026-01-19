@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, BehaviorSubject } from 'rxjs';
+import { Observable, BehaviorSubject, firstValueFrom } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
@@ -68,30 +68,55 @@ export class ApiService {
     this.loadUserFromToken();
   }
 
+  // TODO: Migrate to httpOnly cookies for secure token storage
+  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private loadUserFromToken() {
-    const token = localStorage.getItem('token');
-    if (token) {
-      this.http.get<User>(`${this.apiUrl}/profiles/me`, {
-        headers: this.getAuthHeaders()
-      }).subscribe({
-        next: (user) => this.currentUserSubject.next(user),
-        error: () => {
-          localStorage.removeItem('token');
+    // Try to load user from either sessionStorage token OR httpOnly cookie
+    // Cookie-based auth (from Google OAuth) is preferred
+    this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(false)).subscribe({
+      next: (user) => {
+        this.currentUserSubject.next(user);
+      },
+      error: () => {
+        // If cookie auth fails, try sessionStorage token (for email/password login)
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          this.http.get<User>(`${this.apiUrl}/profiles/me`, this.getHttpOptions(true)).subscribe({
+            next: (user) => this.currentUserSubject.next(user),
+            error: () => {
+              sessionStorage.removeItem('token');
+              this.currentUserSubject.next(null);
+            }
+          });
+        } else {
           this.currentUserSubject.next(null);
         }
-      });
-    }
-  }
-
-  private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('token');
-    return new HttpHeaders({
-      'Authorization': `Bearer ${token}`
+      }
     });
   }
 
+  private getAuthHeaders(): HttpHeaders {
+    const token = sessionStorage.getItem('token');
+    const headers = new HttpHeaders({
+      'Content-Type': 'application/json'
+    });
+    // Only add Authorization header if token exists (for backward compatibility)
+    // Cookie-based auth (httpOnly) is preferred and doesn't need Authorization header
+    if (token) {
+      return headers.set('Authorization', `Bearer ${token}`);
+    }
+    return headers;
+  }
+
+  private getHttpOptions(includeAuth = true) {
+    return {
+      headers: includeAuth ? this.getAuthHeaders() : new HttpHeaders({ 'Content-Type': 'application/json' }),
+      withCredentials: true // Always send cookies for authentication
+    };
+  }
+
   setToken(token: string) {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
     this.loadUserFromToken();
   }
 
@@ -102,7 +127,7 @@ export class ApiService {
   signOut(): Observable<any> {
     return this.http.post(`${this.apiUrl}/auth/logout`, {}).pipe(
       tap(() => {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         this.currentUserSubject.next(null);
       })
     );
@@ -113,23 +138,20 @@ export class ApiService {
   }
 
   getProfile(): Observable<User> {
-    return this.http.get<User>(`${this.apiUrl}/profiles/me`, {
-      headers: this.getAuthHeaders()
-    });
+    // Try /auth/me first (supports cookie auth), fallback to /profiles/me
+    return this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(false));
   }
 
   updateProfile(data: Partial<User>): Observable<User> {
-    return this.http.put<User>(`${this.apiUrl}/profiles/me`, data, {
-      headers: this.getAuthHeaders()
-    });
+    return this.http.put<User>(`${this.apiUrl}/profiles/me`, data, this.getHttpOptions(true));
   }
 
   getTrainers(): Observable<Trainer[]> {
-    return this.http.get<Trainer[]>(`${this.apiUrl}/trainers`);
+    return this.http.get<Trainer[]>(`${this.apiUrl}/trainers`, this.getHttpOptions(false));
   }
 
   getTrainer(id: string): Observable<Trainer> {
-    return this.http.get<Trainer>(`${this.apiUrl}/trainers/${id}`);
+    return this.http.get<Trainer>(`${this.apiUrl}/trainers/${id}`, this.getHttpOptions(false));
   }
 
   getSlots(params?: { trainer_id?: string; start_date?: string; end_date?: string }): Observable<Slot[]> {
@@ -137,7 +159,7 @@ export class ApiService {
     if (params?.trainer_id) url += `trainer_id=${params.trainer_id}&`;
     if (params?.start_date) url += `start_date=${params.start_date}&`;
     if (params?.end_date) url += `end_date=${params.end_date}&`;
-    return this.http.get<Slot[]>(url);
+    return this.http.get<Slot[]>(url, this.getHttpOptions(false));
   }
 
   createBooking(slotId: string, trainerId: string, vehicleId: string, notes?: string): Observable<Booking> {
@@ -180,30 +202,30 @@ export class ApiService {
   }
 
   getAllBookings(): Observable<Booking[]> {
-    return this.http.get<Booking[]>(`${this.apiUrl}/admin/bookings`, {
-      headers: this.getAuthHeaders()
-    });
+    return this.http.get<Booking[]>(`${this.apiUrl}/admin/bookings`, this.getHttpOptions(true));
   }
 
   getAllUsers(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/admin/users`, {
-      headers: this.getAuthHeaders()
-    });
+    return this.http.get<User[]>(`${this.apiUrl}/admin/users`, this.getHttpOptions(true));
   }
 
   getDashboardStats(): Observable<any> {
-    return this.http.get(`${this.apiUrl}/admin/dashboard`, {
-      headers: this.getAuthHeaders()
-    });
+    return this.http.get(`${this.apiUrl}/admin/dashboard`, this.getHttpOptions(true));
   }
 
   get<T>(path: string): Promise<T> {
-    return this.http.get<T>(`${this.apiUrl}${path}`).toPromise() as Promise<T>;
+    return firstValueFrom(this.http.get<T>(`${this.apiUrl}${path}`, this.getHttpOptions(false)));
   }
 
   post<T>(path: string, body: any): Promise<T> {
-    return this.http.post<T>(`${this.apiUrl}${path}`, body, {
-      headers: this.getAuthHeaders()
-    }).toPromise() as Promise<T>;
+    return firstValueFrom(this.http.post<T>(`${this.apiUrl}${path}`, body, this.getHttpOptions(true)));
+  }
+
+  put<T>(path: string, body: any): Promise<T> {
+    return firstValueFrom(this.http.put<T>(`${this.apiUrl}${path}`, body, this.getHttpOptions(true)));
+  }
+
+  delete<T>(path: string): Promise<T> {
+    return firstValueFrom(this.http.delete<T>(`${this.apiUrl}${path}`, this.getHttpOptions(true)));
   }
 }

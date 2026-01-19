@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
+const { validateSettingUpdate, validateSettingsUpdate } = require('../validators');
 const router = express.Router();
 
 // Get all settings (public)
@@ -24,7 +25,10 @@ router.get('/', async (req, res, next) => {
 router.get('/all', authenticate, async (req, res, next) => {
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Forbidden' });
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const result = await db.query('SELECT * FROM settings ORDER BY key');
@@ -50,7 +54,10 @@ router.get('/:key', async (req, res, next) => {
     const result = await db.query('SELECT value FROM settings WHERE key = $1', [req.params.key]);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Setting not found' });
+      const error = new Error('Setting not found');
+      error.status = 404;
+      error.errorCode = 'SETTING_NOT_FOUND';
+      return next(error);
     }
 
     res.json({ key: req.params.key, value: result.rows[0].value });
@@ -60,10 +67,13 @@ router.get('/:key', async (req, res, next) => {
 });
 
 // Update setting (admin only)
-router.put('/:key', authenticate, async (req, res, next) => {
+router.put('/:key', authenticate, validateSettingUpdate, async (req, res, next) => {
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Forbidden' });
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const { value, description } = req.body;
@@ -87,10 +97,13 @@ router.put('/:key', authenticate, async (req, res, next) => {
 });
 
 // Update multiple settings (admin only)
-router.put('/', authenticate, async (req, res, next) => {
+router.put('/', authenticate, validateSettingsUpdate, async (req, res, next) => {
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Forbidden' });
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
     }
 
     const settings = req.body;

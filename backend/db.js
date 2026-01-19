@@ -4,13 +4,17 @@ require('dotenv').config();
 // Support both DATABASE_URL and individual connection parameters
 let pool;
 
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 if (process.env.DATABASE_URL) {
   // Use connection string if available
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
-  console.log('Database Configuration: Using DATABASE_URL');
+  if (isDevelopment) {
+    console.log('Database: Connected using DATABASE_URL');
+  }
 } else {
   // Use individual parameters
   const dbConfig = {
@@ -22,13 +26,15 @@ if (process.env.DATABASE_URL) {
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   };
 
-  // Log configuration (without password) for debugging
-  console.log('Database Configuration:');
-  console.log(`  Host: ${dbConfig.host}`);
-  console.log(`  Port: ${dbConfig.port}`);
-  console.log(`  Database: ${dbConfig.database}`);
-  console.log(`  User: ${dbConfig.user}`);
-  console.log(`  Password: ${dbConfig.password ? '***' : '(empty - ensure PostgreSQL allows passwordless connection or set DB_PASSWORD)'}`);
+  // Log configuration (without password) for debugging in development only
+  if (isDevelopment) {
+    console.log('Database Configuration:');
+    console.log(`  Host: ${dbConfig.host}`);
+    console.log(`  Port: ${dbConfig.port}`);
+    console.log(`  Database: ${dbConfig.database}`);
+    console.log(`  User: ${dbConfig.user}`);
+    console.log(`  Password: ${dbConfig.password ? '***' : '(empty - ensure PostgreSQL allows passwordless connection or set DB_PASSWORD)'}`);
+  }
 
   pool = new Pool(dbConfig);
 }

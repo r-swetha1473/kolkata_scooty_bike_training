@@ -6,7 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const migrationFile = process.argv[2] || path.join(__dirname, '..', 'supabase', 'migrations', '20250103000000_migrate_to_direct_postgresql.sql');
+// Default to the latest migration file
+const defaultMigration = path.join(__dirname, '..', 'supabase', 'migrations', '20250105000000_kolkata_scooty_requirements.sql');
+const fallbackMigration = path.join(__dirname, '..', 'supabase', 'migrations', '20250103000000_migrate_to_direct_postgresql.sql');
+const migrationFile = process.argv[2] || (fs.existsSync(defaultMigration) ? defaultMigration : fallbackMigration);
 const skipAdmin = process.argv.includes('--skip-admin');
 
 if (!fs.existsSync(migrationFile)) {

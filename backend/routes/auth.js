@@ -2,23 +2,38 @@ const express = require('express');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
+const { validateLogin } = require('../validators');
 const router = express.Router();
 
+// Rate limiter for login endpoint (5 attempts per 15 minutes)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per windowMs
+  message: 'Too many login attempts. Try again later.'
+});
+
 // Admin email/password login
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, validateLogin, async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      const error = new Error('Email and password are required');
+      error.status = 400;
+      error.errorCode = 'MISSING_CREDENTIALS';
+      return next(error);
     }
 
     // Check if JWT_SECRET is configured
     if (!process.env.JWT_SECRET) {
       console.error('JWT_SECRET is not set in environment variables');
-      return res.status(500).json({ error: 'Server configuration error. JWT_SECRET is missing.' });
+      const error = new Error('Server configuration error. JWT_SECRET is missing.');
+      error.status = 500;
+      error.errorCode = 'SERVER_CONFIG_ERROR';
+      return next(error);
     }
 
     // Find user by email
@@ -29,7 +44,10 @@ router.post('/login', async (req, res, next) => {
 
     if (result.rows.length === 0) {
       console.log(`Login attempt failed: User not found for email: ${email}`);
-      return res.status(401).json({ error: 'Invalid email or password' });
+      const error = new Error('Invalid email or password');
+      error.status = 401;
+      error.errorCode = 'INVALID_CREDENTIALS';
+      return next(error);
     }
 
     const user = result.rows[0];
@@ -37,7 +55,10 @@ router.post('/login', async (req, res, next) => {
     // Check if user has password_hash (admin/superadmin)
     if (!user.password_hash) {
       console.log(`Login attempt failed: No password_hash for user: ${email}`);
-      return res.status(401).json({ error: 'Invalid email or password' });
+      const error = new Error('Invalid email or password');
+      error.status = 401;
+      error.errorCode = 'INVALID_CREDENTIALS';
+      return next(error);
     }
 
     // Verify password
@@ -45,13 +66,19 @@ router.post('/login', async (req, res, next) => {
 
     if (!isPasswordValid) {
       console.log(`Login attempt failed: Invalid password for user: ${email}`);
-      return res.status(401).json({ error: 'Invalid email or password' });
+      const error = new Error('Invalid email or password');
+      error.status = 401;
+      error.errorCode = 'INVALID_CREDENTIALS';
+      return next(error);
     }
 
     // Check if user is admin or superadmin
     if (user.role !== 'admin' && user.role !== 'superadmin') {
       console.log(`Login attempt failed: Insufficient role for user: ${email}, role: ${user.role}`);
-      return res.status(403).json({ error: 'Access denied. Admin credentials required.' });
+      const error = new Error('Access denied. Admin credentials required.');
+      error.status = 403;
+      error.errorCode = 'ACCESS_DENIED';
+      return next(error);
     }
 
     // Generate JWT token
@@ -106,15 +133,18 @@ router.get('/google/callback',
         { expiresIn: '7d' }
       );
 
-      // Remove sensitive data before sending
-      const { password_hash, ...userWithoutPassword } = user;
-
-      // Encode user data as base64 to pass in URL
-      const userData = Buffer.from(JSON.stringify(userWithoutPassword)).toString('base64');
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
       
-      // Redirect with both token and user data
-      res.redirect(`${frontendUrl}/booking?token=${token}&user=${encodeURIComponent(userData)}`);
+      // Store token in httpOnly cookie
+      res.cookie('auth_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+      
+      // Redirect to profile page without token in URL
+      res.redirect(`${frontendUrl}/profile`);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
@@ -125,6 +155,12 @@ router.get('/google/callback',
 
 router.post('/logout', (req, res) => {
   req.logout(() => {
+    // Clear the auth_token cookie
+    res.clearCookie('auth_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict'
+    });
     res.json({ message: 'Logged out successfully' });
   });
 });

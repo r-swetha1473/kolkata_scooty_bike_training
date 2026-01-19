@@ -16,7 +16,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
       
       <aside class="sidebar">
         <div class="sidebar-header">
-          <h2>🏍️ Admin Panel</h2>
+          <h2>Admin Panel</h2>
           <div class="user-info" *ngIf="auth.userProfile$ | async as profile">
             <div class="user-avatar">{{ profile.full_name.charAt(0) }}</div>
             <div class="user-details">
@@ -28,34 +28,77 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
         <nav class="sidebar-nav">
           <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
-            <span class="nav-icon">📊</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
             <span class="nav-label">Dashboard</span>
           </a>
           <a routerLink="/admin/bookings" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">📅</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
             <span class="nav-label">Bookings</span>
           </a>
           <a routerLink="/admin/slots" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">🕐</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
             <span class="nav-label">Slots</span>
           </a>
           <a routerLink="/admin/trainers" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">👨‍🏫</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
             <span class="nav-label">Trainers</span>
           </a>
           <a routerLink="/admin/users" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">👥</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
             <span class="nav-label">Users</span>
           </a>
+          <a routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path>
+              <polygon points="12 15 17 21 7 21 12 15"></polygon>
+            </svg>
+            <span class="nav-label">Vehicles</span>
+          </a>
           <a routerLink="/admin/settings" routerLinkActive="active" class="nav-item">
-            <span class="nav-icon">⚙️</span>
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+            </svg>
             <span class="nav-label">Settings</span>
+          </a>
+          <a routerLink="/admin/audit-logs" routerLinkActive="active" class="nav-item">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span class="nav-label">Audit Logs</span>
           </a>
         </nav>
 
         <div class="sidebar-footer">
-          <button class="btn-secondary" (click)="goToSite()">← Back to Site</button>
-          <button class="btn-danger" (click)="logout()">🚪 Logout</button>
+          <button class="btn-secondary" (click)="goToSite()">Back to Site</button>
+          <button class="btn-danger" (click)="logout()">Logout</button>
         </div>
       </aside>
 
@@ -74,7 +117,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
       display: flex;
       flex-direction: column;
       min-height: 100vh;
-      background: #f5f7fa;
+      background: var(--background-color);
     }
 
     .content-wrapper {
@@ -89,8 +132,8 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
     .sidebar {
       width: 280px;
-      background: white;
-      border-right: 1px solid #e5e7eb;
+      background: #1F2937;
+      border-right: 1px solid rgba(229, 231, 235, 0.1);
       display: flex;
       flex-direction: column;
       position: fixed;
@@ -102,13 +145,14 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
     .sidebar-header {
       padding: 24px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid rgba(229, 231, 235, 0.1);
     }
 
     .sidebar-header h2 {
       margin: 0 0 20px 0;
       font-size: 20px;
-      color: #1f2937;
+      color: #F9FAFB;
+      font-weight: 700;
     }
 
     .user-info {
@@ -121,12 +165,12 @@ import { ToastComponent } from '../../components/toast/toast.component';
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: rgba(0, 102, 177, 0.2);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      font-weight: bold;
+      color: #60A5FA;
+      font-weight: 600;
       font-size: 16px;
     }
 
@@ -135,14 +179,14 @@ import { ToastComponent } from '../../components/toast/toast.component';
     }
 
     .user-name {
-      font-weight: 600;
-      color: #1f2937;
+      font-weight: 500;
+      color: #F9FAFB;
       font-size: 14px;
     }
 
     .user-role {
       font-size: 12px;
-      color: #6b7280;
+      color: #9CA3AF;
       text-transform: capitalize;
     }
 
@@ -158,24 +202,29 @@ import { ToastComponent } from '../../components/toast/toast.component';
       padding: 12px 16px;
       margin-bottom: 4px;
       border-radius: 8px;
-      color: #6b7280;
+      color: #9CA3AF;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: all var(--transition-base);
       cursor: pointer;
     }
 
     .nav-item:hover {
-      background: #f3f4f6;
-      color: #1f2937;
+      background: rgba(255, 255, 255, 0.05);
+      color: #F9FAFB;
     }
 
     .nav-item.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      background: rgba(0, 102, 177, 0.15);
+      color: #FFFFFF;
+      border-left: 3px solid #0066B1;
+      font-weight: 500;
     }
 
     .nav-icon {
-      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      stroke-width: 2;
+      flex-shrink: 0;
     }
 
     .nav-label {
@@ -185,7 +234,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
     .sidebar-footer {
       padding: 16px;
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid rgba(229, 231, 235, 0.1);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -193,43 +242,47 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
     .btn-secondary {
       padding: 10px 16px;
-      border: 1px solid #d1d5db;
-      background: white;
-      color: #4b5563;
-      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: transparent;
+      color: #9CA3AF;
+      border-radius: var(--border-radius-md);
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all var(--transition-base);
     }
 
     .btn-secondary:hover {
-      background: #f9fafb;
-      border-color: #9ca3af;
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #F9FAFB;
     }
 
     .btn-danger {
       padding: 10px 16px;
-      border: none;
-      background: #ef4444;
-      color: white;
-      border-radius: 8px;
+      border: 1px solid rgba(220, 38, 38, 0.3);
+      background: transparent;
+      color: #FCA5A5;
+      border-radius: var(--border-radius-md);
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all var(--transition-fast);
     }
 
     .btn-danger:hover {
-      background: #dc2626;
+      background: rgba(220, 38, 38, 0.15);
+      border-color: rgba(220, 38, 38, 0.5);
+      color: #FEE2E2;
     }
 
     .main-content {
       flex: 1;
-      padding: 32px;
+      padding: 40px;
       overflow-y: auto;
       overflow-x: hidden;
       min-height: 0;
+      background: #F9FAFB;
     }
 
     @media (max-width: 768px) {

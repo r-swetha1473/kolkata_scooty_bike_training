@@ -11,32 +11,45 @@ import { ToastService } from '../../../services/toast.service';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="users-page">
-      <h1 class="page-title">Manage Users</h1>
+      <div class="admin-page-header">
+        <h1 class="admin-page-title">Manage Users</h1>
+      </div>
       
-      <div class="filters-bar">
-        <input 
-          type="text" 
-          [(ngModel)]="searchTerm" 
-          (input)="filterUsers()"
-          placeholder="Search by name, email, or role..." 
-          class="search-input">
-        <select [(ngModel)]="roleFilter" (change)="filterUsers()" class="filter-select">
-          <option value="">All Roles</option>
-          <option value="customer">Customer</option>
-          <option value="trainer">Trainer</option>
-          <option value="admin">Admin</option>
-          <option value="superadmin">Superadmin</option>
-        </select>
-        <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
-          <option [value]="10">10 per page</option>
-          <option [value]="20">20 per page</option>
-          <option [value]="50">50 per page</option>
-          <option [value]="100">100 per page</option>
-        </select>
+      <div class="admin-filters-bar">
+        <div class="admin-filters-content">
+          <div class="admin-filter-group admin-search-group">
+            <svg class="admin-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input 
+              type="text" 
+              [(ngModel)]="searchTerm" 
+              (input)="filterUsers()"
+              placeholder="Search users..." 
+              class="admin-search-input">
+          </div>
+          <select [(ngModel)]="roleFilter" (change)="filterUsers()" class="admin-select">
+            <option value="">All Roles</option>
+            <option value="customer">Customer</option>
+            <option value="trainer">Trainer</option>
+            <option value="admin">Admin</option>
+            <option value="superadmin">Superadmin</option>
+          </select>
+          <div class="admin-filter-spacer"></div>
+          <button class="admin-btn admin-btn-secondary" (click)="exportUsers()" title="Export to CSV">
+            <svg class="admin-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export
+          </button>
+        </div>
       </div>
 
-      <div class="table-container" style="overflow-x:auto;">
-        <table class="data-table">
+      <div class="admin-table-container">
+        <table class="admin-data-table">
           <thead>
             <tr>
               <th>Name</th>
@@ -48,63 +61,113 @@ import { ToastService } from '../../../services/toast.service';
             </tr>
           </thead>
           <tbody>
+            <tr *ngIf="filteredUsers.length === 0">
+              <td [attr.colspan]="auth.isSuperAdmin() ? 6 : 5" class="empty-state-cell">
+                No users found
+              </td>
+            </tr>
             <tr *ngFor="let user of getPaginatedUsers()">
-            <td>{{ user.full_name }}</td>
-            <td>{{ user.email }}</td>
-            <td>{{ user.phone || 'N/A' }}</td>
-            <td><span class="role-badge">{{ user.role }}</span></td>
-            <td>{{ formatDate(user.created_at) }}</td>
-            <td *ngIf="auth.isSuperAdmin()">
-              <select (change)="updateRole(user.id, $any($event.target).value)" [value]="user.role">
-                <option value="customer">Customer</option>
-                <option value="trainer">Trainer</option>
-                <option value="admin">Admin</option>
-                <option value="superadmin">Superadmin</option>
-              </select>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <td>{{ user.full_name }}</td>
+              <td class="email-cell">{{ user.email }}</td>
+              <td class="auth-cell">
+                <span *ngIf="user.phone" class="auth-badge phone-badge">{{ user.phone }}</span>
+                <span *ngIf="!user.phone && user.google_id" class="auth-badge google-badge">Google</span>
+                <span *ngIf="!user.phone && !user.google_id" class="auth-badge guest-badge">Guest</span>
+              </td>
+              <td><span class="role-badge">{{ user.role }}</span></td>
+              <td>{{ formatDate(user.created_at) }}</td>
+              <td *ngIf="auth.isSuperAdmin()">
+                <select (change)="updateRole(user.id, $any($event.target).value)" [value]="user.role">
+                  <option value="customer">Customer</option>
+                  <option value="trainer">Trainer</option>
+                  <option value="admin">Admin</option>
+                  <option value="superadmin">Superadmin</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="pagination-container" *ngIf="totalPages > 1">
-        <button 
-          class="pagination-btn" 
-          [disabled]="currentPage === 1"
-          (click)="goToPage(currentPage - 1)">
-          ← Previous
-        </button>
-        <span class="page-info">
-          Page {{ currentPage }} of {{ totalPages }} ({{ filteredUsers.length }} users)
-        </span>
-        <button 
-          class="pagination-btn" 
-          [disabled]="currentPage === totalPages"
-          (click)="goToPage(currentPage + 1)">
-          Next →
-        </button>
+      <div class="admin-pagination" *ngIf="filteredUsers.length > 0">
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ filteredUsers.length }} users</span>
+          <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="admin-page-size-select">
+            <option [value]="8">8</option>
+            <option [value]="16">16</option>
+            <option [value]="24">24</option>
+            <option [value]="32">32</option>
+          </select>
+        </div>
+        <div class="admin-pagination-controls" *ngIf="totalPages > 1">
+          <button 
+            class="admin-pagination-btn" 
+            [disabled]="currentPage === 1"
+            (click)="goToPage(currentPage - 1)"
+            title="Previous page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <ng-container *ngFor="let page of getPageNumbers()">
+            <button
+              *ngIf="typeof page === 'number'"
+              class="admin-pagination-btn"
+              [class.active]="page === currentPage"
+              (click)="goToPage(page)"
+              [title]="'Go to page ' + page">
+              {{ page }}
+            </button>
+            <span *ngIf="page === '...'" class="admin-page-ellipsis">...</span>
+          </ng-container>
+          <button 
+            class="admin-pagination-btn" 
+            [disabled]="currentPage === totalPages"
+            (click)="goToPage(currentPage + 1)"
+            title="Next page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   `,
   styles: [`
     .users-page { max-width: 1400px; }
-    .page-title { font-size: 32px; font-weight: 700; color: #1f2937; margin-bottom: 24px; }
-    .data-table { width: 100%; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .data-table th, .data-table td { padding: 16px; text-align: left; }
-    .data-table thead { background: #f9fafb; }
-    .data-table tbody tr { border-top: 1px solid #e5e7eb; }
-    .role-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: #dbeafe; color: #1e40af; text-transform: capitalize; }
-    select { padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; }
-    .filters-bar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
-    .search-input { flex: 1; min-width: 200px; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .search-input:focus { outline: none; border-color: #3b82f6; }
-    .filter-select, .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .pagination-container { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 20px; }
-    .pagination-btn { padding: 10px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .pagination-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
-    .pagination-btn:not(:disabled):hover { transform: translateY(-2px); }
-    .page-info { color: #6b7280; font-size: 14px; }
-    .table-container { overflow-x: auto; }
+    .email-cell { font-size: 12px; color: #9ca3af; font-weight: 400; }
+    .role-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; background: #dbeafe; color: #1e40af; text-transform: capitalize; display: inline-block; }
+    .empty-state-cell { text-align: center; padding: 40px; color: #6b7280; }
+
+    .auth-cell {
+      display: flex;
+      align-items: center;
+    }
+
+    .auth-badge {
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+      display: inline-block;
+      white-space: nowrap;
+    }
+
+    .phone-badge {
+      background: #F3F4F6;
+      color: #374151;
+    }
+
+    .google-badge {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+
+    .guest-badge {
+      background: #FEF3C7;
+      color: #92400E;
+    }
+
   `]
 })
 export class AdminUsersComponent implements OnInit {
@@ -115,7 +178,7 @@ export class AdminUsersComponent implements OnInit {
   
   // Pagination
   currentPage = 1;
-  itemsPerPage = 20;
+  itemsPerPage = 8; // Fixed to 8 records per page
   totalPages = 1;
 
   constructor(
@@ -141,6 +204,11 @@ export class AdminUsersComponent implements OnInit {
   filterUsers() {
     let filtered = [...this.users];
     
+    // Only show regular users (customers) - exclude admin, superadmin, trainer
+    filtered = filtered.filter(user => 
+      user.role === 'customer'
+    );
+    
     // Filter by search term
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase().trim();
@@ -151,7 +219,7 @@ export class AdminUsersComponent implements OnInit {
       );
     }
     
-    // Filter by role
+    // Filter by role (if role filter is set, but still only show customers)
     if (this.roleFilter) {
       filtered = filtered.filter(user => user.role === this.roleFilter);
     }
@@ -177,6 +245,45 @@ export class AdminUsersComponent implements OnInit {
     }
   }
 
+  getPageNumbers(): (number | string)[] {
+    const pages: (number | string)[] = [];
+    const total = this.totalPages;
+    const current = this.currentPage;
+    
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (current <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(total);
+      } else if (current >= total - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = total - 3; i <= total; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(total);
+      }
+    }
+    
+    return pages;
+  }
+
+  getStartIndex(): number {
+    return this.filteredUsers.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
+  }
+
+  getEndIndex(): number {
+    const end = this.currentPage * this.itemsPerPage;
+    return end > this.filteredUsers.length ? this.filteredUsers.length : end;
+  }
+
   onPageSizeChange() {
     this.currentPage = 1;
     this.updatePagination();
@@ -197,4 +304,33 @@ export class AdminUsersComponent implements OnInit {
   formatDate(date: string) {
     return new Date(date).toLocaleDateString();
   }
+
+  exportUsers() {
+    // Simple CSV export
+    const headers = ['Name', 'Email', 'Phone/Auth', 'Role', 'Joined'];
+    const rows = this.filteredUsers.map(user => [
+      user.full_name || '',
+      user.email || '',
+      user.phone || (user.google_id ? 'Google' : 'Guest'),
+      user.role || '',
+      this.formatDate(user.created_at)
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `users_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    this.toastService.success('Users exported successfully');
+  }
+
 }

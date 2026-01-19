@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { Trainer } from '../../../services/trainer.service';
 import { ToastService } from '../../../services/toast.service';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-admin-trainers',
@@ -11,28 +12,46 @@ import { ToastService } from '../../../services/toast.service';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="trainers-page">
-      <div class="page-header">
-        <h1 class="page-title">Manage Trainers</h1>
-        <button class="btn-primary" (click)="showCreateModal()">+ Add Trainer</button>
+      <div class="admin-page-header">
+        <h1 class="admin-page-title">Manage Trainers</h1>
+        <div class="admin-page-actions">
+          <button class="admin-btn admin-btn-primary" (click)="showCreateModal()">+ Add Trainer</button>
+        </div>
       </div>
 
-      <div class="filters-bar">
-        <input 
-          type="text" 
-          [(ngModel)]="searchTerm" 
-          (input)="filterTrainers()"
-          placeholder="Search by name, email, or specialization..." 
-          class="search-input">
-        <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="page-size-select">
-          <option [value]="5">5 per page</option>
-          <option [value]="10">10 per page</option>
-          <option [value]="20">20 per page</option>
-          <option [value]="50">50 per page</option>
-        </select>
+      <div class="admin-filters-bar">
+        <div class="admin-filters-content">
+          <div class="admin-filter-group admin-search-group">
+            <svg class="admin-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input 
+              type="text" 
+              [(ngModel)]="searchTerm" 
+              (input)="filterTrainers()"
+              placeholder="Search name, email, specialization..." 
+              class="admin-search-input">
+          </div>
+          <div class="admin-filter-group">
+            <select [(ngModel)]="statusFilter" (change)="filterTrainers()" class="admin-select">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Disabled</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <select [(ngModel)]="sortBy" (change)="filterTrainers()" class="admin-select">
+              <option value="none">Sort by</option>
+              <option value="rating">Rating</option>
+              <option value="experience">Experience</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      <div class="table-container" style="overflow-x:auto;">
-        <table class="data-table compact-table">
+      <div class="admin-table-container">
+        <table class="admin-data-table">
         <thead>
           <tr>
             <th>Name</th>
@@ -50,7 +69,9 @@ import { ToastService } from '../../../services/toast.service';
             <td class="email-cell">{{ trainer.profile?.email }}</td>
             <td>{{ trainer.experience_years }}y</td>
             <td>{{ trainer.rating || 0 }}/5</td>
-            <td class="specialization-cell">{{ (trainer.specialization?.join(', ') || 'N/A').substring(0, 30) }}{{ (trainer.specialization?.join(', ') || '').length > 30 ? '...' : '' }}</td>
+            <td class="specialization-cell">
+              <div class="specialization-text">{{ trainer.specialization?.join(', ') || 'N/A' }}</div>
+            </td>
             <td>
               <span class="status-badge" [class.active]="trainer.is_active">
                 {{ trainer.is_active ? 'Active' : 'Inactive' }}
@@ -59,24 +80,34 @@ import { ToastService } from '../../../services/toast.service';
             <td>
               <div class="action-buttons">
                 <button
-                  class="btn-icon"
-                  [class.btn-success]="!trainer.is_active"
-                  [class.btn-warning]="trainer.is_active"
-                  (click)="toggleActive(trainer.id, trainer.is_active)"
-                  [title]="trainer.is_active ? 'Deactivate' : 'Activate'">
-                  <span class="icon">{{ trainer.is_active ? '⏸️' : '▶️' }}</span>
-                </button>
-                <button
-                  class="btn-icon btn-info"
+                  class="btn-action btn-edit"
                   (click)="showEditModal(trainer)"
                   title="Edit">
-                  <span class="icon">✏️</span>
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
                 </button>
                 <button
-                  class="btn-icon btn-danger"
+                  class="btn-action btn-disable"
+                  (click)="toggleActive(trainer.id, trainer.is_active)"
+                  [title]="trainer.is_active ? 'Disable' : 'Enable'">
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" *ngIf="trainer.is_active">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                  </svg>
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" *ngIf="!trainer.is_active">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                </button>
+                <button
+                  class="btn-action btn-delete"
                   (click)="deleteTrainer(trainer.id)"
                   title="Delete">
-                  <span class="icon">🗑️</span>
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
                 </button>
               </div>
             </td>
@@ -85,30 +116,47 @@ import { ToastService } from '../../../services/toast.service';
         </table>
       </div>
 
-      <div class="pagination-pill" *ngIf="totalPages > 1">
-        <button 
-          class="nav-btn"
-          [disabled]="currentPage === 1"
-          (click)="goToPage(currentPage - 1)">‹ Prev</button>
-
-        <div class="page-numbers">
+      <div class="admin-pagination" *ngIf="filteredTrainers.length > 0">
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ filteredTrainers.length }} trainers</span>
+          <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="admin-page-size-select">
+            <option [value]="8">8</option>
+            <option [value]="16">16</option>
+            <option [value]="24">24</option>
+            <option [value]="32">32</option>
+          </select>
+        </div>
+        <div class="admin-pagination-controls" *ngIf="totalPages > 1">
           <button 
-            *ngFor="let page of getPageNumbers()"
-            class="page-chip"
-            [class.active]="page === currentPage"
-            [class.ellipsis]="page === '...'"
-            [disabled]="page === '...'"
-            (click)="page !== '...' && goToPage(page)">
-            {{ page }}
+            class="admin-pagination-btn" 
+            [disabled]="currentPage === 1"
+            (click)="goToPage(currentPage - 1)"
+            title="Previous page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <ng-container *ngFor="let page of getPageNumbers()">
+            <button
+              *ngIf="typeof page === 'number'"
+              class="admin-pagination-btn"
+              [class.active]="page === currentPage"
+              (click)="goToPage(page)"
+              [title]="'Go to page ' + page">
+              {{ page }}
+            </button>
+            <span *ngIf="page === '...'" class="admin-page-ellipsis">...</span>
+          </ng-container>
+          <button 
+            class="admin-pagination-btn" 
+            [disabled]="currentPage === totalPages"
+            (click)="goToPage(currentPage + 1)"
+            title="Next page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
         </div>
-
-        <button 
-          class="nav-btn"
-          [disabled]="currentPage === totalPages"
-          (click)="goToPage(currentPage + 1)">Next ›</button>
-
-        <div class="results-info">Showing {{ getShowingCount() }} of {{ filteredTrainers.length }} results</div>
       </div>
 
       <div class="modal" *ngIf="showModal" (click)="closeModal($event)">
@@ -157,44 +205,80 @@ import { ToastService } from '../../../services/toast.service';
   `,
   styles: [`
     .trainers-page { max-width: 1400px; }
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .page-title { font-size: 32px; font-weight: 700; color: #1f2937; margin: 0; }
-    .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
-    .btn-primary:hover { transform: translateY(-2px); }
-    .data-table { width: 100%; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-collapse: collapse; }
-    .data-table.compact-table th, .data-table.compact-table td { padding: 10px 12px; text-align: left; font-size: 13px; }
-    .data-table.compact-table th { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .data-table thead { background: #f9fafb; }
-    .data-table tbody tr { border-top: 1px solid #e5e7eb; }
-    .data-table tbody tr:hover { background: #f9fafb; }
     .email-cell { font-size: 12px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .specialization-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .status-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .specialization-cell { max-width: 200px; }
+    .specialization-text {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+      font-size: 13px;
+      color: #374151;
+    }
+    .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; display: inline-block; }
     .status-badge { background: #fee2e2; color: #991b1b; }
     .status-badge.active { background: #d1fae5; color: #065f46; }
-    .action-buttons { display: flex; gap: 8px; align-items: center; }
+    .action-buttons { display: flex; gap: 6px; align-items: center; }
 
-    /* Pagination pill */
-    .pagination-pill { display:flex; align-items:center; gap:16px; justify-content: space-between; background:white; border-radius: 9999px; padding: 12px 18px; margin:24px 0; box-shadow: 0 10px 25px rgba(0,0,0,0.08), inset 0 0 0 1px #e5e7eb; flex-wrap: wrap; }
-    .nav-btn { background: none; border: none; color: #1f2937; font-weight: 600; cursor: pointer; padding: 8px 10px; border-radius: 9999px; }
-    .nav-btn:disabled { color: #9ca3af; cursor: not-allowed; }
-    .page-numbers { display: flex; gap: 8px; align-items: center; }
-    .page-chip { min-width: 36px; height: 36px; border-radius: 9999px; border: 1px solid #e5e7eb; background: white; color: #1f2937; font-weight: 600; cursor: pointer; }
-    .page-chip:hover:not(.active):not(.ellipsis) { border-color: #6366f1; color: #6366f1; }
-    .page-chip.active { background: #4f46e5; color: white; border-color: #4f46e5; box-shadow: 0 0 0 6px rgba(79,70,229,0.15); }
-    .page-chip.ellipsis { border: none; background: none; cursor: default; color: #6b7280; }
-    .results-info { color: #4b5563; font-size: 14px; margin-left: auto; }
+    .btn-action {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      background: transparent;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
 
-    .btn-icon { width: 36px; height: 36px; padding: 0; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background: #f3f4f6; }
-    .btn-icon .icon { font-size: 16px; line-height: 1; }
-    .btn-icon.btn-success { background: #10b981; color: white; }
-    .btn-icon.btn-success:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3); }
-    .btn-icon.btn-warning { background: #f59e0b; color: white; }
-    .btn-icon.btn-warning:hover { background: #d97706; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3); }
-    .btn-icon.btn-info { background: #3b82f6; color: white; }
-    .btn-icon.btn-info:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3); }
-    .btn-icon.btn-danger { background: #ef4444; color: white; }
-    .btn-icon.btn-danger:hover { background: #dc2626; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3); }
+    .btn-action .icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+    }
+
+    .btn-edit {
+      border-color: #0066B1;
+      color: #0066B1;
+    }
+
+    .btn-edit:hover {
+      background: #0066B1;
+      color: white;
+      box-shadow: 0 2px 6px rgba(0, 102, 177, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn-disable {
+      border-color: #9CA3AF;
+      color: #6B7280;
+    }
+
+    .btn-disable:hover {
+      background: #6B7280;
+      border-color: #6B7280;
+      color: white;
+      box-shadow: 0 2px 6px rgba(107, 114, 128, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn-delete {
+      border-color: #EF4444;
+      color: #EF4444;
+    }
+
+    .btn-delete:hover {
+      background: #EF4444;
+      color: white;
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+      transform: translateY(-1px);
+    }
 
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .modal-content { background: white; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
@@ -211,10 +295,7 @@ import { ToastService } from '../../../services/toast.service';
     .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
     .btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 2px solid #e5e7eb; border-radius: 8px; font-weight: 600; cursor: pointer; }
     .btn-secondary:hover { background: #f9fafb; }
-    .filters-bar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
-    .search-input { flex: 1; padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .search-input:focus { outline: none; border-color: #3b82f6; }
-    .page-size-select { padding: 10px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+
   `]
 })
 export class AdminTrainersComponent implements OnInit {
@@ -224,10 +305,12 @@ export class AdminTrainersComponent implements OnInit {
   editingTrainer: Trainer | null = null;
   specializationInput = '';
   searchTerm = '';
+  statusFilter: 'all' | 'active' | 'inactive' = 'all';
+  sortBy: 'none' | 'rating' | 'experience' = 'none';
   
   // Pagination
   currentPage = 1;
-  itemsPerPage = 10;
+  itemsPerPage = 8; // Fixed to 8 records per page
   totalPages = 1;
   
   trainerForm: any = {
@@ -260,16 +343,33 @@ export class AdminTrainersComponent implements OnInit {
   }
 
   filterTrainers() {
+    let filtered = [...this.trainers];
+    
+    // Search filter
     const term = this.searchTerm.toLowerCase().trim();
-    if (!term) {
-      this.filteredTrainers = [...this.trainers];
-    } else {
-      this.filteredTrainers = this.trainers.filter(trainer => 
+    if (term) {
+      filtered = filtered.filter(trainer => 
         trainer.profile?.full_name?.toLowerCase().includes(term) ||
         trainer.profile?.email?.toLowerCase().includes(term) ||
         trainer.specialization?.some(s => s.toLowerCase().includes(term))
       );
     }
+    
+    // Status filter
+    if (this.statusFilter !== 'all') {
+      filtered = filtered.filter(trainer => 
+        this.statusFilter === 'active' ? trainer.is_active : !trainer.is_active
+      );
+    }
+    
+    // Sort
+    if (this.sortBy === 'rating') {
+      filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (this.sortBy === 'experience') {
+      filtered.sort((a, b) => (b.experience_years || 0) - (a.experience_years || 0));
+    }
+    
+    this.filteredTrainers = filtered;
     this.currentPage = 1;
     this.updatePagination();
   }
@@ -312,14 +412,20 @@ export class AdminTrainersComponent implements OnInit {
     return pages;
   }
 
-  getShowingCount(): number {
-    return Math.min(this.currentPage * this.itemsPerPage, this.filteredTrainers.length);
+  getStartIndex(): number {
+    return this.filteredTrainers.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
+  }
+
+  getEndIndex(): number {
+    const end = this.currentPage * this.itemsPerPage;
+    return end > this.filteredTrainers.length ? this.filteredTrainers.length : end;
   }
 
   onPageSizeChange() {
     this.currentPage = 1;
     this.updatePagination();
   }
+
 
   showCreateModal() {
     this.editingTrainer = null;
@@ -372,7 +478,7 @@ export class AdminTrainersComponent implements OnInit {
           specialization: specialization,
           rating: parseFloat(this.trainerForm.rating) || 0
         };
-        await this.adminService.updateTrainer(this.editingTrainer.id, data).toPromise();
+        await firstValueFrom(this.adminService.updateTrainer(this.editingTrainer.id, data));
       } else {
         const data = {
           email: this.trainerForm.email,
@@ -383,7 +489,7 @@ export class AdminTrainersComponent implements OnInit {
           specialization: specialization,
           rating: parseFloat(this.trainerForm.rating) || 0
         };
-        await this.adminService.createTrainer(data).toPromise();
+        await firstValueFrom(this.adminService.createTrainer(data));
       }
 
       this.showModal = false;
@@ -397,7 +503,7 @@ export class AdminTrainersComponent implements OnInit {
 
   async toggleActive(trainerId: string, currentStatus: boolean) {
     try {
-      await this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }).toPromise();
+      await firstValueFrom(this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }));
       await this.loadTrainers();
       this.toastService.success(`Trainer ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
     } catch (error: any) {
@@ -412,7 +518,7 @@ export class AdminTrainersComponent implements OnInit {
     }
 
     try {
-      await this.adminService.deleteTrainer(trainerId).toPromise();
+      await firstValueFrom(this.adminService.deleteTrainer(trainerId));
       await this.loadTrainers();
       this.toastService.success('Trainer deleted successfully');
     } catch (error: any) {

@@ -17,10 +17,10 @@ export class AboutComponent {
   ];
 
   values = [
-    { icon: '🎯', title: 'Excellence', description: 'Committed to delivering the highest quality training experience' },
-    { icon: '🤝', title: 'Integrity', description: 'Honest and transparent in all our dealings' },
-    { icon: '💡', title: 'Innovation', description: 'Continuously improving our methods and technology' },
-    { icon: '❤️', title: 'Care', description: 'Genuinely caring about each student\'s success and safety' }
+    { icon: 'excellence', title: 'Excellence', description: 'Committed to delivering the highest quality training experience' },
+    { icon: 'integrity', title: 'Integrity', description: 'Honest and transparent in all our dealings' },
+    { icon: 'innovation', title: 'Innovation', description: 'Continuously improving our methods and technology' },
+    { icon: 'care', title: 'Care', description: 'Genuinely caring about each student\'s success and safety' }
   ];
 
   achievements = [
@@ -37,11 +37,16 @@ export class AboutComponent {
   ];
 
   features = [
-    { icon: '✓', text: 'State-of-the-art training facilities' },
-    { icon: '✓', text: 'Modern fleet of training bikes' },
-    { icon: '✓', text: 'Flexible scheduling options' },
-    { icon: '✓', text: 'Comprehensive safety training' },
-    { icon: '✓', text: 'License exam preparation' },
-    { icon: '✓', text: 'Post-training support' }
+    { text: 'State-of-the-art training facilities' },
+    { text: 'Modern fleet of training bikes' },
+    { text: 'Flexible scheduling options' },
+    { text: 'Comprehensive safety training' },
+    { text: 'License exam preparation' },
+    { text: 'Post-training support' }
   ];
+
+  getInitials(name: string): string {
+    if (!name) return '';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  }
 }

@@ -71,7 +71,7 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+      background: var(--bg-secondary);
       padding: 20px;
     }
 
@@ -81,9 +81,10 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .login-card {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow-xl);
       padding: 40px;
       animation: slideUp 0.4s ease;
     }
@@ -118,13 +119,13 @@ import { AuthService } from '../../services/auth.service';
     h1 {
       margin: 0 0 8px;
       font-size: 28px;
-      color: #2c3e50;
+      color: var(--text-primary);
       font-weight: 700;
     }
 
     .subtitle {
       margin: 0;
-      color: #7f8c8d;
+      color: var(--text-secondary);
       font-size: 14px;
     }
 
@@ -142,22 +143,22 @@ import { AuthService } from '../../services/auth.service';
 
     label {
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--text-primary);
       font-size: 14px;
     }
 
     input {
       padding: 12px 16px;
-      border: 2px solid #e0e0e0;
-      border-radius: 8px;
+      border: 2px solid var(--border-primary);
+      border-radius: var(--border-radius-md);
       font-size: 15px;
-      transition: all 0.3s;
+      transition: all var(--transition-base);
       outline: none;
     }
 
     input:focus {
-      border-color: #e74c3c;
-      box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+      border-color: var(--border-accent);
+      box-shadow: var(--shadow-focus);
     }
 
     input:disabled {
@@ -202,13 +203,13 @@ import { AuthService } from '../../services/auth.service';
     .info-message {
       margin-top: 24px;
       padding-top: 24px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid var(--border-primary);
       text-align: center;
     }
 
     .info-message p {
       margin: 0;
-      color: #7f8c8d;
+      color: var(--text-secondary);
       font-size: 13px;
     }
 

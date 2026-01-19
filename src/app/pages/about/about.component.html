@@ -1,30 +1,57 @@
 <div class="about-page">
-  <section class="about-hero">
+  <section class="page-hero">
     <div class="container">
-      <h1 class="fade-in">About Kolkata Scotty</h1>
-      <p class="fade-in-delay">Transforming beginners into confident riders since 2014</p>
+      <div class="hero-content">
+        <h1 class="hero-title">About Kolkata Scotty</h1>
+        <p class="hero-subtitle">Transforming beginners into confident riders since 2014. We are committed to excellence in motorcycle training and safety education.</p>
+      </div>
     </div>
   </section>
 
-  <section class="story">
+  <section class="story-section">
     <div class="container">
       <div class="story-content">
         <div class="story-text">
-          <h2>Our Story</h2>
+          <h2 class="section-title">Our Story</h2>
           <p>Founded in 2014, Kolkata Scotty Bike Training has been the premier destination for quality motorcycle training in West Bengal. What started as a small training center with just two instructors has grown into one of the most trusted names in driver education.</p>
           <p>Our mission is simple: to create safe, confident, and skilled riders through comprehensive training programs that emphasize both technical proficiency and road safety. We believe that proper training is the foundation of responsible riding.</p>
           <p>Over the years, we've trained thousands of students, each with their unique goals and challenges. Our personalized approach ensures that every student receives the attention and guidance they need to succeed.</p>
         </div>
-        <div class="story-image">
-          <div class="image-placeholder">🏍️</div>
+        <div class="story-visual">
+          <div class="story-card">
+            <div class="story-icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <h3>Mission</h3>
+            <p>To create safe, confident, and skilled riders through comprehensive training programs.</p>
+          </div>
+          <div class="story-card">
+            <div class="story-icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+            </div>
+            <h3>Vision</h3>
+            <p>To be the most trusted and respected motorcycle training institute in West Bengal.</p>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="timeline">
+  <section class="timeline-section">
     <div class="container">
-      <h2 class="section-title">Our Journey</h2>
+      <div class="section-header">
+        <h2 class="section-title">Our Journey</h2>
+        <p class="section-subtitle">Milestones in our growth and development</p>
+      </div>
       <div class="timeline-container">
         <div class="timeline-item" *ngFor="let milestone of milestones; let i = index" [class.left]="i % 2 === 0" [class.right]="i % 2 !== 0">
           <div class="timeline-content">
@@ -37,12 +64,28 @@
     </div>
   </section>
 
-  <section class="values">
+  <section class="values-section">
     <div class="container">
-      <h2 class="section-title">Our Values</h2>
+      <div class="section-header">
+        <h2 class="section-title">Our Values</h2>
+        <p class="section-subtitle">The principles that guide everything we do</p>
+      </div>
       <div class="values-grid">
         <div class="value-card" *ngFor="let value of values">
-          <div class="value-icon">{{ value.icon }}</div>
+          <div class="value-icon-wrapper">
+            <svg *ngIf="value.icon === 'excellence'" class="value-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <svg *ngIf="value.icon === 'integrity'" class="value-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <svg *ngIf="value.icon === 'innovation'" class="value-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <svg *ngIf="value.icon === 'care'" class="value-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+          </div>
           <h3>{{ value.title }}</h3>
           <p>{{ value.description }}</p>
         </div>
@@ -50,9 +93,12 @@
     </div>
   </section>
 
-  <section class="achievements">
+  <section class="achievements-section">
     <div class="container">
-      <h2 class="section-title">Our Achievements</h2>
+      <div class="section-header">
+        <h2 class="section-title">Our Achievements</h2>
+        <p class="section-subtitle">Numbers that reflect our commitment to excellence</p>
+      </div>
       <div class="achievements-grid">
         <div class="achievement-card" *ngFor="let achievement of achievements">
           <h3>{{ achievement.title }}</h3>
@@ -62,28 +108,46 @@
     </div>
   </section>
 
-  <section class="features-list">
+  <section class="features-section">
     <div class="container">
-      <h2 class="section-title">What Sets Us Apart</h2>
+      <div class="section-header">
+        <h2 class="section-title">What Sets Us Apart</h2>
+        <p class="section-subtitle">Features that make us the preferred choice</p>
+      </div>
       <div class="features-grid">
         <div class="feature-item" *ngFor="let feature of features">
-          <span class="check-icon">{{ feature.icon }}</span>
+          <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
           <span>{{ feature.text }}</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="team">
+  <section class="team-section">
     <div class="container">
-      <h2 class="section-title">Leadership Team</h2>
+      <div class="section-header">
+        <h2 class="section-title">Leadership Team</h2>
+        <p class="section-subtitle">Meet the experts leading our mission</p>
+      </div>
       <div class="team-grid">
         <div class="team-card" *ngFor="let member of team">
-          <div class="team-avatar">👤</div>
+          <div class="team-avatar">{{ getInitials(member.name) }}</div>
           <h3>{{ member.name }}</h3>
           <div class="team-role">{{ member.role }}</div>
           <p>{{ member.description }}</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-content">
+        <h2>Ready to Start Your Journey?</h2>
+        <p>Join thousands of successful riders who trained with us</p>
+        <a routerLink="/booking" class="btn btn-primary btn-large">Book Your Training Session</a>
       </div>
     </div>
   </section>

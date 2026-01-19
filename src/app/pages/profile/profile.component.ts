@@ -5,6 +5,9 @@ import { RouterModule } from '@angular/router';
 import { AuthService, UserProfile } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { BookingService } from '../../services/booking.service';
+import { HttpService } from '../../services/http.service';
+import { firstValueFrom } from 'rxjs';
+import { extractDateFromDateTime, extractTime, formatTimeToAMPM, isPastDateTime, calculateDurationMinutes } from '../../utils/date.utils';
 
 export interface Booking {
   id: string;
@@ -30,7 +33,8 @@ export interface Booking {
   imports: [CommonModule, FormsModule, RouterModule],
   template: `
     <div class="profile-page">
-      <div class="profile-header">
+      <div *ngIf="loading && !userProfile" class="loading">Loading profile...</div>
+      <div class="profile-header" *ngIf="userProfile">
         <div class="profile-avatar">
           <img 
             *ngIf="userProfile?.avatar_url" 
@@ -44,7 +48,7 @@ export interface Booking {
         <div class="profile-info">
           <h1 class="profile-name">{{ userProfile?.full_name || 'User' }}</h1>
           <p class="profile-email">{{ userProfile?.email }}</p>
-          <p *ngIf="userProfile?.phone" class="profile-phone">{{ userProfile.phone }}</p>
+          <p *ngIf="userProfile?.phone && !userProfile.phone.startsWith('GOOGLE_')" class="profile-phone">{{ userProfile.phone }}</p>
         </div>
       </div>
 
@@ -240,9 +244,9 @@ export interface Booking {
     .profile-avatar {
       width: 120px;
       height: 120px;
-      border-radius: 50%;
+      border-radius: var(--border-radius-full);
       overflow: hidden;
-      background: #e5e7eb;
+      background: var(--bg-tertiary);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -257,7 +261,7 @@ export interface Booking {
     .avatar-placeholder {
       font-size: 48px;
       font-weight: 600;
-      color: #667eea;
+      color: var(--bmw-primary);
     }
 
     .profile-info {
@@ -267,71 +271,77 @@ export interface Booking {
     .profile-name {
       font-size: 32px;
       font-weight: 700;
-      color: #1f2937;
+      color: var(--text-primary);
       margin: 0 0 8px 0;
     }
 
     .profile-email {
       font-size: 16px;
-      color: #6b7280;
+      color: var(--text-secondary);
       margin: 0 0 4px 0;
     }
 
     .profile-phone {
       font-size: 16px;
-      color: #6b7280;
+      color: var(--text-secondary);
       margin: 0;
     }
 
     .bookings-section {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow-md);
       padding: 32px;
     }
 
     .section-title {
       font-size: 24px;
       font-weight: 700;
-      color: #1f2937;
+      color: var(--text-primary);
       margin: 0 0 24px 0;
     }
 
     .loading {
       text-align: center;
       padding: 40px;
-      color: #6b7280;
+      color: var(--text-secondary);
     }
 
     .empty-state {
       text-align: center;
-      padding: 60px 20px;
+      padding: var(--spacing-4xl) var(--spacing-xl);
+      background: var(--bg-primary);
+      border-radius: var(--border-radius-lg);
+      border: 1px dashed var(--border-secondary);
     }
 
     .empty-icon {
-      font-size: 60px;
-      margin-bottom: 16px;
+      font-size: 4rem;
+      margin-bottom: var(--spacing-lg);
+      opacity: 0.4;
+      color: var(--text-tertiary);
     }
 
     .empty-state p {
-      color: #6b7280;
-      font-size: 16px;
-      margin-bottom: 24px;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      margin-bottom: var(--spacing-lg);
     }
 
     .btn-primary {
       display: inline-block;
       padding: 12px 24px;
-      background: #667eea;
-      color: white;
+      background: var(--bmw-primary);
+      color: var(--text-on-blue);
       text-decoration: none;
-      border-radius: 8px;
+      border-radius: var(--border-radius-md);
       font-weight: 500;
-      transition: background 0.2s;
+      transition: background var(--transition-fast);
     }
 
     .btn-primary:hover {
-      background: #5568d3;
+      background: var(--bmw-secondary);
     }
 
     .bookings-list {
@@ -341,20 +351,24 @@ export interface Booking {
     }
 
     .booking-card {
-      border: 2px solid #e5e7eb;
-      border-radius: 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--border-radius-lg);
       padding: 20px;
-      transition: all 0.2s;
+      transition: all var(--transition-fast);
+      box-shadow: var(--shadow-sm);
     }
 
     .booking-card:hover {
-      border-color: #667eea;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      border-color: var(--border-accent);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
     }
 
     .booking-card.past {
       opacity: 0.7;
-      background: #f9fafb;
+      background: var(--bg-primary);
+      border-color: var(--border-disabled);
     }
 
     .booking-header {
@@ -429,50 +443,50 @@ export interface Booking {
 
     .time-label, .duration-label, .notes-label, .reason-label {
       font-weight: 600;
-      color: #6b7280;
+      color: var(--text-secondary);
       min-width: 120px;
     }
 
     .time-value, .duration-value, .notes-value, .reason-value {
-      color: #1f2937;
+      color: var(--text-primary);
     }
 
     .booking-actions {
       margin-top: 16px;
       padding-top: 16px;
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid var(--border-primary);
     }
 
     .btn-cancel {
       padding: 8px 16px;
-      background: #fee2e2;
-      color: #991b1b;
+      background: var(--status-error-bg);
+      color: var(--status-error-text);
       border: none;
-      border-radius: 6px;
+      border-radius: var(--border-radius-sm);
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all var(--transition-fast);
     }
 
-    .btn-cancel:hover {
-      background: #ef4444;
+    .btn-cancel:hover:not(:disabled) {
+      background: var(--status-error);
       color: white;
     }
 
     .btn-rate {
       padding: 8px 16px;
-      background: #dbeafe;
-      color: #1e40af;
+      background: var(--status-info-bg);
+      color: var(--status-info-text);
       border: none;
-      border-radius: 6px;
+      border-radius: var(--border-radius-sm);
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all var(--transition-fast);
     }
 
-    .btn-rate:hover {
-      background: #3b82f6;
-      color: white;
+    .btn-rate:hover:not(:disabled) {
+      background: var(--bmw-primary);
+      color: var(--text-on-blue);
     }
 
     .modal-overlay {
@@ -499,12 +513,12 @@ export interface Booking {
     .modal-content h3 {
       font-size: 24px;
       font-weight: 700;
-      color: #1f2937;
+      color: var(--text-primary);
       margin: 0 0 16px 0;
     }
 
     .modal-content p {
-      color: #6b7280;
+      color: var(--text-secondary);
       margin-bottom: 24px;
     }
 
@@ -515,22 +529,23 @@ export interface Booking {
     .form-group label {
       display: block;
       font-weight: 600;
-      color: #1f2937;
+      color: var(--text-primary);
       margin-bottom: 8px;
     }
 
     .form-group textarea {
       width: 100%;
       padding: 12px;
-      border: 2px solid #e5e7eb;
-      border-radius: 8px;
+      border: 2px solid var(--border-primary);
+      border-radius: var(--border-radius-md);
       font-family: inherit;
       resize: vertical;
     }
 
     .form-group textarea:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: var(--border-accent);
+      box-shadow: var(--shadow-focus);
     }
 
     .modal-actions {
@@ -541,37 +556,41 @@ export interface Booking {
 
     .btn-secondary {
       padding: 10px 20px;
-      background: #f3f4f6;
-      color: #374151;
-      border: none;
-      border-radius: 8px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--border-radius-md);
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all var(--transition-fast);
     }
 
-    .btn-secondary:hover {
-      background: #e5e7eb;
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--bg-hover);
+      border-color: var(--border-accent);
     }
 
     .btn-danger {
       padding: 10px 20px;
-      background: #ef4444;
+      background: var(--status-error);
       color: white;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--border-radius-md);
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all var(--transition-fast);
     }
 
     .btn-danger:hover:not(:disabled) {
-      background: #dc2626;
+      background: #DC2626;
+      box-shadow: var(--shadow-md);
     }
 
     .btn-danger:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
+      background: var(--bg-tertiary);
+      color: var(--text-tertiary);
     }
 
     .star-rating {
@@ -631,19 +650,34 @@ export class ProfileComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private apiService: ApiService,
-    private bookingService: BookingService
+    private bookingService: BookingService,
+    private httpService: HttpService
   ) {}
 
   async ngOnInit() {
     this.loading = true;
     try {
+      // Check if user profile is already loaded
       this.userProfile = this.authService.getUserProfile();
       
+      // If no profile, try to load from API (handles httpOnly cookie from OAuth)
       if (!this.userProfile) {
-        this.authService.userProfile$.subscribe(profile => {
-          this.userProfile = profile;
-        });
+        try {
+          const profile = await firstValueFrom(this.httpService.get<UserProfile>('/auth/me'));
+          if (profile) {
+            this.userProfile = profile;
+            // Update auth service state
+            (this.authService as any).userProfileSubject.next(profile);
+          }
+        } catch (error) {
+          console.error('Failed to load user profile:', error);
+        }
       }
+
+      // Subscribe to profile changes
+      this.authService.userProfile$.subscribe(profile => {
+        this.userProfile = profile;
+      });
 
       await this.loadBookings();
     } catch (error) {
@@ -655,7 +689,7 @@ export class ProfileComponent implements OnInit {
 
   async loadBookings() {
     try {
-      const bookings = await this.apiService.getMyBookings().toPromise();
+      const bookings = await firstValueFrom(this.apiService.getMyBookings());
       // Map the API response to match our Booking interface
       this.bookings = (bookings || []).map((booking: any) => ({
         id: booking.id,
@@ -688,27 +722,37 @@ export class ProfileComponent implements OnInit {
     return name[0].toUpperCase();
   }
 
-  formatDateTime(dateString: string): string {
-    return new Date(dateString).toLocaleString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  formatDateTime(datetimeString: string): string {
+    // Extract date and time parts
+    const date = extractDateFromDateTime(datetimeString);
+    const time = extractTime(datetimeString);
+    
+    if (!date || !time) {
+      return '';
+    }
+    
+    // Format date part
+    const [year, month, day] = date.split('-').map(Number);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    // Get day of week (0=Sunday, 6=Saturday)
+    const dateObj = new Date(Date.UTC(year, month - 1, day));
+    const dayOfWeek = dayNames[dateObj.getUTCDay()];
+    
+    const formattedDate = `${dayOfWeek}, ${monthNames[month - 1]} ${day}, ${year}`;
+    const formattedTime = formatTimeToAMPM(time);
+    
+    return `${formattedDate}, ${formattedTime}`;
   }
 
   formatDuration(start: string, end: string): string {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const diffMs = endDate.getTime() - startDate.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const diffMins = calculateDurationMinutes(start, end);
     return `${diffMins} minutes`;
   }
 
   isPastBooking(booking: Booking): boolean {
-    return new Date(booking.start_time) < new Date();
+    return isPastDateTime(booking.start_time);
   }
 
   getUpcomingBookings(): Booking[] {
@@ -723,7 +767,7 @@ export class ProfileComponent implements OnInit {
     if (booking.status === 'cancelled' || booking.status === 'completed') {
       return false;
     }
-    return new Date(booking.start_time) > new Date();
+    return !isPastDateTime(booking.start_time);
   }
 
   canRateBooking(booking: Booking): boolean {
@@ -747,7 +791,7 @@ export class ProfileComponent implements OnInit {
 
     this.cancelling = true;
     try {
-      await this.apiService.cancelBooking(this.selectedBooking.id, this.cancelReason).toPromise();
+      await firstValueFrom(this.apiService.cancelBooking(this.selectedBooking.id, this.cancelReason));
       this.closeCancelModal();
       await this.loadBookings();
     } catch (error: any) {
@@ -775,7 +819,7 @@ export class ProfileComponent implements OnInit {
   async submitRating() {
     if (!this.selectedBooking) return;
     try {
-      const res = await this.apiService.submitRating(this.selectedBooking.id, this.ratingValue, this.ratingComments).toPromise();
+      const res = await firstValueFrom(this.apiService.submitRating(this.selectedBooking.id, this.ratingValue, this.ratingComments));
       this.closeRatingModal();
       await this.loadBookings();
       alert('Thank you for your rating!');

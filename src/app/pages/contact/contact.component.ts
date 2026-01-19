@@ -38,10 +38,10 @@ export class ContactComponent implements OnInit {
   updateContactInfo() {
     if (!this.settings) return;
     this.contactInfo = [
-      { icon: '📞', title: 'Phone', value: this.settings.contact_phone, link: `tel:${this.settings.contact_phone}` },
-      { icon: '📧', title: 'Email', value: this.settings.contact_email, link: `mailto:${this.settings.contact_email}` },
-      { icon: '📍', title: 'Location', value: this.settings.contact_address, link: '#' },
-      { icon: '🕐', title: 'Hours', value: 'Mon-Sat: 9 AM - 9 PM', link: '#' }
+      { icon: 'phone', title: 'Phone', value: this.settings.contact_phone, link: `tel:${this.settings.contact_phone}` },
+      { icon: 'email', title: 'Email', value: this.settings.contact_email, link: `mailto:${this.settings.contact_email}` },
+      { icon: 'location', title: 'Location', value: this.settings.contact_address, link: '#' },
+      { icon: 'hours', title: 'Hours', value: 'Mon-Sat: 9 AM - 9 PM', link: '#' }
     ];
   }
 
@@ -59,10 +59,10 @@ export class ContactComponent implements OnInit {
   ];
 
   socialLinks = [
-    { icon: '📘', name: 'Facebook', url: '#' },
-    { icon: '📸', name: 'Instagram', url: '#' },
-    { icon: '🐦', name: 'Twitter', url: '#' },
-    { icon: '💼', name: 'LinkedIn', url: '#' }
+    { icon: 'facebook', name: 'Facebook', url: '#' },
+    { icon: 'instagram', name: 'Instagram', url: '#' },
+    { icon: 'twitter', name: 'Twitter', url: '#' },
+    { icon: 'linkedin', name: 'LinkedIn', url: '#' }
   ];
 
   onSubmit() {

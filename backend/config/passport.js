@@ -27,44 +27,64 @@ passport.use(new GoogleStrategy({
           [email]
         );
 
-      if (result.rows.length === 0) {
-        // Create new user
-        console.log(`[Google Auth] Creating new user: ${email}`);
-        result = await db.query(
-          `INSERT INTO profiles (email, full_name, google_id, provider_id, auth_provider, avatar_url, role)
-           VALUES ($1, $2, $3, $4, 'google', $5, 'customer')
-           RETURNING *`,
-          [email, name, googleId, googleId, avatarUrl]
-        );
-        console.log(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
-      } else {
-        // Update existing user with Google info
-        console.log(`[Google Auth] Updating existing user: ${email}`);
-        result = await db.query(
-          `UPDATE profiles 
-           SET google_id = $1, provider_id = $1, auth_provider = 'google', avatar_url = COALESCE($2, avatar_url)
-           WHERE email = $3 
-           RETURNING *`,
-          [googleId, avatarUrl, email]
-        );
-        console.log(`[Google Auth] User updated with ID: ${result.rows[0].id}`);
-      }
-    } else {
-      // Update provider_id if not set (migration helper)
-      if (!result.rows[0].provider_id) {
+        if (result.rows.length === 0) {
+          // Create new user
+          console.log(`[Google Auth] Creating new user: ${email}`);
+          // Generate a unique phone number for OAuth users (format: GOOGLE_<googleId>)
+          const phoneNumber = `GOOGLE_${googleId}`;
+          result = await db.query(
+            `INSERT INTO profiles (email, full_name, google_id, provider_id, auth_provider, avatar_url, role, phone)
+             VALUES ($1, $2, $3, $4, 'google', $5, 'customer', $6)
+             RETURNING *`,
+            [email, name, googleId, googleId, avatarUrl, phoneNumber]
+          );
+          console.log(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
+        } else {
+          // Update existing user with Google info
+          console.log(`[Google Auth] Updating existing user: ${email}`);
+          // If user doesn't have a phone number, set one for OAuth users
+          const existingUser = result.rows[0];
+          const phoneNumber = existingUser.phone || `GOOGLE_${googleId}`;
           result = await db.query(
             `UPDATE profiles 
-             SET provider_id = $1, auth_provider = 'google', avatar_url = COALESCE(avatar_url, $2)
-             WHERE id = $3 
+             SET google_id = $1, provider_id = $1, auth_provider = 'google', 
+                 avatar_url = COALESCE($2, avatar_url), phone = COALESCE(phone, $3)
+             WHERE email = $4 
              RETURNING *`,
-            [googleId, avatarUrl, result.rows[0].id]
+            [googleId, avatarUrl, phoneNumber, email]
           );
-        } else if (avatarUrl && result.rows[0].avatar_url !== avatarUrl) {
-          // Update avatar if changed
+          console.log(`[Google Auth] User updated with ID: ${result.rows[0].id}`);
+        }
+      } else {
+        // User found by provider_id/google_id - ensure phone exists
+        const existingUser = result.rows[0];
+        if (!existingUser.phone) {
+          // Set phone if missing
+          const phoneNumber = `GOOGLE_${googleId}`;
           result = await db.query(
-            `UPDATE profiles SET avatar_url = $1 WHERE id = $2 RETURNING *`,
-            [avatarUrl, result.rows[0].id]
+            `UPDATE profiles 
+             SET phone = $1, updated_at = NOW()
+             WHERE id = $2 
+             RETURNING *`,
+            [phoneNumber, existingUser.id]
           );
+        } else {
+          // Update provider_id if not set (migration helper)
+          if (!existingUser.provider_id) {
+            result = await db.query(
+              `UPDATE profiles 
+               SET provider_id = $1, auth_provider = 'google', avatar_url = COALESCE(avatar_url, $2)
+               WHERE id = $3 
+               RETURNING *`,
+              [googleId, avatarUrl, existingUser.id]
+            );
+          } else if (avatarUrl && existingUser.avatar_url !== avatarUrl) {
+            // Update avatar if changed
+            result = await db.query(
+              `UPDATE profiles SET avatar_url = $1 WHERE id = $2 RETURNING *`,
+              [avatarUrl, existingUser.id]
+            );
+          }
         }
       }
 
