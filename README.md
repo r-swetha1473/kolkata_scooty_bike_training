@@ -143,11 +143,11 @@ npm run dev
 **Terminal 2 - Frontend:**
 ```bash
 npm start
-# Frontend runs on https://kolkata-scooty-bike-training-r0iv3gqny-r-swetha1473s-projects.vercel.app/```
+# Frontend runs on https://kolkata-scooty-bike-training.vercel.app/```
 
 ### 7. Access the Application
 
-- **Customer Portal**: https://kolkata-scooty-bike-training-r0iv3gqny-r-swetha1473s-projects.vercel.app/- **Admin Panel**: http://localhost:4200/admin/login
+- **Customer Portal**: https://kolkata-scooty-bike-training.vercel.app/- **Admin Panel**: http://localhost:4200/admin/login
 - **API**: https://kolkata-scooty-bike-training-1ild.onrender.com/api
 
 ## 📁 Project Structure

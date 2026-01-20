@@ -28,9 +28,22 @@ app.use(helmet());
 // CORS configuration: allow main frontend, preview frontend and local Angular dev
 // FRONTEND_URL          -> main production frontend
 // FRONTEND_URL_PREVIEW  -> Vercel preview / staging frontend (optional)
+//
+// Note: Normalize URLs to avoid mismatches due to trailing slashes.
+const normalizeOrigin = (url) => {
+  if (!url) return url;
+  try {
+    // Some environments may pass full URLs, others just origin strings.
+    // We always strip exactly one trailing slash, if present.
+    return url.replace(/\/$/, '');
+  } catch {
+    return url;
+  }
+};
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.FRONTEND_URL_PREVIEW,
+  normalizeOrigin(process.env.FRONTEND_URL),
+  normalizeOrigin(process.env.FRONTEND_URL_PREVIEW),
   'http://localhost:4200'
 ].filter(Boolean);
 
@@ -40,9 +53,20 @@ app.use(cors({
     if (!origin) {
       return callback(null, true);
     }
-    if (allowedOrigins.includes(origin)) {
+
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    // Exact match against allowed origins
+    if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
+
+    // Optionally allow any Vercel deployment of this app
+    if (normalizedOrigin.endsWith('kolkata-scooty-bike-training.vercel.app')) {
+      return callback(null, true);
+    }
+
+    console.warn('Blocked CORS origin:', origin);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
