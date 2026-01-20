@@ -7,9 +7,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for potential build steps)
+# Install production dependencies only
 # Using --no-audit and --no-fund to reduce memory usage during install
-RUN npm ci --only=production --no-audit --no-fund && \
+RUN npm ci --omit=dev --no-audit --no-fund && \
     npm cache clean --force
 
 # Stage 2: Production image
