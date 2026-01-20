@@ -28,7 +28,7 @@ export interface SiteSettings {
   providedIn: 'root'
 })
 export class SettingsService {
-  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training.onrender.com/api';
+  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training-1ild.onrender.com/api';
   private settingsSubject = new BehaviorSubject<SiteSettings>({
     site_name: 'Kolkata Scotty',
     site_logo: '',

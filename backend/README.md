@@ -66,7 +66,7 @@ node apply_migration.js ../supabase/migrations/20250103000000_migrate_to_direct_
 npm run dev
 ```
 
-Backend runs on `https://kolkata-scooty-bike-training.onrender.com`
+Backend runs on `https://kolkata-scooty-bike-training-1ild.onrender.com`
 
 ## 📁 Project Structure
 
@@ -158,16 +158,16 @@ SMTP_FROM=noreply@kolkatascotty.com
 
 ```bash
 # Health check
-curl https://kolkata-scooty-bike-training.onrender.com/api/health
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/health
 
 # Get trainers
-curl https://kolkata-scooty-bike-training.onrender.com/api/trainers
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/trainers
 
 # Get slots for a date
-curl https://kolkata-scooty-bike-training.onrender.com/api/slots/date/2025-01-15
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/slots/date/2025-01-15
 
 # Admin login (returns JWT token)
-curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/auth/login \
+curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"password"}'
 ```

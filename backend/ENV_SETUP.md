@@ -54,7 +54,7 @@ Required for user authentication via Google Sign-In.
 |----------|-------------|---------|
 | `GOOGLE_CLIENT_ID` | Google OAuth Client ID | `123456789-abc.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | `GOCSPX-abc123...` |
-| `GOOGLE_CALLBACK_URL` | OAuth callback URL | `https://kolkata-scooty-bike-training.onrender.com/api/auth/google/callback` |
+| `GOOGLE_CALLBACK_URL` | OAuth callback URL | `https://kolkata-scooty-bike-training-1ild.onrender.com/api/auth/google/callback` |
 
 #### How to Get Google OAuth Credentials:
 
@@ -65,7 +65,7 @@ Required for user authentication via Google Sign-In.
 5. Configure consent screen (if first time)
 6. Application type: **Web application**
 7. Add **Authorized redirect URIs**:
-   - Development: `https://kolkata-scooty-bike-training.onrender.com/api/auth/google/callback`
+   - Development: `https://kolkata-scooty-bike-training-1ild.onrender.com/api/auth/google/callback`
    - Production: `https://yourdomain.com/api/auth/google/callback`
 8. Copy **Client ID** and **Client Secret** to `.env`
 

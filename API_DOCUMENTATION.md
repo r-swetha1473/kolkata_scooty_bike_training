@@ -672,20 +672,20 @@ Exceeding this limit will result in `429 Too Many Requests` response.
 
 1. **Login as admin:**
    ```bash
-   curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/auth/login \
+   curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/auth/login \
      -H "Content-Type: application/json" \
      -d '{"email": "admin@kolkatascotty.com", "password": "admin123"}'
    ```
 
 2. **Get statistics:**
    ```bash
-   curl -X GET https://kolkata-scooty-bike-training.onrender.com/api/admin/stats \
+   curl -X GET https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin/stats \
      -H "Authorization: Bearer YOUR_TOKEN"
    ```
 
 3. **Create a trainer:**
    ```bash
-   curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/admin/trainers \
+   curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin/trainers \
      -H "Authorization: Bearer YOUR_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"email": "trainer@example.com", "full_name": "Test Trainer", "bio": "Test bio", "experience_years": 5}'
@@ -693,7 +693,7 @@ Exceeding this limit will result in `429 Too Many Requests` response.
 
 4. **Create a slot:**
    ```bash
-   curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/admin/slots \
+   curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin/slots \
      -H "Authorization: Bearer YOUR_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"trainer_id": "TRAINER_ID", "start_time": "2025-11-05T14:00:00Z", "end_time": "2025-11-05T15:00:00Z", "capacity": 3}'
@@ -701,7 +701,7 @@ Exceeding this limit will result in `429 Too Many Requests` response.
 
 5. **Update booking status:**
    ```bash
-   curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin/bookings/BOOKING_ID/status \
+   curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin/bookings/BOOKING_ID/status \
      -H "Authorization: Bearer YOUR_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"status": "confirmed"}'

@@ -27,7 +27,7 @@ export interface Trainer {
   providedIn: 'root'
 })
 export class TrainerService {
-  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training.onrender.com/api';
+  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training-1ild.onrender.com/api';
 
   constructor(private http: HttpClient) {}
 

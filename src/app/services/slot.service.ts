@@ -34,7 +34,7 @@ export interface Slot {
   providedIn: 'root'
 })
 export class SlotService {
-  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training.onrender.com/api';
+  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training-1ild.onrender.com/api';
 
   constructor(private http: HttpClient) {}
 

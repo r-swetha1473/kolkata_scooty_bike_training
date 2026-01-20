@@ -128,7 +128,7 @@ node apply_migration.js
 2. Create a new project or select existing
 3. Enable Google+ API
 4. Create OAuth 2.0 credentials
-5. Add authorized redirect URI: `https://kolkata-scooty-bike-training.onrender.com/api/auth/google/callback` (development)
+5. Add authorized redirect URI: `https://kolkata-scooty-bike-training-1ild.onrender.com/api/auth/google/callback` (development)
 6. Copy Client ID and Secret to `backend/.env`
 
 ### 6. Run Development Servers
@@ -137,7 +137,7 @@ node apply_migration.js
 ```bash
 cd backend
 npm run dev
-# Backend runs on https://kolkata-scooty-bike-training.onrender.com
+# Backend runs on https://kolkata-scooty-bike-training-1ild.onrender.com
 ```
 
 **Terminal 2 - Frontend:**
@@ -148,7 +148,7 @@ npm start
 ### 7. Access the Application
 
 - **Customer Portal**: https://kolkata-scooty-bike-training-r0iv3gqny-r-swetha1473s-projects.vercel.app/- **Admin Panel**: http://localhost:4200/admin/login
-- **API**: https://kolkata-scooty-bike-training.onrender.com/api
+- **API**: https://kolkata-scooty-bike-training-1ild.onrender.com/api
 
 ## 📁 Project Structure
 
@@ -223,16 +223,16 @@ See **[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)** for complete API endpoint
 
 ### Backend Health Check
 ```bash
-curl https://kolkata-scooty-bike-training.onrender.com/api/health
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/health
 ```
 
 ### Test API Endpoints
 ```bash
 # Get trainers
-curl https://kolkata-scooty-bike-training.onrender.com/api/trainers
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/trainers
 
 # Get slots for a date
-curl https://kolkata-scooty-bike-training.onrender.com/api/slots/date/2025-01-15
+curl https://kolkata-scooty-bike-training-1ild.onrender.com/api/slots/date/2025-01-15
 ```
 
 ## 🐛 Troubleshooting

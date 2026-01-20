@@ -263,7 +263,7 @@ CREATE TABLE admins (
 ### Change Own Password
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/change-password \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/change-password \
   -H "Authorization: Bearer <admin_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -291,7 +291,7 @@ curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-manageme
 ### Reset Admin Password (SUPER_ADMIN)
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/reset-password/<admin_id> \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/reset-password/<admin_id> \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{

@@ -382,7 +382,7 @@ router.delete('/delete/:id', authorizeAdmin('SUPER_ADMIN'), handler);
 ### Create Admin (SUPER_ADMIN only)
 
 ```bash
-curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/admin-management/create \
+curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/create \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -397,14 +397,14 @@ curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/admin-managem
 ### List All Admins
 
 ```bash
-curl -X GET "https://kolkata-scooty-bike-training.onrender.com/api/admin-management/list?role=ADMIN&is_active=true" \
+curl -X GET "https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/list?role=ADMIN&is_active=true" \
   -H "Authorization: Bearer <superadmin_token>"
 ```
 
 ### Update Admin
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/update/<admin_id> \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/update/<admin_id> \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -416,7 +416,7 @@ curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-manageme
 ### Reset Password
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/reset-password/<admin_id> \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/reset-password/<admin_id> \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -427,7 +427,7 @@ curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-manageme
 ### Delete Admin
 
 ```bash
-curl -X DELETE https://kolkata-scooty-bike-training.onrender.com/api/admin-management/delete/<admin_id> \
+curl -X DELETE https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/delete/<admin_id> \
   -H "Authorization: Bearer <superadmin_token>"
 ```
 
@@ -457,7 +457,7 @@ node create_admin.js superadmin@example.com SuperAdminPass123 superadmin
 ```bash
 # First, ensure superadmin exists in profiles table with password_hash
 # Then create admin account via API
-curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/admin-management/create \
+curl -X POST https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/create \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{

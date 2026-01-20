@@ -110,7 +110,7 @@
 ### Example 1: Change Own Password
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/change-password \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/change-password \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -140,7 +140,7 @@ curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-manageme
 ### Example 2: Reset Admin Password (SUPER_ADMIN)
 
 ```bash
-curl -X PUT https://kolkata-scooty-bike-training.onrender.com/api/admin-management/reset-password/550e8400-e29b-41d4-a716-446655440000 \
+curl -X PUT https://kolkata-scooty-bike-training-1ild.onrender.com/api/admin-management/reset-password/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer <superadmin_token>" \
   -H "Content-Type: application/json" \
   -d '{
