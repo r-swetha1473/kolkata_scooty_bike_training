@@ -60,7 +60,7 @@ export interface Booking {
   providedIn: 'root'
 })
 export class ApiService {
-  private apiUrl = environment.apiUrl || 'http://localhost:3000/api';
+  private apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training.onrender.com/api';
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 

@@ -284,7 +284,7 @@ HAVING COUNT(svc.id) = 0;
 
 ```bash
 # Test slot generation
-curl -X POST http://localhost:3000/api/slots/generate \
+curl -X POST https://kolkata-scooty-bike-training.onrender.com/api/slots/generate \
   -H "Authorization: Bearer <admin_token>" \
   -H "Content-Type: application/json" \
   -d '{"date": "2026-01-25"}'

@@ -48,7 +48,7 @@ Backend Deployment (Node/Express)
    pm2 startup   # follows instructions to persist across reboots
 
 3) Health check
-   curl -I http://localhost:3000/health   # if you have a health route
+   curl -I https://kolkata-scooty-bike-training.onrender.com/health   # if you have a health route
 
 Nginx Reverse Proxy (recommended)
 1) Create site config (example):

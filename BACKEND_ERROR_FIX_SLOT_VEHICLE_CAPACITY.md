@@ -539,7 +539,7 @@ node backend/apply_migration.js supabase/migrations/20260124000000_create_slot_v
 node -e "const db = require('./backend/db'); db.query('SELECT COUNT(*) FROM slot_vehicle_capacity').then(r => { console.log('Records:', r.rows[0].count); process.exit(0); });"
 
 # 3. Test API endpoint
-curl http://localhost:3000/api/slots/date/2026-01-19
+curl https://kolkata-scooty-bike-training.onrender.com/api/slots/date/2026-01-19
 ```
 
 ### 7.2 Expected Results
