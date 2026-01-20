@@ -24,8 +24,24 @@ const app = express();
 const events = require('./events');
 
 app.use(helmet());
+
+// CORS configuration: allow both deployed frontend and local Angular dev
+const allowedOrigins = [
+  process.env.FRONTEND_URL,      // e.g. Vercel URL in production
+  'http://localhost:4200'        // local Angular dev
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:4200',
+  origin: (origin, callback) => {
+    // Allow non-browser/SSR requests with no origin
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(cookieParser());
