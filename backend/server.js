@@ -25,10 +25,13 @@ const events = require('./events');
 
 app.use(helmet());
 
-// CORS configuration: allow both deployed frontend and local Angular dev
+// CORS configuration: allow main frontend, preview frontend and local Angular dev
+// FRONTEND_URL          -> main production frontend
+// FRONTEND_URL_PREVIEW  -> Vercel preview / staging frontend (optional)
 const allowedOrigins = [
-  process.env.FRONTEND_URL,      // e.g. Vercel URL in production
-  'http://localhost:4200'        // local Angular dev
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_PREVIEW,
+  'http://localhost:4200'
 ].filter(Boolean);
 
 app.use(cors({

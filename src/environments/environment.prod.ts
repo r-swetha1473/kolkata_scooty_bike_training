@@ -1,4 +1,5 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://your-api-domain.com/api'
+  // Production backend API on Render
+  apiUrl: 'https://kolkata-scooty-bike-training-1ild.onrender.com/api'
 };
