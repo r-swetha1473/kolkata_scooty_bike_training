@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build"
+    "start": "npx ng serve",
+    "build": "npx ng build"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",

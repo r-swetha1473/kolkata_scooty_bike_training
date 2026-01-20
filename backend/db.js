@@ -7,10 +7,19 @@ let pool;
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
 if (process.env.DATABASE_URL) {
-  // Use connection string if available
+  // Use connection string if available (Neon PostgreSQL uses DATABASE_URL)
+  // Neon requires SSL connections, so we enable SSL for production
+  const sslConfig = process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: false } // Required for Neon and most cloud PostgreSQL
+    : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false);
+  
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: sslConfig,
+    // Connection pool settings for production
+    max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
   });
   if (isDevelopment) {
     console.log('Database: Connected using DATABASE_URL');
@@ -23,7 +32,13 @@ if (process.env.DATABASE_URL) {
     database: String(process.env.DB_NAME || 'biketraining'),
     user: String(process.env.DB_USER || 'postgres'),
     password: process.env.DB_PASSWORD ? String(process.env.DB_PASSWORD) : undefined,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' 
+      ? { rejectUnauthorized: false } 
+      : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false),
+    // Connection pool settings
+    max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
   };
 
   // Log configuration (without password) for debugging in development only

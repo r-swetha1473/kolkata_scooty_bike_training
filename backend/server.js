@@ -138,7 +138,48 @@ app.get('/api/events', (req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0'; // Bind to 0.0.0.0 for Docker compatibility
+
+// Start server
+const server = app.listen(PORT, HOST, () => {
+  console.log(`Server running on ${HOST}:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = (signal) => {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  
+  server.close(() => {
+    console.log('HTTP server closed.');
+    
+    // Close database connections
+    const { pool } = require('./db');
+    pool.end(() => {
+      console.log('Database connections closed.');
+      process.exit(0);
+    });
+  });
+
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
 });

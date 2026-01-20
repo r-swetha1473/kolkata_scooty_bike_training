@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+*.md
+ENV_SETUP.md
+
+# Tests
+test
+*.test.js
+coverage
+
+# Development files
+.env.example
+env.example.txt
+
+# Logs
+logs
+*.log
+
+# Build artifacts
+dist
+build
+*.map
+
+# Misc
+.dockerignore
+Dockerfile
+docker-compose.yml

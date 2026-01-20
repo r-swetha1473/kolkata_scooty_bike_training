@@ -7,7 +7,9 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node migrations/run.js",
-    "test:endpoints": "NODE_ENV=test node test/endpoints.test.js"
+    "test:endpoints": "NODE_ENV=test node test/endpoints.test.js",
+    "docker:build": "docker build -t biketraining-backend .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env biketraining-backend"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
