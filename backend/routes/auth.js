@@ -110,9 +110,11 @@ router.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
+      const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
+
       // Ensure user data is stored (passport should have done this, but verify)
       if (!req.user || !req.user.id) {
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:4200'}/booking?error=auth_failed`);
+        return res.redirect(`${frontendUrl}/booking?error=auth_failed`);
       }
 
       // Fetch fresh user data from database to ensure we have latest
@@ -120,7 +122,7 @@ router.get('/google/callback',
       const userResult = await db.query('SELECT * FROM profiles WHERE id = $1', [req.user.id]);
       if (userResult.rows.length === 0) {
         console.error(`[Google OAuth Callback] User not found in database: ${req.user.id}`);
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:4200'}/booking?error=user_not_found`);
+        return res.redirect(`${frontendUrl}/booking?error=user_not_found`);
       }
 
       const user = userResult.rows[0];
@@ -133,8 +135,6 @@ router.get('/google/callback',
         { expiresIn: '7d' }
       );
 
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
-      
       // Store token in httpOnly cookie
       res.cookie('auth_token', token, {
         httpOnly: true,
@@ -144,10 +144,11 @@ router.get('/google/callback',
       });
       
       // Redirect to profile page without token in URL
+      console.log('Redirecting to:', `${frontendUrl}/profile`);
       res.redirect(`${frontendUrl}/profile`);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+      const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
       res.redirect(`${frontendUrl}/booking?error=auth_error`);
     }
   }
