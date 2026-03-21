@@ -8,6 +8,7 @@
 
 const db = require('../db');
 const config = require('../app.config');
+const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const {
   WEEKLY_BOOKING_LIMIT,
   BOOKING_WINDOW_HOURS,
@@ -29,9 +30,9 @@ const vehicleService = require('./vehicle.service');
  */
 async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, slotId = null, userId = null) {
   try {
-    const normalizedPhone = String(phone != null ? phone : '').replace(/\D/g, '');
+    const normalizedPhone = normalizeIndianMobileDigits(phone);
     
-    // Validate phone number format
+    // Validate phone number format (profiles may store +91 / 91 — normalize to 10 digits first)
     if (!config.booking.phoneNumberPattern.test(normalizedPhone)) {
       return {
         eligible: false,
@@ -118,7 +119,7 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
            FROM bookings b
            JOIN profiles p ON b.user_id = p.id
            JOIN slots s ON b.slot_id = s.id
-           WHERE p.phone = $1
+           WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1
              AND b.status NOT IN ('cancelled')
              AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
              AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
@@ -274,7 +275,7 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
             `SELECT b.id
              FROM bookings b
              JOIN profiles p ON b.user_id = p.id
-             WHERE p.phone = $1 AND b.slot_id = $2 AND b.status NOT IN ('cancelled')`,
+             WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1 AND b.slot_id = $2 AND b.status NOT IN ('cancelled')`,
             [normalizedPhone, slotId]
           );
 
@@ -341,15 +342,22 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
  */
 async function validateCancellationEligibility(phone, bookingId) {
   try {
-    const normalizedPhone = phone.replace(/\D/g, '');
-    
+    const normalizedPhone = normalizeIndianMobileDigits(phone);
+    if (!config.booking.phoneNumberPattern.test(normalizedPhone)) {
+      return {
+        eligible: false,
+        reason: 'INVALID_PHONE_FORMAT',
+        message: config.booking.phoneNumberErrorMessage
+      };
+    }
+
     // Find booking by phone number
     const bookingCheck = await db.query(
       `SELECT b.*, s.start_time
        FROM bookings b
        JOIN profiles p ON b.user_id = p.id
        JOIN slots s ON b.slot_id = s.id
-       WHERE p.phone = $1 AND b.id = $2`,
+       WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1 AND b.id = $2`,
       [normalizedPhone, bookingId]
     );
     

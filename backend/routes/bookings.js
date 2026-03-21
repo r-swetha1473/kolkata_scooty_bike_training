@@ -18,6 +18,7 @@ const { validateBookingEligibility, validateCancellationEligibility } = require(
 const vehicleService = require('../services/vehicle.service');
 const auditService = require('../services/audit.service');
 const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
+const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const router = express.Router();
 
 /** OAuth profiles use a synthetic phone (GOOGLE_<id>) until the user saves a real number. */
@@ -234,10 +235,17 @@ router.post(
         throw err;
       }
       
-      if (!isPlaceholderProfilePhone(user.phone) && phone !== user.phone) {
-        const err = new Error('Phone number must match your registered phone number. Only registered phone numbers can make bookings.');
-        err.status = 400;
-        throw err;
+      if (!isPlaceholderProfilePhone(user.phone)) {
+        const a = normalizeIndianMobileDigits(phone);
+        const b = normalizeIndianMobileDigits(user.phone);
+        if (a !== b || !a) {
+          const err = new Error(
+            'Phone number must match your registered mobile (same 10 digits as on your profile, with or without +91).'
+          );
+          err.status = 400;
+          err.errorCode = 'PHONE_MISMATCH';
+          throw err;
+        }
       }
       
       if (isPlaceholderProfilePhone(user.phone)) {
@@ -257,8 +265,8 @@ router.post(
       }
     }
     
-    // Use registered phone number (either existing or newly set)
-    const bookingPhone = phone || user.phone;
+    // Use registered phone number (either existing or newly set); normalize profile storage (+91, etc.)
+    const bookingPhone = phone || normalizeIndianMobileDigits(user.phone) || user.phone;
 
     // Get slot details for validation
     const slotCheck = await client.query(

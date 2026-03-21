@@ -1,15 +1,4 @@
-/**
- * Digits-only mobile; strips India country code (91) / leading 0 so validation sees 10 digits.
- */
-function normalizePhoneDigits(raw) {
-  if (raw == null || raw === '') return raw === '' ? '' : undefined;
-  let d = String(raw).replace(/\D/g, '');
-  if (d.length === 0) return '';
-  if (d.length === 12 && d.startsWith('91')) d = d.slice(2);
-  else if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
-  else if (d.length > 10) d = d.slice(-10);
-  return d;
-}
+const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 
 /**
  * Normalize POST /api/bookings JSON so validation and handlers always see snake_case strings.
@@ -40,8 +29,7 @@ function normalizeBookingCreateBody(req, res, next) {
   }
 
   if (b.phone != null && b.phone !== '') {
-    const normalized = normalizePhoneDigits(b.phone);
-    if (normalized !== undefined) b.phone = normalized;
+    b.phone = normalizeIndianMobileDigits(b.phone);
   }
 
   if (b.notes != null && typeof b.notes !== 'string') {
@@ -55,4 +43,4 @@ function normalizeBookingCreateBody(req, res, next) {
   next();
 }
 
-module.exports = { normalizeBookingCreateBody, normalizePhoneDigits };
+module.exports = { normalizeBookingCreateBody };
