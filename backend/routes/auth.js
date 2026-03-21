@@ -127,6 +127,7 @@ router.get('/google/callback',
 
       const user = userResult.rows[0];
       console.log(`[Google OAuth Callback] User found: ${user.email}, ID: ${user.id}, Role: ${user.role}`);
+      console.log('[Google OAuth Callback] req.user exists:', !!req.user);
 
       // Generate JWT token
       const token = jwt.sign(
@@ -139,13 +140,16 @@ router.get('/google/callback',
       res.cookie('auth_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        // Vercel frontend and Render backend are cross-site, so cookie must be None in production.
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
       
-      // Redirect to profile page without token in URL
-      console.log('Redirecting to:', `${frontendUrl}/profile`);
-      res.redirect(`${frontendUrl}/profile`);
+      // Fallback for browsers/environments where third-party cookies are blocked:
+      // include JWT in query once so Angular can store it and continue with Authorization header.
+      const redirectUrl = `${frontendUrl}/profile?token=${encodeURIComponent(token)}`;
+      console.log('Redirecting to:', redirectUrl);
+      res.redirect(redirectUrl);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
@@ -160,7 +164,7 @@ router.post('/logout', (req, res) => {
     res.clearCookie('auth_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict'
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
     });
     res.json({ message: 'Logged out successfully' });
   });

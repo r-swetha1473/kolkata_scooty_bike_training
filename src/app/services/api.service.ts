@@ -169,7 +169,8 @@ export class ApiService {
       vehicle_id: vehicleId,
       notes: notes || ''
     }, {
-      headers: this.getAuthHeaders()
+      headers: this.getAuthHeaders(),
+      withCredentials: true
     });
   }
 
@@ -179,7 +180,8 @@ export class ApiService {
 
   getMyBookings(): Observable<Booking[]> {
     return this.http.get<Booking[]>(`${this.apiUrl}/bookings/my-bookings`, {
-      headers: this.getAuthHeaders()
+      headers: this.getAuthHeaders(),
+      withCredentials: true
     });
   }
 
@@ -187,7 +189,8 @@ export class ApiService {
     return this.http.put(`${this.apiUrl}/bookings/${bookingId}/cancel`, {
       cancellation_reason: reason
     }, {
-      headers: this.getAuthHeaders()
+      headers: this.getAuthHeaders(),
+      withCredentials: true
     });
   }
 
@@ -197,7 +200,8 @@ export class ApiService {
       rating_value: ratingValue,
       comments: comments || ''
     }, {
-      headers: this.getAuthHeaders()
+      headers: this.getAuthHeaders(),
+      withCredentials: true
     });
   }
 

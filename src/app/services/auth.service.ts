@@ -29,7 +29,24 @@ export class AuthService {
     private http: HttpService,
     private router: Router
   ) {
+    this.captureOAuthTokenFromUrl();
     this.loadUserFromToken();
+  }
+
+  private captureOAuthTokenFromUrl(): void {
+    try {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token');
+      if (!token) {
+        return;
+      }
+
+      sessionStorage.setItem('token', token);
+      url.searchParams.delete('token');
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    } catch (error) {
+      console.error('Failed to capture OAuth token from URL:', error);
+    }
   }
 
   // Load user from token (sessionStorage) or httpOnly cookie
