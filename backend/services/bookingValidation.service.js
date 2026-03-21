@@ -29,8 +29,7 @@ const vehicleService = require('./vehicle.service');
  */
 async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, slotId = null, userId = null) {
   try {
-    // Normalize phone number (remove spaces, ensure 10 digits)
-    const normalizedPhone = phone.replace(/\D/g, '');
+    const normalizedPhone = String(phone != null ? phone : '').replace(/\D/g, '');
     
     // Validate phone number format
     if (!config.booking.phoneNumberPattern.test(normalizedPhone)) {
@@ -101,21 +100,30 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       };
     }
     
-    // Check 2: Weekly booking limit (per phone number)
-    // PHASE 5: Fix LB-004 - Count bookings by slot_date (when slot occurs) instead of created_at (when booking was made)
-    // This prevents gaming the system by booking slots for different weeks on the same day
-    // Count bookings by phone number where slot_date falls in current week (Monday to Sunday)
-    const weeklyBookingsResult = await db.query(
-      `SELECT COUNT(*) as count
-       FROM bookings b
-       JOIN profiles p ON b.user_id = p.id
-       JOIN slots s ON b.slot_id = s.id
-       WHERE p.phone = $1
-         AND b.status NOT IN ('cancelled')
-         AND s.slot_date >= date_trunc('week', CURRENT_DATE)
-         AND s.slot_date < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'`,
-      [normalizedPhone]
-    );
+    // Check 2: Weekly booking limit — use user_id when provided so counts stay correct inside a DB transaction
+    // (phone on profiles may not be committed yet when validation runs on another pool connection).
+    const weeklyBookingsResult = userId
+      ? await db.query(
+          `SELECT COUNT(*)::int as count
+           FROM bookings b
+           JOIN slots s ON b.slot_id = s.id
+           WHERE b.user_id = $1
+             AND b.status NOT IN ('cancelled')
+             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
+             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
+          [userId]
+        )
+      : await db.query(
+          `SELECT COUNT(*)::int as count
+           FROM bookings b
+           JOIN profiles p ON b.user_id = p.id
+           JOIN slots s ON b.slot_id = s.id
+           WHERE p.phone = $1
+             AND b.status NOT IN ('cancelled')
+             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
+             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
+          [normalizedPhone]
+        );
     
     const weeklyBookingsCount = parseInt(weeklyBookingsResult.rows[0]?.count || 0, 10);
     if (weeklyBookingsCount >= WEEKLY_BOOKING_LIMIT) {
@@ -127,43 +135,49 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       };
     }
     
-    // Check 3: Total slot entitlement (if userId provided)
+    // Check 3: student_entitlements (optional table — skip if missing)
     if (userId) {
-      const entitlementCheck = await db.query(
-        `SELECT total_slots, used_slots, expiry_date, first_booking_date
-         FROM student_entitlements 
-         WHERE user_id = $1`,
-        [userId]
-      );
-      
-      if (entitlementCheck.rows.length > 0) {
-        const entitlement = entitlementCheck.rows[0];
-        const currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
-        
-        // Check if entitlement has expired
-        if (entitlement.expiry_date) {
-          const expiryDate = new Date(entitlement.expiry_date);
-          expiryDate.setHours(0, 0, 0, 0);
-          
-          if (currentDate > expiryDate) {
+      try {
+        const entitlementCheck = await db.query(
+          `SELECT total_slots, used_slots, expiry_date, first_booking_date
+           FROM student_entitlements 
+           WHERE user_id = $1`,
+          [userId]
+        );
+
+        if (entitlementCheck.rows.length > 0) {
+          const entitlement = entitlementCheck.rows[0];
+          const currentDate = new Date();
+          currentDate.setHours(0, 0, 0, 0);
+
+          if (entitlement.expiry_date) {
+            const expiryDate = new Date(entitlement.expiry_date);
+            expiryDate.setHours(0, 0, 0, 0);
+
+            if (currentDate > expiryDate) {
+              return {
+                eligible: false,
+                reason: 'ENTITLEMENT_EXPIRED',
+                message: `Your booking entitlement has expired on ${expiryDate.toLocaleDateString()}. Please contact support to renew your entitlements.`,
+                details: { expiryDate: entitlement.expiry_date }
+              };
+            }
+          }
+
+          if (entitlement.used_slots >= entitlement.total_slots) {
             return {
               eligible: false,
-              reason: 'ENTITLEMENT_EXPIRED',
-              message: `Your booking entitlement has expired on ${expiryDate.toLocaleDateString()}. Please contact support to renew your entitlements.`,
-              details: { expiryDate: entitlement.expiry_date }
+              reason: 'QUOTA_EXHAUSTED',
+              message: `You have used all your available booking slots (${entitlement.used_slots}/${entitlement.total_slots}). Please contact support to add more slots.`,
+              details: { usedSlots: entitlement.used_slots, totalSlots: entitlement.total_slots }
             };
           }
         }
-        
-        // Check if all slots have been used
-        if (entitlement.used_slots >= entitlement.total_slots) {
-          return {
-            eligible: false,
-            reason: 'QUOTA_EXHAUSTED',
-            message: `You have used all your available booking slots (${entitlement.used_slots}/${entitlement.total_slots}). Please contact support to add more slots.`,
-            details: { usedSlots: entitlement.used_slots, totalSlots: entitlement.total_slots }
-          };
+      } catch (entErr) {
+        if (entErr.code === '42P01' || (entErr.message && entErr.message.includes('does not exist'))) {
+          // Table not deployed — ignore
+        } else {
+          throw entErr;
         }
       }
     }
@@ -248,18 +262,22 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       }
     }
     
-    // Check 5: Prevent duplicate booking for same phone + slot
+    // Check 5: duplicate booking (prefer user_id — same transaction / phone-update safety)
     if (slotId) {
-      const duplicateCheck = await db.query(
-        `SELECT b.id
-         FROM bookings b
-         JOIN profiles p ON b.user_id = p.id
-         WHERE p.phone = $1
-           AND b.slot_id = $2
-           AND b.status NOT IN ('cancelled')`,
-        [normalizedPhone, slotId]
-      );
-      
+      const duplicateCheck = userId
+        ? await db.query(
+            `SELECT b.id FROM bookings b
+             WHERE b.user_id = $1 AND b.slot_id = $2 AND b.status NOT IN ('cancelled')`,
+            [userId, slotId]
+          )
+        : await db.query(
+            `SELECT b.id
+             FROM bookings b
+             JOIN profiles p ON b.user_id = p.id
+             WHERE p.phone = $1 AND b.slot_id = $2 AND b.status NOT IN ('cancelled')`,
+            [normalizedPhone, slotId]
+          );
+
       if (duplicateCheck.rows.length > 0) {
         return {
           eligible: false,
@@ -289,11 +307,24 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
     };
     
   } catch (error) {
-    console.error('[BookingValidation] Error validating booking eligibility:', error);
+    console.error('[BookingValidation] Error validating booking eligibility:', {
+      message: error.message,
+      code: error.code,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+    const hint =
+      error.code === '42P01'
+        ? ' Database table missing (run migrations).'
+        : '';
+    const detail =
+      process.env.NODE_ENV === 'development' && error.message
+        ? ` (${error.message})`
+        : '';
     return {
       eligible: false,
       reason: 'VALIDATION_ERROR',
-      message: 'An error occurred while validating booking eligibility',
+      message: `Booking validation failed.${hint}${detail}`.trim(),
+      errorCode: error.code || 'VALIDATION_EXCEPTION',
       error: error.message
     };
   }

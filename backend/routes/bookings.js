@@ -260,7 +260,7 @@ router.post('/', authenticate, logPostBookingRequest, validateBookingCreation, a
     if (!validationResult.eligible) {
       const err = new Error(validationResult.message || `Booking not eligible: ${validationResult.reason}`);
       err.status = 400;
-      err.errorCode = validationResult.reason || 'BOOKING_NOT_ELIGIBLE';
+      err.errorCode = validationResult.reason || validationResult.errorCode || 'BOOKING_NOT_ELIGIBLE';
       throw err;
     }
 
