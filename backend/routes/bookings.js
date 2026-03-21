@@ -24,6 +24,16 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
   const client = await db.getClient();
 
   try {
+    console.log('[Bookings][POST /] Incoming body:', req.body);
+    console.log('[Bookings][POST /] Auth user:', req.user ? { id: req.user.id, role: req.user.role } : null);
+
+    if (!req.user || !req.user.id) {
+      const authError = new Error('Authentication required. User context missing.');
+      authError.status = 401;
+      authError.errorCode = 'AUTH_USER_MISSING';
+      throw authError;
+    }
+
     await client.query('BEGIN');
 
     // Check if student_recognition table exists (optional feature)
@@ -135,15 +145,24 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     const { slot_id, trainer_id, vehicle_id, phone, notes } = req.body;
 
     if (!slot_id) {
-      throw new Error('slot_id is required');
+      const error = new Error('slot_id is required');
+      error.status = 400;
+      error.errorCode = 'MISSING_SLOT_ID';
+      throw error;
     }
 
     if (!trainer_id) {
-      throw new Error('trainer_id is required');
+      const error = new Error('trainer_id is required');
+      error.status = 400;
+      error.errorCode = 'MISSING_TRAINER_ID';
+      throw error;
     }
 
     if (!vehicle_id) {
-      throw new Error('vehicle_id is required');
+      const error = new Error('vehicle_id is required');
+      error.status = 400;
+      error.errorCode = 'MISSING_VEHICLE_ID';
+      throw error;
     }
 
     // PHASE 1: Get user's phone number (phone is the unique identity)
@@ -470,6 +489,13 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     res.status(201).json(booking);
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error('[Bookings][POST /] Error:', {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+      userId: req.user?.id || null,
+      body: req.body
+    });
     
     // PHASE 5: Fix DIR-002 - Handle lock timeout errors (NOWAIT failures)
     // If slot is locked by another transaction, provide clear error message
@@ -478,6 +504,12 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
       lockError.status = 409; // Conflict
       lockError.errorCode = 'SLOT_LOCKED';
       return next(lockError);
+    }
+
+    // Convert common booking business validation errors to 400 instead of generic 500.
+    if (!error.status) {
+      error.status = 400;
+      error.errorCode = error.errorCode || 'BOOKING_VALIDATION_ERROR';
     }
     
     next(error);

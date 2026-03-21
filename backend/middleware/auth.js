@@ -5,10 +5,22 @@ const authenticate = async (req, res, next) => {
   try {
     // Try to get token from httpOnly cookie first (preferred method)
     let token = req.cookies?.auth_token;
+    let tokenSource = 'cookie';
     
     // If not in cookie, fall back to Authorization header (for backward compatibility)
     if (!token) {
-      token = req.headers.authorization?.split(' ')[1];
+      const authHeader = req.headers.authorization;
+      if (authHeader) {
+        const [scheme, value] = authHeader.split(' ');
+        if (scheme !== 'Bearer' || !value) {
+          const error = new Error('Malformed Authorization header');
+          error.status = 401;
+          error.errorCode = 'MALFORMED_AUTH_HEADER';
+          return next(error);
+        }
+        token = value;
+        tokenSource = 'authorization_header';
+      }
     }
 
     if (!token) {
@@ -33,6 +45,7 @@ const authenticate = async (req, res, next) => {
     }
 
     req.user = result.rows[0];
+    req.auth = { tokenSource };
     next();
   } catch (error) {
     // Handle JWT verification errors
