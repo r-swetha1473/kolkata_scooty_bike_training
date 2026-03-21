@@ -50,6 +50,10 @@ Passing a `.sql` path runs **only** that file and does **not** run the legacy â€
 
 **Multi-trainer booking constraint:** `20260321120000_bookings_unique_slot_trainer.sql` creates `idx_bookings_slot_trainer_active` (one active booking per `slot_id` + `trainer_id`). If creation fails with a duplicate-key error, clean conflicting rows in `bookings` first, then re-run.
 
+**Error: `column "phone" of relation "bookings" does not exist`:** Run  
+`node apply_migration.js ../supabase/migrations/20260321140000_add_bookings_phone_column.sql`  
+(with `DB_SSL=true` if using Neon locally). That adds `bookings.phone` and backfills from `profiles` where possible.
+
 ### Server Configuration
 
 | Variable | Description | Default | Example |
