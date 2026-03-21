@@ -243,8 +243,8 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         };
       }
       
-      // Check trainer availability
-      if (!slot.trainer_id || !slot.trainer_is_active) {
+      // Trainer must exist on the slot and resolve to an active trainers row (slots.trainer_id → trainers.id)
+      if (!slot.trainer_id || slot.trainer_is_active !== true) {
         return {
           eligible: false,
           reason: 'TRAINER_NOT_ASSIGNED',

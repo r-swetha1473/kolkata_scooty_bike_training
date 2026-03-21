@@ -36,7 +36,6 @@ function logPostBookingRequest(req, res, next) {
   const u = req.user || {};
   const bodyForLog = {
     slot_id: b.slot_id,
-    trainer_id: b.trainer_id,
     vehicle_id: b.vehicle_id,
     phone: b.phone
       ? `***${String(b.phone).slice(-4)} (${String(b.phone).length} digits)`
@@ -182,19 +181,12 @@ router.post(
       }
     }
 
-    const { slot_id, trainer_id, vehicle_id, phone, notes } = req.body;
+    const { slot_id, vehicle_id, phone, notes } = req.body;
 
     if (!slot_id) {
       const error = new Error('slot_id is required');
       error.status = 400;
       error.errorCode = 'MISSING_SLOT_ID';
-      throw error;
-    }
-
-    if (!trainer_id) {
-      const error = new Error('trainer_id is required');
-      error.status = 400;
-      error.errorCode = 'MISSING_TRAINER_ID';
       throw error;
     }
 
@@ -307,15 +299,6 @@ router.post(
       throw new Error('Invalid or inactive vehicle selected');
     }
 
-    // Verify trainer exists and is active (additional check)
-    const trainerCheck = await client.query(
-      'SELECT id, is_active FROM trainers WHERE id = $1',
-      [trainer_id]
-    );
-    if (trainerCheck.rows.length === 0 || !trainerCheck.rows[0].is_active) {
-      throw new Error('Selected trainer is not available');
-    }
-
     // Check vehicle capacity dynamically
     const vehicleAvailability = await vehicleService.checkVehicleAvailability(slot_id, vehicle_id);
     if (!vehicleAvailability.available) {
@@ -331,8 +314,7 @@ router.post(
       `WITH locked_slot AS (
         SELECT s.*, 
                (SELECT is_active FROM trainers t WHERE t.id = s.trainer_id) as trainer_is_active,
-               -- Get booked count for this specific vehicle dynamically (no hardcoded types)
-               (SELECT COUNT(*) FROM bookings WHERE slot_id = s.id AND vehicle_id = $4 AND status NOT IN ('cancelled')) as vehicle_booked_count
+               (SELECT COUNT(*) FROM bookings WHERE slot_id = s.id AND vehicle_id = $3 AND status NOT IN ('cancelled')) as vehicle_booked_count
         FROM slots s
         WHERE s.id = $1
         FOR UPDATE NOWAIT
@@ -347,7 +329,7 @@ router.post(
             v.max_per_slot
           ) AS vehicle_capacity
         FROM vehicles v
-        WHERE v.id = $4 AND v.is_active = true
+        WHERE v.id = $3 AND v.is_active = true
       ),
       slot_validation AS (
         SELECT 
@@ -357,6 +339,7 @@ router.post(
           CASE 
             WHEN ls.id IS NULL THEN 'SLOT_NOT_FOUND'
             WHEN vc.vehicle_capacity IS NULL THEN 'INVALID_VEHICLE'
+            WHEN ls.trainer_id IS NULL OR ls.trainer_is_active IS NOT TRUE THEN 'TRAINER_NOT_ASSIGNED'
             WHEN ls.status IN ('disabled', 'cancelled') THEN 'SLOT_NOT_AVAILABLE'
             WHEN ls.status NOT IN ('available', 'full') THEN 'SLOT_INVALID_STATUS'
             WHEN ls.start_time <= NOW() THEN 'SLOT_PAST'
@@ -369,15 +352,14 @@ router.post(
       ),
       booking_insert AS (
         INSERT INTO bookings (user_id, slot_id, trainer_id, vehicle_id, phone, status, notes)
-        SELECT $2, $1, $3, $4, $5, $6, $7
-        FROM slot_validation
+        SELECT $2, $1, sv.trainer_id, $3, $4, $5, $6
+        FROM slot_validation sv
         WHERE validation_status = 'VALID'
         RETURNING *
       ),
       slot_update AS (
         UPDATE slots
         SET booked_count = booked_count + 1,
-            trainer_id = COALESCE(NULLIF(slots.trainer_id, NULL), $3),
             status = CASE 
               WHEN slots.booked_count + 1 >= slots.capacity THEN 'full'
               WHEN slots.booked_count = 0 THEN 'available'
@@ -419,7 +401,7 @@ router.post(
       WHERE NOT EXISTS (SELECT 1 FROM booking_insert)
         AND sv.validation_status != 'VALID'
       LIMIT 1`,
-      [slot_id, req.user.id, trainer_id, vehicle_id, bookingPhone, config.booking.defaultStatus, notes]
+      [slot_id, req.user.id, vehicle_id, bookingPhone, config.booking.defaultStatus, notes]
     );
 
     if (bookingResult.rows.length === 0) {
@@ -440,6 +422,7 @@ router.post(
         'SLOT_NOT_VISIBLE': config.slot.visibilityWindowMessage,
         'SLOT_PAST': 'This slot has already started or passed',
         'BOOKING_NOT_OPEN_YET': config.booking.bookingWindowMessage,
+        'TRAINER_NOT_ASSIGNED': 'No trainer assigned to this slot or trainer is inactive',
         'VEHICLE_CAPACITY_FULL': `All ${vehicle.name} slots are full for this time slot`,
         'INVALID_VEHICLE': 'Invalid or inactive vehicle selected'
       };
@@ -516,7 +499,7 @@ router.post(
           FROM trainers t 
           JOIN profiles p ON t.user_id = p.id 
           WHERE t.id = $1
-        `, [trainer_id]),
+        `, [booking.trainer_id]),
         db.query('SELECT * FROM vehicles WHERE id = $1', [vehicle_id])
       ]);
 

@@ -3,7 +3,7 @@
     <div class="container">
       <div class="hero-content">
         <h1 class="hero-title">Book Your Training Slot</h1>
-        <p class="hero-subtitle">Choose your preferred date and time. Select a trainer and vehicle to begin your training journey.</p>
+        <p class="hero-subtitle">Choose your preferred date and time. Your trainer is assigned to each slot; select a vehicle to complete your booking.</p>
       </div>
     </div>
   </section>
@@ -184,18 +184,10 @@
       </p>
 
       <form (ngSubmit)="confirmBooking()">
-        <div class="form-group">
-          <label for="trainer">Select Trainer *</label>
-          <select
-            id="trainer"
-            [(ngModel)]="bookingForm.trainer_id"
-            name="trainer_id"
-            required>
-            <option value="">-- Select Trainer --</option>
-            <option *ngFor="let trainer of trainers" [value]="trainer.id">
-              {{ trainer.profile?.full_name || trainer.name }} ({{ trainer.rating }}/5 ⭐)
-            </option>
-          </select>
+        <div class="form-group" *ngIf="selectedSlot">
+          <label>Trainer for this session</label>
+          <p class="trainer-readonly">{{ getTrainerName(selectedSlot) }}</p>
+          <small class="form-hint">Assigned to this time slot — you cannot change it here.</small>
         </div>
 
         <div class="form-group">
@@ -245,7 +237,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="!captchaVerified || loading || !bookingForm.trainer_id || !bookingForm.vehicle_id || !bookingForm.phone">
+          [disabled]="!captchaVerified || loading || !bookingForm.vehicle_id || !bookingForm.phone || hasNoTrainer(selectedSlot)">
           {{ loading ? 'Booking...' : 'Confirm Booking' }}
         </button>
       </form>

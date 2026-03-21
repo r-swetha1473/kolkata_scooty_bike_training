@@ -2,7 +2,6 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
-import { TrainerService, Trainer } from '../../services/trainer.service';
 import { AuthService } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
@@ -30,11 +29,9 @@ export class BookingComponent implements OnInit, OnDestroy {
   errorMessage = '';
   refreshInterval: any;
   slotEvents?: EventSource;
-  trainers: Trainer[] = [];
   vehicles: any[] = [];
 
   bookingForm = {
-    trainer_id: '',
     vehicle_id: '',
     phone: '',
     notes: ''
@@ -42,7 +39,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   constructor(
     private slotService: SlotService,
-    private trainerService: TrainerService,
     public authService: AuthService,
     private apiService: ApiService
   ) {}
@@ -92,7 +88,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     const today = new Date();
     this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
     await this.loadSlots();
-    await this.loadTrainers();
     await this.loadVehicles();
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
@@ -195,19 +190,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
-  async loadTrainers() {
-    try {
-      this.trainers = await this.trainerService.getOnDutyTrainers();
-      if (this.trainers.length === 0) {
-        console.warn('No active trainers available');
-      }
-    } catch (error) {
-      console.error('Failed to load trainers:', error);
-      this.trainers = [];
-      this.errorMessage = 'Failed to load trainers. Please refresh the page.';
-    }
-  }
-
   async loadVehicles() {
     try {
       const response = await this.apiService.get<any[]>('/vehicles');
@@ -239,9 +221,6 @@ export class BookingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Reload trainers to ensure we have the latest data
-    await this.loadTrainers();
-
     // Load user profile to pre-populate phone number if available
     try {
       const user = await this.apiService.get<any>('/auth/me');
@@ -253,7 +232,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
 
     this.selectedSlot = slot;
-    this.bookingForm.trainer_id = slot.trainer_id || slot.trainer?.id || '';
     this.showBookingModal = true;
     this.captchaVerified = false;
   }
@@ -280,8 +258,13 @@ export class BookingComponent implements OnInit, OnDestroy {
   async confirmBooking() {
     if (!this.selectedSlot || !this.captchaVerified) return;
 
-    if (!this.bookingForm.trainer_id || !this.bookingForm.vehicle_id) {
-      this.errorMessage = 'Please select both trainer and vehicle';
+    if (!this.bookingForm.vehicle_id) {
+      this.errorMessage = 'Please select a vehicle';
+      return;
+    }
+
+    if (this.hasNoTrainer(this.selectedSlot)) {
+      this.errorMessage = 'This slot has no trainer assigned. Please choose another time.';
       return;
     }
 
@@ -300,7 +283,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       const payload = {
         slot_id: this.selectedSlot.id,
-        trainer_id: this.bookingForm.trainer_id,
         vehicle_id: this.bookingForm.vehicle_id,
         phone: this.bookingForm.phone.trim(),
         notes: (this.bookingForm.notes || '').trim()
@@ -312,7 +294,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       console.log('[BookingComponent] Bearer token in localStorage:', !!getAuthToken());
 
       await firstValueFrom(
-        this.apiService.createBooking(payload.slot_id, payload.trainer_id, payload.vehicle_id, {
+        this.apiService.createBooking(payload.slot_id, payload.vehicle_id, {
           phone: payload.phone,
           notes: payload.notes
         })
@@ -345,7 +327,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   resetForm() {
     this.bookingForm = {
-      trainer_id: '',
       vehicle_id: '',
       phone: '',
       notes: ''
@@ -377,11 +358,13 @@ export class BookingComponent implements OnInit, OnDestroy {
     return slot.status === 'disabled' || slot.status === 'cancelled';
   }
 
-  hasNoTrainer(slot: Slot): boolean {
+  hasNoTrainer(slot: Slot | null): boolean {
+    if (!slot) return true;
     return !slot.trainer_id || !slot.trainer;
   }
 
-  getTrainerName(slot: Slot): string {
+  getTrainerName(slot: Slot | null): string {
+    if (!slot) return 'Unassigned';
     return slot.trainer?.profile?.full_name || 'Unassigned';
   }
 

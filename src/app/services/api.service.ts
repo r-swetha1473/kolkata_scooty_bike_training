@@ -31,7 +31,7 @@ export interface Trainer {
 
 export interface Slot {
   id: string;
-  trainer_id: string;
+  trainer_id?: string | null;
   start_time: string;
   end_time: string;
   capacity: number;
@@ -175,13 +175,11 @@ export class ApiService {
 
   createBooking(
     slotId: string,
-    trainerId: string,
     vehicleId: string,
     options?: { phone?: string; notes?: string }
   ): Observable<Booking> {
     const payload: Record<string, string> = {
       slot_id: slotId,
-      trainer_id: trainerId,
       vehicle_id: vehicleId,
       notes: (options?.notes ?? '').trim()
     };
