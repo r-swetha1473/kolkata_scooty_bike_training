@@ -26,9 +26,10 @@ const vehicleService = require('./vehicle.service');
  * @param {string} vehicleId - Vehicle UUID (required - no hardcoded types)
  * @param {string} slotId - Slot UUID (required for full validation)
  * @param {string} userId - User UUID (optional, for user_id based checks)
+ * @param {string} trainerId - Trainer UUID (required when slotId is set; must be active and free for this slot)
  * @returns {Promise<{eligible: boolean, reason?: string, details?: object}>}
  */
-async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, slotId = null, userId = null) {
+async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, slotId = null, userId = null, trainerId = null) {
   try {
     const normalizedPhone = normalizeIndianMobileDigits(phone);
     
@@ -185,9 +186,15 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
     
     // Check 4: Slot availability (if slotId provided)
     if (slotId) {
+      if (!trainerId || !uuidPattern.test(String(trainerId))) {
+        return {
+          eligible: false,
+          reason: 'TRAINER_REQUIRED',
+          message: 'Please select a trainer for this slot.'
+        };
+      }
+
       // Get slot details and vehicle-specific booking counts
-      // Note: Currently bookings table uses vehicle_id, not vehicle_type
-      // In PHASE 2, we'll add vehicle_type column to bookings table
       const slotCheck = await db.query(
         `SELECT 
            s.id,
@@ -195,11 +202,8 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
            s.end_time,
            s.slot_date,
            s.status,
-           s.is_visible,
-           s.trainer_id,
-           t.is_active as trainer_is_active
+           s.is_visible
          FROM slots s
-         LEFT JOIN trainers t ON s.trainer_id = t.id
          WHERE s.id = $1`,
         [slotId]
       );
@@ -242,16 +246,40 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
           details: { slotStartTime: slot.start_time, hoursUntil }
         };
       }
-      
-      // Trainer must exist on the slot and resolve to an active trainers row (slots.trainer_id → trainers.id)
-      if (!slot.trainer_id || slot.trainer_is_active !== true) {
+
+      const trainerRow = await db.query(
+        `SELECT id, is_active FROM trainers WHERE id = $1`,
+        [trainerId]
+      );
+      if (trainerRow.rows.length === 0) {
         return {
           eligible: false,
-          reason: 'TRAINER_NOT_ASSIGNED',
-          message: 'No trainer assigned to this slot or trainer is inactive'
+          reason: 'TRAINER_NOT_FOUND',
+          message: 'Selected trainer was not found.'
         };
       }
-      
+      if (trainerRow.rows[0].is_active !== true) {
+        return {
+          eligible: false,
+          reason: 'TRAINER_INACTIVE',
+          message: 'This trainer is not available for booking.'
+        };
+      }
+
+      const trainerTaken = await db.query(
+        `SELECT 1 FROM bookings b
+         WHERE b.slot_id = $1 AND b.trainer_id = $2 AND b.status NOT IN ('cancelled')
+         LIMIT 1`,
+        [slotId, trainerId]
+      );
+      if (trainerTaken.rows.length > 0) {
+        return {
+          eligible: false,
+          reason: 'TRAINER_SLOT_TAKEN',
+          message: 'This trainer is already booked for this time slot. Choose another trainer.'
+        };
+      }
+
       // Check vehicle-specific capacity dynamically
       if (vehicleBookedCount >= vehicleCapacity) {
         return {

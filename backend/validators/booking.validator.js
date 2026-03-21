@@ -2,7 +2,7 @@ const { body } = require('express-validator');
 const { handleValidationErrors } = require('./common');
 
 const ID_HINT =
-  'Send JSON with snake_case: slot_id, vehicle_id (and optional phone, notes) — or camelCase: slotId, vehicleId. Trainer comes from the slot.';
+  'Send JSON with snake_case: slot_id, trainer_id, vehicle_id (and optional phone, notes) — or camelCase: slotId, trainerId, vehicleId.';
 
 /**
  * Validation for POST /api/bookings (runs after normalizeBookingCreateBody).
@@ -17,6 +17,16 @@ const validateBookingCreation = [
     .bail()
     .isUUID()
     .withMessage('slot_id must be a valid UUID from the slots list'),
+
+  body('trainer_id')
+    .notEmpty()
+    .withMessage(`trainer_id is required. ${ID_HINT}`)
+    .bail()
+    .isString()
+    .withMessage('trainer_id must be a string UUID')
+    .bail()
+    .isUUID()
+    .withMessage('trainer_id must be a valid UUID (use GET /trainers/available-for-slot/:slotId)'),
 
   body('vehicle_id')
     .notEmpty()

@@ -2,6 +2,86 @@ const express = require('express');
 const db = require('../db');
 const router = express.Router();
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * GET /trainers/available-for-slot/:slotId
+ * Active trainers not already booked for this slot (non-cancelled bookings).
+ */
+router.get('/available-for-slot/:slotId', async (req, res, next) => {
+  try {
+    const slotId = String(req.params.slotId || '').trim();
+    if (!UUID_RE.test(slotId)) {
+      const err = new Error('Invalid slot id');
+      err.status = 400;
+      err.errorCode = 'INVALID_SLOT_ID';
+      return next(err);
+    }
+
+    const slotExists = await db.query('SELECT 1 FROM slots WHERE id = $1', [slotId]);
+    if (slotExists.rows.length === 0) {
+      const err = new Error('Slot not found');
+      err.status = 404;
+      err.errorCode = 'SLOT_NOT_FOUND';
+      return next(err);
+    }
+
+    const result = await db.query(
+      `
+      SELECT
+        t.id,
+        t.user_id,
+        t.bio,
+        t.experience_years,
+        t.specialization,
+        t.rating,
+        t.total_sessions,
+        t.is_active,
+        t.created_at,
+        t.updated_at,
+        p.full_name,
+        p.avatar_url,
+        p.email,
+        p.phone
+      FROM trainers t
+      JOIN profiles p ON t.user_id = p.id
+      WHERE t.is_active = true
+        AND NOT EXISTS (
+          SELECT 1 FROM bookings b
+          WHERE b.slot_id = $1
+            AND b.trainer_id = t.id
+            AND b.status NOT IN ('cancelled')
+        )
+      ORDER BY t.rating DESC NULLS LAST, t.total_sessions DESC NULLS LAST, p.full_name ASC
+      `,
+      [slotId]
+    );
+
+    const formatted = result.rows.map((row) => ({
+      id: row.id.toString(),
+      user_id: row.user_id.toString(),
+      bio: row.bio || '',
+      experience_years: row.experience_years || 0,
+      specialization: row.specialization || [],
+      rating: parseFloat(row.rating) || 0,
+      total_sessions: row.total_sessions || 0,
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      profile: {
+        full_name: row.full_name,
+        email: row.email,
+        phone: row.phone || null,
+        avatar_url: row.avatar_url || null
+      }
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/', async (req, res, next) => {
   try {
     const result = await db.query(`

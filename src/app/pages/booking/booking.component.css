@@ -609,14 +609,15 @@
   color: var(--text-muted);
 }
 
-.trainer-readonly {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: var(--bg-light, #f5f7fa);
-  border: 1px solid var(--border-color, #e2e8f0);
-  font-weight: 600;
-  color: var(--text-primary);
+.loading-inline {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+
+.slot-trainer-hint {
+  font-size: 12px;
+  opacity: 0.9;
 }
 
 .btn-confirm {

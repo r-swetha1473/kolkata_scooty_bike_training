@@ -49,8 +49,42 @@ export interface Booking {
         <div class="profile-info">
           <h1 class="profile-name">{{ userProfile?.full_name || 'User' }}</h1>
           <p class="profile-email">{{ userProfile?.email }}</p>
-          <p *ngIf="userProfile?.phone && !userProfile.phone.startsWith('GOOGLE_')" class="profile-phone">{{ userProfile.phone }}</p>
+          <p *ngIf="userProfile?.phone && !isPlaceholderPhone(userProfile.phone)" class="profile-phone">{{ displayPhoneLabel(userProfile.phone) }}</p>
+          <p *ngIf="userProfile && isPlaceholderPhone(userProfile.phone)" class="profile-phone-placeholder">No mobile saved yet — add it below for bookings.</p>
         </div>
+      </div>
+
+      <div class="profile-settings" *ngIf="userProfile">
+        <h2 class="section-title">Mobile number</h2>
+        <p class="settings-hint" *ngIf="isPlaceholderPhone(userProfile.phone)">
+          Enter your 10-digit Indian mobile number. It is used for bookings and confirmations.
+        </p>
+        <div class="form-group">
+          <label for="profilePhone">Mobile number</label>
+          <input
+            id="profilePhone"
+            type="tel"
+            name="profilePhone"
+            maxlength="10"
+            inputmode="numeric"
+            autocomplete="tel"
+            [(ngModel)]="phoneEditValue"
+            (ngModelChange)="phoneUpdateSuccess = ''; phoneUpdateError = ''"
+            placeholder="10 digits, e.g. 9876543210"
+            class="profile-phone-input" />
+          <small class="form-hint">Digits only; +91 is accepted when pasted and will be normalized.</small>
+        </div>
+        <div class="phone-actions">
+          <button
+            type="button"
+            class="btn-primary"
+            (click)="saveMobileNumber()"
+            [disabled]="savingPhone || !isPhoneInputValid()">
+            {{ savingPhone ? 'Saving…' : 'Save mobile number' }}
+          </button>
+        </div>
+        <p class="text-success" *ngIf="phoneUpdateSuccess">{{ phoneUpdateSuccess }}</p>
+        <p class="text-error" *ngIf="phoneUpdateError">{{ phoneUpdateError }}</p>
       </div>
 
       <div class="bookings-section">
@@ -286,6 +320,89 @@ export interface Booking {
       font-size: 16px;
       color: var(--text-secondary);
       margin: 0;
+    }
+
+    .profile-phone-placeholder {
+      color: var(--text-muted, #6b7280);
+      margin: 8px 0 0 0;
+      font-size: 15px;
+    }
+
+    .profile-settings {
+      padding: 28px 32px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      margin-bottom: 32px;
+    }
+
+    .profile-settings .section-title {
+      margin-top: 0;
+    }
+
+    .settings-hint {
+      color: var(--text-secondary);
+      margin: 0 0 20px 0;
+      line-height: 1.5;
+    }
+
+    .profile-settings .form-group {
+      margin-bottom: 16px;
+    }
+
+    .profile-settings .form-group label {
+      display: block;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .profile-settings .form-group input.profile-phone-input {
+      width: 100%;
+      max-width: 280px;
+      padding: 12px 14px;
+      border: 2px solid var(--border-primary);
+      border-radius: var(--border-radius-md);
+      font-size: 16px;
+    }
+
+    .profile-settings .form-group input.profile-phone-input:focus {
+      outline: none;
+      border-color: var(--border-accent);
+      box-shadow: var(--shadow-focus);
+    }
+
+    .profile-settings .form-hint {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-muted, #6b7280);
+    }
+
+    .phone-actions {
+      margin-top: 8px;
+    }
+
+    .profile-settings .btn-primary {
+      border: none;
+      cursor: pointer;
+    }
+
+    .profile-settings .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .text-success {
+      margin-top: 12px;
+      color: #059669;
+      font-size: 14px;
+    }
+
+    .text-error {
+      margin-top: 12px;
+      color: var(--status-error, #dc2626);
+      font-size: 14px;
     }
 
     .bookings-section {
@@ -639,6 +756,10 @@ export class ProfileComponent implements OnInit {
   userProfile: UserProfile | null = null;
   bookings: Booking[] = [];
   loading = false;
+  phoneEditValue = '';
+  savingPhone = false;
+  phoneUpdateSuccess = '';
+  phoneUpdateError = '';
   isCancelModalVisible = false;
   selectedBooking: Booking | null = null;
   cancelReason = '';
@@ -682,9 +803,11 @@ export class ProfileComponent implements OnInit {
         }
       }
 
-      // Subscribe to profile changes
+      this.syncPhoneInputFromProfile();
+
       this.authService.userProfile$.subscribe(profile => {
         this.userProfile = profile;
+        this.syncPhoneInputFromProfile();
       });
 
       await this.loadBookings();
@@ -718,6 +841,58 @@ export class ProfileComponent implements OnInit {
       }));
     } catch (error) {
       console.error('Error loading bookings:', error);
+    }
+  }
+
+  isPlaceholderPhone(phone: string | null | undefined): boolean {
+    if (phone == null || String(phone).trim() === '') return true;
+    return String(phone).startsWith('GOOGLE_');
+  }
+
+  /** Last 10 digits for display when stored number may include formatting. */
+  displayPhoneLabel(phone: string): string {
+    const d = String(phone).replace(/\D/g, '');
+    if (d.length >= 10) return d.slice(-10);
+    return phone;
+  }
+
+  private syncPhoneInputFromProfile(): void {
+    const p = this.userProfile?.phone ?? null;
+    if (this.isPlaceholderPhone(p)) {
+      this.phoneEditValue = '';
+      return;
+    }
+    this.phoneEditValue = this.displayPhoneLabel(p);
+  }
+
+  isPhoneInputValid(): boolean {
+    return /^[0-9]{10}$/.test((this.phoneEditValue || '').trim());
+  }
+
+  async saveMobileNumber(): Promise<void> {
+    if (!this.isPhoneInputValid()) {
+      this.phoneUpdateError = 'Enter a valid 10-digit mobile number.';
+      this.phoneUpdateSuccess = '';
+      return;
+    }
+    this.savingPhone = true;
+    this.phoneUpdateError = '';
+    this.phoneUpdateSuccess = '';
+    try {
+      const digits = (this.phoneEditValue || '').trim();
+      await this.authService.updateProfile({ phone: digits });
+      this.phoneUpdateSuccess = 'Mobile number saved.';
+    } catch (error: any) {
+      const body = error?.error;
+      const msg =
+        body?.message ||
+        (Array.isArray(body?.errors) && body.errors[0]?.message) ||
+        body?.error ||
+        error?.message ||
+        'Could not update mobile number.';
+      this.phoneUpdateError = msg;
+    } finally {
+      this.savingPhone = false;
     }
   }
 

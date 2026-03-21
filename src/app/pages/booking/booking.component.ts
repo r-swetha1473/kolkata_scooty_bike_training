@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
 import { AuthService } from '../../services/auth.service';
-import { ApiService } from '../../services/api.service';
+import { ApiService, Trainer } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
 import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
@@ -30,8 +30,12 @@ export class BookingComponent implements OnInit, OnDestroy {
   refreshInterval: any;
   slotEvents?: EventSource;
   vehicles: any[] = [];
+  /** Trainers still available for the slot in the booking modal (excludes already-booked). */
+  availableTrainers: Trainer[] = [];
+  loadingTrainers = false;
 
   bookingForm = {
+    trainer_id: '',
     vehicle_id: '',
     phone: '',
     notes: ''
@@ -146,14 +150,6 @@ export class BookingComponent implements OnInit, OnDestroy {
         });
         
         this.slots = filtered;
-        
-        // Optional info: count unassigned for visibility
-        if (filtered.length > 0) {
-          const unassignedCount = filtered.filter(s => !s.trainer_id || !s.trainer).length;
-          if (unassignedCount > 0) {
-            console.info(`Showing ${unassignedCount} unassigned slots on ${normalizedDate}`);
-          }
-        }
       } else {
         this.slots = [];
       }
@@ -181,6 +177,9 @@ export class BookingComponent implements OnInit, OnDestroy {
           const affectedDate = data.slot_date || extractDateFromDateTime(data.start_time) || payload.date;
           if (!affectedDate || affectedDate === this.selectedDate) {
             await this.loadSlots();
+            if (this.showBookingModal && this.selectedSlot) {
+              await this.loadAvailableTrainers(this.selectedSlot.id);
+            }
           }
         } catch (_) {}
       };
@@ -232,8 +231,31 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
 
     this.selectedSlot = slot;
+    this.bookingForm.trainer_id = '';
+    this.availableTrainers = [];
     this.showBookingModal = true;
     this.captchaVerified = false;
+    await this.loadAvailableTrainers(slot.id);
+  }
+
+  async loadAvailableTrainers(slotId: string): Promise<void> {
+    this.loadingTrainers = true;
+    this.errorMessage = '';
+    try {
+      this.availableTrainers = await firstValueFrom(
+        this.apiService.getAvailableTrainersForSlot(slotId)
+      );
+      if (!this.availableTrainers.length) {
+        this.errorMessage =
+          'No trainers are available for this time slot right now. They may all be booked — try another slot or refresh.';
+      }
+    } catch (e) {
+      console.error('Failed to load trainers for slot', e);
+      this.availableTrainers = [];
+      this.errorMessage = 'Could not load trainers for this slot. Please try again.';
+    } finally {
+      this.loadingTrainers = false;
+    }
   }
 
   async signInWithGoogle() {
@@ -258,13 +280,13 @@ export class BookingComponent implements OnInit, OnDestroy {
   async confirmBooking() {
     if (!this.selectedSlot || !this.captchaVerified) return;
 
-    if (!this.bookingForm.vehicle_id) {
-      this.errorMessage = 'Please select a vehicle';
+    if (!this.bookingForm.trainer_id) {
+      this.errorMessage = 'Please select a trainer';
       return;
     }
 
-    if (this.hasNoTrainer(this.selectedSlot)) {
-      this.errorMessage = 'This slot has no trainer assigned. Please choose another time.';
+    if (!this.bookingForm.vehicle_id) {
+      this.errorMessage = 'Please select a vehicle';
       return;
     }
 
@@ -283,6 +305,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       const payload = {
         slot_id: this.selectedSlot.id,
+        trainer_id: this.bookingForm.trainer_id,
         vehicle_id: this.bookingForm.vehicle_id,
         phone: this.bookingForm.phone.trim(),
         notes: (this.bookingForm.notes || '').trim()
@@ -294,7 +317,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       console.log('[BookingComponent] Bearer token in localStorage:', !!getAuthToken());
 
       await firstValueFrom(
-        this.apiService.createBooking(payload.slot_id, payload.vehicle_id, {
+        this.apiService.createBooking(payload.slot_id, payload.trainer_id, payload.vehicle_id, {
           phone: payload.phone,
           notes: payload.notes
         })
@@ -327,10 +350,12 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   resetForm() {
     this.bookingForm = {
+      trainer_id: '',
       vehicle_id: '',
       phone: '',
       notes: ''
     };
+    this.availableTrainers = [];
     this.errorMessage = '';
   }
 
@@ -356,16 +381,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   isSlotDisabled(slot: Slot): boolean {
     return slot.status === 'disabled' || slot.status === 'cancelled';
-  }
-
-  hasNoTrainer(slot: Slot | null): boolean {
-    if (!slot) return true;
-    return !slot.trainer_id || !slot.trainer;
-  }
-
-  getTrainerName(slot: Slot | null): string {
-    if (!slot) return 'Unassigned';
-    return slot.trainer?.profile?.full_name || 'Unassigned';
   }
 
   // PHASE 3: Use centralized date utilities

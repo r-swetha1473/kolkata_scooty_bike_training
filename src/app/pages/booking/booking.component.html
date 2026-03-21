@@ -3,7 +3,7 @@
     <div class="container">
       <div class="hero-content">
         <h1 class="hero-title">Book Your Training Slot</h1>
-        <p class="hero-subtitle">Choose your preferred date and time. Your trainer is assigned to each slot; select a vehicle to complete your booking.</p>
+        <p class="hero-subtitle">Choose your preferred date and time, then pick an available trainer and vehicle. Multiple students can use the same time slot with different trainers.</p>
       </div>
     </div>
   </section>
@@ -88,12 +88,15 @@
             <div class="slot-status-text">
               {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotBooked(slot) ? 'BOOKED' : 'AVAILABLE')) }}
             </div>
-            <div class="slot-trainer" *ngIf="slot.trainer?.profile?.full_name">
+            <div class="slot-trainer slot-trainer-hint" *ngIf="slot.trainer?.profile?.full_name">
               <svg class="trainer-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                 <circle cx="12" cy="7" r="4"></circle>
               </svg>
-              {{ slot.trainer.profile.full_name }}
+              Default: {{ slot.trainer.profile.full_name }}
+            </div>
+            <div class="slot-trainer slot-trainer-hint" *ngIf="!slot.trainer?.profile?.full_name">
+              Choose trainer when booking
             </div>
             <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>
@@ -161,7 +164,7 @@
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>Trainer assigned based on availability</span>
+              <span>Pick your trainer when you book (only trainers free for that time are listed)</span>
             </li>
             <li>
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -185,9 +188,22 @@
 
       <form (ngSubmit)="confirmBooking()">
         <div class="form-group" *ngIf="selectedSlot">
-          <label>Trainer for this session</label>
-          <p class="trainer-readonly">{{ getTrainerName(selectedSlot) }}</p>
-          <small class="form-hint">Assigned to this time slot — you cannot change it here.</small>
+          <label for="bookingTrainer">Trainer *</label>
+          <div *ngIf="loadingTrainers" class="loading-inline">Loading trainers…</div>
+          <select
+            *ngIf="!loadingTrainers"
+            id="bookingTrainer"
+            [(ngModel)]="bookingForm.trainer_id"
+            name="trainer_id"
+            required>
+            <option value="">-- Select trainer --</option>
+            <option *ngFor="let t of availableTrainers" [value]="t.id">
+              {{ t.profile?.full_name || 'Trainer' }} ({{ t.rating | number:'1.1-1' }}/5)
+            </option>
+          </select>
+          <small class="form-hint" *ngIf="!loadingTrainers && availableTrainers.length">
+            Trainers already booked for this time are hidden from the list.
+          </small>
         </div>
 
         <div class="form-group">
@@ -237,7 +253,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="!captchaVerified || loading || !bookingForm.vehicle_id || !bookingForm.phone || hasNoTrainer(selectedSlot)">
+          [disabled]="!captchaVerified || loading || loadingTrainers || !bookingForm.trainer_id || !bookingForm.vehicle_id || !bookingForm.phone || !availableTrainers.length">
           {{ loading ? 'Booking...' : 'Confirm Booking' }}
         </button>
       </form>

@@ -92,6 +92,7 @@ export class BookingService {
 
   async createBooking(
     slotId: string,
+    trainerId: string,
     vehicleId: string,
     notes: string,
     phone?: string
@@ -99,6 +100,7 @@ export class BookingService {
     try {
       const body: Record<string, string> = {
         slot_id: slotId,
+        trainer_id: trainerId,
         vehicle_id: vehicleId,
         notes: notes || ''
       };

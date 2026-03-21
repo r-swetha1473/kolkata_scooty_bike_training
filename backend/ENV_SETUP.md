@@ -25,6 +25,30 @@ This document explains all environment variables required for the Kolkata Scotty
 | `DB_USER` | Database username | `scotty_user` |
 | `DB_PASSWORD` | Database password | `your_password` |
 | `DATABASE_URL` | Full connection string (alternative) | `postgresql://user:pass@host:port/db` |
+| `DB_SSL` | Use TLS to PostgreSQL | Set to `true` when using **Neon** (or any cloud host) from your **local** machine while `NODE_ENV` is not `production` — otherwise the pool may connect without SSL and fail. |
+
+#### Neon PostgreSQL
+
+1. In the [Neon console](https://console.neon.tech), copy the connection string (pooler URL is fine for the app).
+2. Put it in `backend/.env` as `DATABASE_URL=...` (usually includes `sslmode=require`).
+3. For **local** runs (`npm start` / migrations) with `NODE_ENV=development`, also set `DB_SSL=true` so `db.js` enables TLS (Neon rejects non-SSL clients).
+
+**Apply one migration file to Neon (safe for an existing database):**
+
+```bash
+cd backend
+# Windows CMD:
+set DB_SSL=true
+node apply_migration.js ..\supabase\migrations\20260321120000_bookings_unique_slot_trainer.sql
+
+# PowerShell:
+$env:DB_SSL="true"
+node apply_migration.js ..\supabase\migrations\20260321120000_bookings_unique_slot_trainer.sql
+```
+
+Passing a `.sql` path runs **only** that file and does **not** run the legacy “bootstrap everything” migration or auto-create admin. To run the old full bootstrap (empty DB only), run `node apply_migration.js` with **no** file argument.
+
+**Multi-trainer booking constraint:** `20260321120000_bookings_unique_slot_trainer.sql` creates `idx_bookings_slot_trainer_active` (one active booking per `slot_id` + `trainer_id`). If creation fails with a duplicate-key error, clean conflicting rows in `bookings` first, then re-run.
 
 ### Server Configuration
 

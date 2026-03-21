@@ -1,6 +1,8 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
+const config = require('../app.config');
+const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const router = express.Router();
 
 router.get('/me', authenticate, async (req, res, next) => {
@@ -13,15 +15,7 @@ router.get('/me', authenticate, async (req, res, next) => {
 
 router.put('/me', authenticate, async (req, res, next) => {
   try {
-    const { full_name, phone, email } = req.body;
-
-    // Phone is required for customers
-    if (req.user.role === 'customer' && !phone) {
-      const error = new Error('Phone number is required for customers');
-      error.status = 400;
-      error.errorCode = 'PHONE_REQUIRED';
-      return next(error);
-    }
+    const { full_name, phone: rawPhone, email } = req.body;
 
     const updates = [];
     const params = [];
@@ -31,9 +25,16 @@ router.put('/me', authenticate, async (req, res, next) => {
       updates.push(`full_name = $${paramIndex++}`);
       params.push(full_name);
     }
-    if (phone !== undefined) {
+    if (rawPhone !== undefined) {
+      const normalizedPhone = normalizeIndianMobileDigits(rawPhone);
+      if (!config.booking.phoneNumberPattern.test(normalizedPhone)) {
+        const err = new Error(config.booking.phoneNumberErrorMessage);
+        err.status = 400;
+        err.errorCode = 'INVALID_PHONE';
+        return next(err);
+      }
       updates.push(`phone = $${paramIndex++}`);
-      params.push(phone);
+      params.push(normalizedPhone);
     }
     if (email !== undefined) {
       updates.push(`email = $${paramIndex++}`);
@@ -63,14 +64,14 @@ router.put('/me', authenticate, async (req, res, next) => {
     }
 
     res.json(result.rows[0]);
-  } catch (error) {
-    if (error.code === '23505') { // Unique constraint violation
-      const error = new Error('Phone number already exists');
-      error.status = 409;
-      error.errorCode = 'DUPLICATE_PHONE';
-      return next(error);
+  } catch (err) {
+    if (err.code === '23505') {
+      const dup = new Error('This mobile number is already registered to another account.');
+      dup.status = 409;
+      dup.errorCode = 'DUPLICATE_PHONE';
+      return next(dup);
     }
-    next(error);
+    next(err);
   }
 });
 

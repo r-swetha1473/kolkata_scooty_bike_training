@@ -100,12 +100,16 @@ backend/
 - `GET /api/auth/google` - Google OAuth initiation
 - `GET /api/auth/google/callback` - Google OAuth callback
 - `GET /api/auth/me` - Get current user profile
+- `PUT /api/profiles/me` - Update own profile (partial updates; `phone` normalized to 10 digits, unique)
 
 ### Public Endpoints
 - `GET /api/trainers` - Get all active trainers
+- `GET /api/trainers/available-for-slot/:slotId` - Active trainers not yet booked for that slot (for booking UI)
 - `GET /api/slots/date/:date` - Get slots for a date
 - `GET /api/slots/available` - Get available slots
-- `POST /api/bookings` - Create a booking
+
+### Customer (authenticated)
+- `POST /api/bookings` - Create booking: `slot_id`, `trainer_id`, `vehicle_id`, optional `phone`, `notes` (trainer selected per slot; multiple bookings per slot use different trainers)
 
 ### Admin Endpoints (Requires Admin Role)
 - `GET /api/admin/bookings` - Get all bookings

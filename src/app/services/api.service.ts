@@ -165,6 +165,14 @@ export class ApiService {
     return this.http.get<Trainer>(`${this.apiUrl}/trainers/${id}`, this.getHttpOptions(false));
   }
 
+  /** Active trainers not yet booked for this slot (non-cancelled). */
+  getAvailableTrainersForSlot(slotId: string): Observable<Trainer[]> {
+    return this.http.get<Trainer[]>(
+      `${this.apiUrl}/trainers/available-for-slot/${encodeURIComponent(slotId)}`,
+      this.getHttpOptions(false)
+    );
+  }
+
   getSlots(params?: { trainer_id?: string; start_date?: string; end_date?: string }): Observable<Slot[]> {
     let url = `${this.apiUrl}/slots?`;
     if (params?.trainer_id) url += `trainer_id=${params.trainer_id}&`;
@@ -175,11 +183,13 @@ export class ApiService {
 
   createBooking(
     slotId: string,
+    trainerId: string,
     vehicleId: string,
     options?: { phone?: string; notes?: string }
   ): Observable<Booking> {
     const payload: Record<string, string> = {
       slot_id: slotId,
+      trainer_id: trainerId,
       vehicle_id: vehicleId,
       notes: (options?.notes ?? '').trim()
     };

@@ -6,11 +6,23 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-// Default to the latest migration file
+// Usage:
+//   node apply_migration.js [path/to/file.sql] [--skip-admin] [--with-admin]
+// If you pass a .sql path, only that file runs (recommended for Neon / incremental updates).
+// Admin bootstrap runs only for the legacy default migration, unless you pass --with-admin.
 const defaultMigration = path.join(__dirname, '..', 'supabase', 'migrations', '20250105000000_kolkata_scooty_requirements.sql');
 const fallbackMigration = path.join(__dirname, '..', 'supabase', 'migrations', '20250103000000_migrate_to_direct_postgresql.sql');
-const migrationFile = process.argv[2] || (fs.existsSync(defaultMigration) ? defaultMigration : fallbackMigration);
-const skipAdmin = process.argv.includes('--skip-admin');
+const argPath = process.argv[2] && !String(process.argv[2]).startsWith('--') ? process.argv[2] : null;
+const migrationFile = argPath
+  ? path.isAbsolute(argPath)
+    ? argPath
+    : path.join(process.cwd(), argPath)
+  : fs.existsSync(defaultMigration)
+    ? defaultMigration
+    : fallbackMigration;
+const skipAdmin =
+  process.argv.includes('--skip-admin') ||
+  (argPath != null && !process.argv.includes('--with-admin'));
 
 if (!fs.existsSync(migrationFile)) {
   console.error(`Error: Migration file not found: ${migrationFile}`);
@@ -34,15 +46,19 @@ async function applyMigration() {
       console.log('✓ Migration applied successfully!');
       console.log('');
     } catch (error) {
-      await client.query('ROLLBACK');
-      
-      // Some errors are expected for idempotent operations
-      if (error.message.includes('already exists') || 
-          error.message.includes('does not exist') ||
-          error.message.includes('column') && error.message.includes('already')) {
-        console.log(`  Note: ${error.message.split('\n')[0]}`);
-        await client.query('COMMIT'); // Commit anyway for idempotent operations
-        console.log('✓ Migration applied successfully (some changes already existed)!');
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {
+        /* ignore */
+      }
+      const msg0 = (error.message || '').split('\n')[0];
+      if (
+        msg0.includes('already exists') ||
+        msg0.includes('does not exist') ||
+        (msg0.includes('column') && msg0.includes('already'))
+      ) {
+        console.log(`  Note: ${msg0}`);
+        console.log('✓ Migration skipped or partially already applied.');
         console.log('');
       } else {
         throw error;

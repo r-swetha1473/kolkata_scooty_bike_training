@@ -314,7 +314,11 @@ async function runTests() {
   });
   await testEndpoint('POST', '/api/bookings', {
     auth: 'user',
-    body: { slot_id: '123', vehicle_id: '123' },
+    body: {
+      slot_id: '123e4567-e89b-12d3-a456-426614174000',
+      trainer_id: '123e4567-e89b-12d3-a456-426614174001',
+      vehicle_id: '123e4567-e89b-12d3-a456-426614174002'
+    },
     description: 'Create booking (may fail validation)'
   });
   await testEndpoint('GET', '/api/bookings/my-bookings', {

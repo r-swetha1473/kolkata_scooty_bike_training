@@ -58,7 +58,8 @@ router.get('/', async (req, res, next) => {
     const params = [];
 
     if (available_only === 'true') {
-      query += ` AND s.status = '${config.slot.defaultStatus}' AND s.status != 'disabled' AND t.is_active = true`;
+      query += ` AND s.status = '${config.slot.defaultStatus}' AND s.status != 'disabled'`;
+      query += ` AND (t.id IS NULL OR t.is_active = true)`;
     } else if (status) {
       params.push(status);
       query += ` AND s.status = $${params.length}`;
@@ -70,8 +71,6 @@ router.get('/', async (req, res, next) => {
     if (trainer_id) {
       params.push(trainer_id);
       query += ` AND s.trainer_id = $${params.length}`;
-    } else if (available_only === 'true') {
-      query += ` AND s.trainer_id IS NOT NULL AND t.is_active = true`;
     }
 
     // Filter by slot_date

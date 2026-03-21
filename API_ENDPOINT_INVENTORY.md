@@ -23,14 +23,17 @@ This document provides a comprehensive list of all API endpoints in the backend 
 | Method | Endpoint | Controller | Tables Used | Auth |
 |--------|----------|------------|-------------|------|
 | GET | `/api/profiles/me` | Get own profile | `profiles` | `authenticate` |
-| PUT | `/api/profiles/me` | Update own profile | `profiles` | `authenticate` |
+| PUT | `/api/profiles/me` | Update own profile (`full_name`, `phone`, `email` — partial OK). When `phone` is sent, it is normalized to 10 Indian digits and must be unique. | `profiles` | `authenticate` |
 
 ---
 
 ## Trainer Routes (`/api/trainers`)
 
+**Route order:** `available-for-slot` and `active` are registered before `/:id` so they are not captured as IDs.
+
 | Method | Endpoint | Controller | Tables Used | Auth |
 |--------|----------|------------|-------------|------|
+| GET | `/api/trainers/available-for-slot/:slotId` | Active trainers **not** already booked for that slot (non-cancelled `bookings`) | `slots`, `trainers`, `profiles`, `bookings` | None (public) |
 | GET | `/api/trainers` | List all active trainers | `trainers`, `profiles` | None (public) |
 | GET | `/api/trainers/active` | List active trainers | `trainers`, `profiles` | None (public) |
 | GET | `/api/trainers/:id` | Get trainer by ID | `trainers`, `profiles` | None (public) |
@@ -41,7 +44,7 @@ This document provides a comprehensive list of all API endpoints in the backend 
 
 | Method | Endpoint | Controller | Tables Used | Auth |
 |--------|----------|------------|-------------|------|
-| GET | `/api/slots` | List slots with filters | `slots`, `trainers`, `profiles`, `slot_vehicle_capacity`, `vehicles`, `bookings` | None (public) |
+| GET | `/api/slots` | List slots with filters (`date`, `trainer_id`, `available_only`, etc.). With `available_only=true`, slots **do not** need `slots.trainer_id` set; booking-time trainer is chosen separately. | `slots`, `trainers`, `profiles`, `slot_vehicle_capacity`, `vehicles`, `bookings` | None (public) |
 | GET | `/api/slots/date/:date` | Get slots by date | `slots`, `trainers`, `profiles`, `slot_vehicle_capacity`, `vehicles`, `bookings` | None (public) |
 | GET | `/api/slots/range` | Get slots by date range | `slots`, `trainers`, `profiles` | None (public) |
 | GET | `/api/slots/available` | Get available slots | `slots`, `trainers`, `profiles` | None (public) |
@@ -66,7 +69,7 @@ This document provides a comprehensive list of all API endpoints in the backend 
 
 | Method | Endpoint | Controller | Tables Used | Auth |
 |--------|----------|------------|-------------|------|
-| POST | `/api/bookings` | Create booking | `student_recognition`, `student_entitlements`, `profiles`, `slots`, `trainers`, `vehicles`, `bookings`, `slot_vehicle_capacity` | `authenticate` |
+| POST | `/api/bookings` | Create booking. **Body:** `slot_id`, `trainer_id`, `vehicle_id`, optional `phone`, `notes` (camelCase aliases accepted). `trainer_id` must be active and **free** for that slot (at most one non-cancelled booking per `(slot_id, trainer_id)` — enforced in app + DB index `idx_bookings_slot_trainer_active`). Same user cannot book the same `slot_id` twice (any trainer). Vehicle capacity is per `(slot, vehicle)` across all trainers. | `student_recognition`, `student_entitlements`, `profiles`, `slots`, `trainers`, `vehicles`, `bookings`, `slot_vehicle_capacity` | `authenticate` |
 | GET | `/api/bookings/my-bookings` | Get user's bookings | `bookings`, `slots`, `trainers`, `profiles`, `vehicles` | `authenticate` |
 | PUT | `/api/bookings/:id/cancel` | Cancel booking | `profiles`, `bookings`, `slots`, `admin_audit_log` | `authenticate` |
 
@@ -180,7 +183,7 @@ The following tables are used across the API endpoints:
 - **`admins`** - Admin accounts (separate from profiles)
 - **`admin_audit_log`** - Audit trail for admin actions
 - **`audit_logs`** - General audit logs (legacy)
-- **`bookings`** - Booking records
+- **`bookings`** - Booking records (`trainer_id` = trainer chosen at booking time; not derived from `slots.trainer_id`)
 - **`profiles`** - User profiles (customers, trainers, admins)
 - **`ratings`** - Trainer ratings by users
 - **`settings`** - Application settings
@@ -206,12 +209,15 @@ The following tables are used across the API endpoints:
 ## Notes
 
 - Rate limiting is applied to most endpoints (see `server.js` for details)
-- Some endpoints have additional validation beyond authentication (e.g., phone number matching, booking eligibility)
+- **Booking flow:** list slots → `GET /api/trainers/available-for-slot/:slotId` → `POST /api/bookings` with `slot_id` + `trainer_id` + `vehicle_id`. `slots.trainer_id` is optional legacy/display only.
+- Some endpoints have additional validation beyond authentication (e.g., phone number matching, booking eligibility, weekly limits, slot visibility window)
+- Google OAuth may merge profiles by email or phone (see `backend/config/passport.js`) to reduce duplicates
 - The admin management routes use a separate `admins` table with its own role system
 - Most admin routes check both `profiles.role` and `admins.role` for authorization
 - Audit logging is implemented for admin actions on bookings, slots, vehicles, and admin management
+- **Migration:** multi-trainer constraint — `supabase/migrations/20260321120000_bookings_unique_slot_trainer.sql`
 
 ---
 
-**Generated:** 2025-01-27
-**Total Endpoints:** 80+
+**Generated:** 2026-03-21  
+**Total Endpoints:** 81+

@@ -36,6 +36,7 @@ function logPostBookingRequest(req, res, next) {
   const u = req.user || {};
   const bodyForLog = {
     slot_id: b.slot_id,
+    trainer_id: b.trainer_id,
     vehicle_id: b.vehicle_id,
     phone: b.phone
       ? `***${String(b.phone).slice(-4)} (${String(b.phone).length} digits)`
@@ -181,12 +182,19 @@ router.post(
       }
     }
 
-    const { slot_id, vehicle_id, phone, notes } = req.body;
+    const { slot_id, trainer_id, vehicle_id, phone, notes } = req.body;
 
     if (!slot_id) {
       const error = new Error('slot_id is required');
       error.status = 400;
       error.errorCode = 'MISSING_SLOT_ID';
+      throw error;
+    }
+
+    if (!trainer_id) {
+      const error = new Error('trainer_id is required');
+      error.status = 400;
+      error.errorCode = 'MISSING_TRAINER_ID';
       throw error;
     }
 
@@ -281,9 +289,10 @@ router.post(
       bookingPhone,
       slotDate,
       slotTime,
-      vehicle_id, // Pass vehicle_id, validation service will lookup type
+      vehicle_id,
       slot_id,
-      req.user.id // Pass userId for entitlement checks
+      req.user.id,
+      trainer_id
     );
 
     if (!validationResult.eligible) {
@@ -312,8 +321,7 @@ router.post(
     // No hardcoded vehicle types - uses vehicle_id and vehicle.max_per_slot dynamically
     const bookingResult = await client.query(
       `WITH locked_slot AS (
-        SELECT s.*, 
-               (SELECT is_active FROM trainers t WHERE t.id = s.trainer_id) as trainer_is_active,
+        SELECT s.*,
                (SELECT COUNT(*) FROM bookings WHERE slot_id = s.id AND vehicle_id = $3 AND status NOT IN ('cancelled')) as vehicle_booked_count
         FROM slots s
         WHERE s.id = $1
@@ -339,7 +347,12 @@ router.post(
           CASE 
             WHEN ls.id IS NULL THEN 'SLOT_NOT_FOUND'
             WHEN vc.vehicle_capacity IS NULL THEN 'INVALID_VEHICLE'
-            WHEN ls.trainer_id IS NULL OR ls.trainer_is_active IS NOT TRUE THEN 'TRAINER_NOT_ASSIGNED'
+            WHEN (SELECT id FROM trainers WHERE id = $4) IS NULL THEN 'TRAINER_NOT_FOUND'
+            WHEN (SELECT is_active FROM trainers WHERE id = $4) IS NOT TRUE THEN 'TRAINER_INACTIVE'
+            WHEN EXISTS (
+              SELECT 1 FROM bookings b
+              WHERE b.slot_id = $1 AND b.trainer_id = $4 AND b.status NOT IN ('cancelled')
+            ) THEN 'TRAINER_SLOT_TAKEN'
             WHEN ls.status IN ('disabled', 'cancelled') THEN 'SLOT_NOT_AVAILABLE'
             WHEN ls.status NOT IN ('available', 'full') THEN 'SLOT_INVALID_STATUS'
             WHEN ls.start_time <= NOW() THEN 'SLOT_PAST'
@@ -352,7 +365,7 @@ router.post(
       ),
       booking_insert AS (
         INSERT INTO bookings (user_id, slot_id, trainer_id, vehicle_id, phone, status, notes)
-        SELECT $2, $1, sv.trainer_id, $3, $4, $5, $6
+        SELECT $2, $1, $4, $3, $5, $6, $7
         FROM slot_validation sv
         WHERE validation_status = 'VALID'
         RETURNING *
@@ -401,7 +414,7 @@ router.post(
       WHERE NOT EXISTS (SELECT 1 FROM booking_insert)
         AND sv.validation_status != 'VALID'
       LIMIT 1`,
-      [slot_id, req.user.id, vehicle_id, bookingPhone, config.booking.defaultStatus, notes]
+      [slot_id, req.user.id, vehicle_id, trainer_id, bookingPhone, config.booking.defaultStatus, notes]
     );
 
     if (bookingResult.rows.length === 0) {
@@ -422,7 +435,9 @@ router.post(
         'SLOT_NOT_VISIBLE': config.slot.visibilityWindowMessage,
         'SLOT_PAST': 'This slot has already started or passed',
         'BOOKING_NOT_OPEN_YET': config.booking.bookingWindowMessage,
-        'TRAINER_NOT_ASSIGNED': 'No trainer assigned to this slot or trainer is inactive',
+        'TRAINER_NOT_FOUND': 'Selected trainer was not found',
+        'TRAINER_INACTIVE': 'This trainer is not available for booking',
+        'TRAINER_SLOT_TAKEN': 'This trainer is already booked for this time slot. Choose another trainer.',
         'VEHICLE_CAPACITY_FULL': `All ${vehicle.name} slots are full for this time slot`,
         'INVALID_VEHICLE': 'Invalid or inactive vehicle selected'
       };
@@ -549,6 +564,20 @@ router.post(
       lockError.status = 409; // Conflict
       lockError.errorCode = 'SLOT_LOCKED';
       return next(lockError);
+    }
+
+    if (error.code === '23505') {
+      const c = String(error.constraint || '');
+      const d = String(error.detail || '');
+      if (
+        c.includes('slot_trainer') ||
+        (d.includes('slot_id') && d.includes('trainer_id'))
+      ) {
+        const dup = new Error('This trainer is already booked for this time slot. Choose another trainer.');
+        dup.status = 409;
+        dup.errorCode = 'TRAINER_SLOT_TAKEN';
+        return next(dup);
+      }
     }
 
     // Convert common booking business validation errors to 400 instead of generic 500.
