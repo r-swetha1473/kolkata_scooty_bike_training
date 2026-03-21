@@ -10,7 +10,7 @@ const db = require('../db');
 const config = require('../app.config');
 const {
   WEEKLY_BOOKING_LIMIT,
-  BOOKING_ADVANCE_HOURS,
+  BOOKING_WINDOW_HOURS,
   SLOT_VISIBILITY_HOURS,
   CANCELLATION_WINDOW_HOURS
 } = require('../config/app.config');
@@ -79,16 +79,25 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       };
     }
     
-    // Check 1: 24-hour advance booking rule
+    // Check 1: Booking opens 24 hours before the slot — only inside that window (slot in future, within BOOKING_WINDOW_HOURS)
     const currentTime = new Date();
     const hoursUntilSlot = (slotStartTime - currentTime) / (1000 * 60 * 60);
-    
-    if (hoursUntilSlot < BOOKING_ADVANCE_HOURS) {
+
+    if (hoursUntilSlot <= 0) {
       return {
         eligible: false,
-        reason: 'SLOT_TOO_SOON',
-        message: `Bookings must be made at least ${BOOKING_ADVANCE_HOURS} hours in advance. The selected slot starts in ${Math.round(hoursUntilSlot * 10) / 10} hours.`,
-        details: { hoursUntilSlot, requiredHours: BOOKING_ADVANCE_HOURS }
+        reason: 'SLOT_PAST',
+        message: 'This slot has already started or passed.',
+        details: { hoursUntilSlot }
+      };
+    }
+
+    if (hoursUntilSlot > BOOKING_WINDOW_HOURS) {
+      return {
+        eligible: false,
+        reason: 'BOOKING_NOT_OPEN_YET',
+        message: `Booking opens ${BOOKING_WINDOW_HOURS} hours before the class. This slot starts in ${Math.round(hoursUntilSlot * 10) / 10} hours.`,
+        details: { hoursUntilSlot, bookingWindowHours: BOOKING_WINDOW_HOURS }
       };
     }
     
@@ -172,9 +181,6 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
            s.slot_date,
            s.status,
            s.is_visible,
-           s.electric_capacity,
-           s.petrol_capacity,
-           s.bike_capacity,
            s.trainer_id,
            t.is_active as trainer_is_active
          FROM slots s
@@ -183,9 +189,9 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         [slotId]
       );
       
-      // Get vehicle-specific booking count for this vehicle dynamically
+      // Per-slot capacity from slot_vehicle_capacity when configured
       const vehicleBookedCount = await vehicleService.getVehicleBookedCount(slotId, vehicleId);
-      const vehicleCapacity = vehicle.max_per_slot;
+      const vehicleCapacity = await vehicleService.getEffectiveCapacityForSlot(slotId, vehicleId);
       
       if (slotCheck.rows.length === 0) {
         return {
@@ -207,21 +213,18 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         };
       }
       
-      // PHASE 5: Fix MBR-001 - Check slot visibility (24-hour rule)
-      // Business rule: Slot becomes visible when current_time >= slot_start_time - 24 hours
-      // If slot.is_visible is false, re-check dynamically (in case visibility changed since slot creation)
+      // Visibility: show/book only when slot is within the booking window (same as Check 1)
       const slotStart = new Date(slot.start_time);
-      const visibilityThreshold = new Date(currentTime.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-      
-      // Slot is visible if slot_start_time <= current_time + 24 hours
-      const isCurrentlyVisible = slotStart <= visibilityThreshold;
-      
+      const hoursUntil = (slotStart - currentTime) / (1000 * 60 * 60);
+      const isCurrentlyVisible =
+        hoursUntil > 0 && hoursUntil <= SLOT_VISIBILITY_HOURS;
+
       if (!slot.is_visible && !isCurrentlyVisible) {
         return {
           eligible: false,
           reason: 'SLOT_NOT_VISIBLE',
           message: config.slot.visibilityWindowMessage,
-          details: { slotStartTime: slot.start_time, visibilityThreshold }
+          details: { slotStartTime: slot.start_time, hoursUntil }
         };
       }
       
@@ -265,8 +268,11 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         };
       }
     }
-    
-    // All checks passed
+
+    const effectiveVehicleCapacity = slotId
+      ? await vehicleService.getEffectiveCapacityForSlot(slotId, vehicleId)
+      : vehicle.max_per_slot;
+
     return {
       eligible: true,
       reason: 'VALID',
@@ -277,7 +283,7 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         slotTime,
         vehicleId: vehicleId,
         vehicleName: vehicle.name,
-        vehicleCapacity: vehicle.max_per_slot,
+        vehicleCapacity: effectiveVehicleCapacity,
         weeklyBookingsCount
       }
     };

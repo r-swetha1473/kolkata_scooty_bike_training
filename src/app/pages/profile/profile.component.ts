@@ -8,6 +8,7 @@ import { BookingService } from '../../services/booking.service';
 import { HttpService } from '../../services/http.service';
 import { firstValueFrom } from 'rxjs';
 import { extractDateFromDateTime, extractTime, formatTimeToAMPM, isPastDateTime, calculateDurationMinutes } from '../../utils/date.utils';
+import { setAuthToken } from '../../utils/auth-token.storage';
 
 export interface Booking {
   id: string;
@@ -661,9 +662,7 @@ export class ProfileComponent implements OnInit {
       const oauthToken = this.route.snapshot.queryParamMap.get('token');
       console.log('OAuth token from query params:', oauthToken);
       if (oauthToken) {
-        localStorage.setItem('token', oauthToken);
-        // Keep sessionStorage in sync because current auth headers use sessionStorage.
-        sessionStorage.setItem('token', oauthToken);
+        setAuthToken(oauthToken);
       }
 
       // Check if user profile is already loaded

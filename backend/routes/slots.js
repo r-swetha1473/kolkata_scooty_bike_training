@@ -222,7 +222,6 @@ router.get('/date/:date', async (req, res, next) => {
 router.get('/range', async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
-    console.log('Range endpoint called:', { start_date, end_date });
     if (!start_date || !end_date) {
       const error = new Error('start_date and end_date are required');
       error.status = 400;
@@ -273,8 +272,8 @@ router.get('/available', async (req, res, next) => {
         AND s.trainer_id IS NOT NULL
         AND s.booked_count < s.capacity
         AND t.is_active = true
-        AND s.is_visible = true
-        AND s.start_time >= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours')
+        AND s.start_time > NOW()
+        AND s.start_time <= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours')
     `;
     const params = [];
 
@@ -352,7 +351,7 @@ router.put('/:id/vehicle-capacity', authenticate, async (req, res, next) => {
     
     // Validate and update each vehicle capacity
     for (const [vehicleId, newCapacity] of Object.entries(vehicle_capacities)) {
-      const current = currentCapacities.rows.find(r => r.vehicle_id === vehicleId);
+      const current = currentCapacities.rows.find(r => String(r.vehicle_id) === String(vehicleId));
       if (!current) {
         await client.query('ROLLBACK');
         client.release();
@@ -540,8 +539,8 @@ router.post('/', authenticate, validateSlotCreation, async (req, res, next) => {
     if (start_time) {
       const slotStartTime = new Date(start_time);
       const visibilityThreshold = new Date(Date.now() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-      // Slot is visible if it starts within or after the visibility window (24 hours from now)
-      isVisible = slotStartTime <= visibilityThreshold;
+      const now = new Date();
+      isVisible = slotStartTime > now && slotStartTime <= visibilityThreshold;
     }
 
     // Insert slot (without vehicle capacity columns)
@@ -871,8 +870,8 @@ router.put('/:id', authenticate, validateSlotUpdate, async (req, res, next) => {
     if (start_time !== undefined) {
       const slotStartTime = new Date(start_time);
       const visibilityThreshold = new Date(Date.now() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-      // Slot is visible if it starts within or after the visibility window
-      const isVisible = slotStartTime <= visibilityThreshold;
+      const now = new Date();
+      const isVisible = slotStartTime > now && slotStartTime <= visibilityThreshold;
       updates.push(`is_visible = $${paramIndex++}::boolean`);
       params.push(isVisible);
     }
@@ -1071,12 +1070,27 @@ router.post('/generate', authenticate, async (req, res, next) => {
       return next(error);
     }
 
-    // PHASE 2: Wrap slot generation in transaction
-    await client.query('BEGIN');
-
     const { date, force } = req.body;
     // Use the provided date string directly (first 10 chars) to avoid timezone shifts
     const dateString = normalizeDate(date || getToday());
+
+    // Do not generate for today or the past (one-day-at-a-time admin workflow; use tomorrow+)
+    const todayStr = getToday();
+    if (dateString <= todayStr) {
+      client.release();
+      const nextDay = addDays(todayStr, 1);
+      const error = new Error(
+        `Slot generation is only allowed for future dates. Use tomorrow (${nextDay}) or later.`
+      );
+      error.status = 400;
+      error.errorCode = 'GENERATE_FUTURE_DATE_REQUIRED';
+      error.suggestedDate = nextDay;
+      error.requestedDate = dateString;
+      return next(error);
+    }
+
+    // PHASE 2: Wrap slot generation in transaction
+    await client.query('BEGIN');
     
     // Check if slots already exist for this date
     const existingSlotsCheck = await client.query(`
@@ -1253,7 +1267,7 @@ router.post('/generate', authenticate, async (req, res, next) => {
         // Deterministic check: slot is visible if slot_start_time <= current_time + 24 hours
         const now = new Date();
         const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart <= visibilityThreshold;
+        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
 
         const slot = {
           trainer_id: null,
@@ -1331,21 +1345,17 @@ router.post('/generate', authenticate, async (req, res, next) => {
         // Extract hours and minutes from total minutes using integer division
         const startHours = Math.floor(startMinutes / 60);
         const startMins = startMinutes % 60;
-        const endHours = Math.floor(endMinutes / 60);
-        const endMins = endMinutes % 60;
-        
-        // Create Date objects using Date.UTC to avoid timezone issues
-        // Using the extracted year, month, day ensures slots stay on the same day
-        // This guarantees no midnight crossing: all slots are 10:30-12:30 on the same date
-        const slotStart = new Date(Date.UTC(year, month - 1, day, startHours, startMins, 0, 0));
-        const slotEnd = new Date(Date.UTC(year, month - 1, day, endHours, endMins, 0, 0));
+        const endHoursIST = Math.floor(endMinutes / 60);
+        const endMinsIST = endMinutes % 60;
 
-        // PHASE 5: Fix MBR-001 - Slot open rule clarification
-        // Slot becomes visible when current_time >= slot_start_time - 24 hours
-        // Deterministic check: slot is visible if slot_start_time <= current_time + 24 hours
+        const startUTC = convertISTToUTC(startHours, startMins);
+        const endUTC = convertISTToUTC(endHoursIST, endMinsIST);
+        const slotStart = new Date(Date.UTC(year, month - 1, day, startUTC.hours, startUTC.minutes, 0, 0));
+        const slotEnd = new Date(Date.UTC(year, month - 1, day, endUTC.hours, endUTC.minutes, 0, 0));
+
         const now = new Date();
         const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart <= visibilityThreshold;
+        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
 
         const slot = {
           trainer_id: null,
@@ -1415,7 +1425,7 @@ router.post('/generate', authenticate, async (req, res, next) => {
         // Deterministic check: slot is visible if slot_start_time <= current_time + 24 hours
         const now = new Date();
         const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart <= visibilityThreshold;
+        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
 
         const slot = {
           trainer_id: null,
@@ -1678,11 +1688,17 @@ router.post('/update-visibility', authenticate, async (req, res, next) => {
         updated_count: updatedCount
       });
     } else {
-      // Fallback: manual update
+      // Booking window: visible when slot is in the future and within SLOT_VISIBILITY_HOURS
       const result = await db.query(`
         UPDATE slots
-        SET is_visible = (start_time >= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours'))
-        WHERE is_visible != (start_time >= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours'))
+        SET is_visible = (
+          start_time > NOW()
+          AND start_time <= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours')
+        )
+        WHERE is_visible IS DISTINCT FROM (
+          start_time > NOW()
+          AND start_time <= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours')
+        )
       `);
       res.json({
         success: true,

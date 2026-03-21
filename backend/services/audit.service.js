@@ -188,6 +188,36 @@ async function logBookingCancellation(adminId, bookingId, bookingData, reason) {
 }
 
 /**
+ * Log customer-initiated cancellation (actor is the user's profile id)
+ */
+async function logUserBookingCancellation(userId, bookingId, bookingData, reason) {
+  await logAdminAction({
+    adminId: userId,
+    actionType: 'USER_CANCEL_BOOKING',
+    entityType: 'booking',
+    entityId: bookingId,
+    beforeValue: {
+      id: bookingData.id,
+      user_id: bookingData.user_id,
+      slot_id: bookingData.slot_id,
+      vehicle_id: bookingData.vehicle_id,
+      status: bookingData.status
+    },
+    afterValue: {
+      id: bookingData.id,
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: userId,
+      cancellation_reason: reason
+    },
+    details: {
+      reason: reason || null,
+      cancelled_by_customer: true
+    }
+  });
+}
+
+/**
  * Helper function to get changed fields between two objects
  */
 function getChangedFields(before, after) {
@@ -210,5 +240,6 @@ module.exports = {
   logVehicleCreate,
   logVehicleUpdate,
   logVehicleDelete,
-  logBookingCancellation
+  logBookingCancellation,
+  logUserBookingCancellation
 };

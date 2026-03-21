@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject, firstValueFrom } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { getAuthToken, setAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
 export interface User {
   id: string;
@@ -77,7 +78,7 @@ export class ApiService {
         return;
       }
 
-      sessionStorage.setItem('token', token);
+      setAuthToken(token);
       url.searchParams.delete('token');
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     } catch (error) {
@@ -85,23 +86,18 @@ export class ApiService {
     }
   }
 
-  // TODO: Migrate to httpOnly cookies for secure token storage
-  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private loadUserFromToken() {
-    // Try to load user from either sessionStorage token OR httpOnly cookie
-    // Cookie-based auth (from Google OAuth) is preferred
     this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(true)).subscribe({
       next: (user) => {
         this.currentUserSubject.next(user);
       },
       error: () => {
-        // If cookie auth fails, try sessionStorage token (for email/password login)
-        const token = sessionStorage.getItem('token');
+        const token = getAuthToken();
         if (token) {
           this.http.get<User>(`${this.apiUrl}/profiles/me`, this.getHttpOptions(true)).subscribe({
             next: (user) => this.currentUserSubject.next(user),
             error: () => {
-              sessionStorage.removeItem('token');
+              clearAuthToken();
               this.currentUserSubject.next(null);
             }
           });
@@ -113,12 +109,10 @@ export class ApiService {
   }
 
   private getAuthHeaders(): HttpHeaders {
-    const token = sessionStorage.getItem('token');
+    const token = getAuthToken();
     const headers = new HttpHeaders({
       'Content-Type': 'application/json'
     });
-    // Only add Authorization header if token exists (for backward compatibility)
-    // Cookie-based auth (httpOnly) is preferred and doesn't need Authorization header
     if (token) {
       return headers.set('Authorization', `Bearer ${token}`);
     }
@@ -133,7 +127,7 @@ export class ApiService {
   }
 
   setToken(token: string) {
-    sessionStorage.setItem('token', token);
+    setAuthToken(token);
     this.loadUserFromToken();
   }
 
@@ -144,7 +138,7 @@ export class ApiService {
   signOut(): Observable<any> {
     return this.http.post(`${this.apiUrl}/auth/logout`, {}).pipe(
       tap(() => {
-        sessionStorage.removeItem('token');
+        clearAuthToken();
         this.currentUserSubject.next(null);
       })
     );
@@ -179,16 +173,29 @@ export class ApiService {
     return this.http.get<Slot[]>(url, this.getHttpOptions(false));
   }
 
-  createBooking(slotId: string, trainerId: string, vehicleId: string, notes?: string): Observable<Booking> {
-    return this.http.post<Booking>(`${this.apiUrl}/bookings`, {
+  createBooking(
+    slotId: string,
+    trainerId: string,
+    vehicleId: string,
+    options?: { phone?: string; notes?: string }
+  ): Observable<Booking> {
+    const payload: Record<string, string> = {
       slot_id: slotId,
       trainer_id: trainerId,
       vehicle_id: vehicleId,
-      notes: notes || ''
-    }, {
-      headers: this.getAuthHeaders(),
-      withCredentials: true
+      notes: (options?.notes ?? '').trim()
+    };
+    const phone = options?.phone?.trim();
+    if (phone) {
+      payload.phone = phone;
+    }
+    const token = getAuthToken();
+    console.log('[ApiService] POST /bookings', {
+      payload: { ...payload, phone: payload.phone ? '***' + payload.phone.slice(-4) : '(none)', notes: payload.notes ? '[set]' : '' },
+      hasBearerToken: !!token,
+      authorizationHeader: token ? `Bearer <${token.length} chars>` : '(none — relying on httpOnly cookie)'
     });
+    return this.http.post<Booking>(`${this.apiUrl}/bookings`, payload, this.getHttpOptions(true));
   }
 
   getVehicles(): Observable<any[]> {
@@ -234,11 +241,23 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/admin/dashboard`, this.getHttpOptions(true));
   }
 
+  /**
+   * Sends Bearer token + cookies when present (required for /auth/me, /profiles/me, etc.).
+   * Safe for public routes too — extra Authorization is ignored by the server.
+   */
   get<T>(path: string): Promise<T> {
-    return firstValueFrom(this.http.get<T>(`${this.apiUrl}${path}`, this.getHttpOptions(false)));
+    return firstValueFrom(this.http.get<T>(`${this.apiUrl}${path}`, this.getHttpOptions(true)));
   }
 
   post<T>(path: string, body: any): Promise<T> {
+    if (path.includes('bookings') && path.replace(/^\//, '') === 'bookings') {
+      console.log('[ApiService] POST /bookings body:', {
+        ...body,
+        phone: body?.phone ? '***' + String(body.phone).slice(-4) : body?.phone,
+        notes: body?.notes ? '[set]' : body?.notes
+      });
+      console.log('[ApiService] Auth: Bearer token present:', !!getAuthToken(), '| withCredentials: true');
+    }
     return firstValueFrom(this.http.post<T>(`${this.apiUrl}${path}`, body, this.getHttpOptions(true)));
   }
 

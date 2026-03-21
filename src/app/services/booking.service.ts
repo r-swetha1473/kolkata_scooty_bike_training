@@ -90,13 +90,25 @@ export class BookingService {
     }
   }
 
-  async createBooking(slotId: string, trainerId: string, notes: string): Promise<BookingWithDetails> {
+  async createBooking(
+    slotId: string,
+    trainerId: string,
+    vehicleId: string,
+    notes: string,
+    phone?: string
+  ): Promise<BookingWithDetails> {
     try {
-      const booking = await firstValueFrom(this.http.post<BookingWithDetails>('/bookings', {
+      const body: Record<string, string> = {
         slot_id: slotId,
         trainer_id: trainerId,
-        notes
-      }));
+        vehicle_id: vehicleId,
+        notes: notes || ''
+      };
+      if (phone?.trim()) {
+        body.phone = phone.trim();
+      }
+      console.log('[BookingService] POST /bookings', { ...body, notes: body.notes ? '[set]' : '' });
+      const booking = await firstValueFrom(this.http.post<BookingWithDetails>('/bookings', body));
 
       if (!booking) {
         throw new Error('Failed to create booking');

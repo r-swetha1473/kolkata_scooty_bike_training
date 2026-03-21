@@ -40,7 +40,9 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
     statusCode = 401;
     message = err.message || 'Invalid or expired token';
-    errorCode = 'AUTHENTICATION_ERROR';
+    errorCode =
+      err.errorCode ||
+      (err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN');
   }
 
   // Validation errors (from express-validator)
@@ -98,16 +100,25 @@ const errorHandler = (err, req, res, next) => {
     }
   }
 
-  // Send standardized error response
   const response = {
     success: false,
     message,
     errorCode
   };
 
-  // Include validation errors if present
   if (err.errors && Array.isArray(err.errors)) {
     response.errors = err.errors;
+  }
+
+  // Optional structured payload (409 conflicts, validation hints)
+  const extraData = {};
+  if (err.nextAvailableDate != null) extraData.nextAvailableDate = err.nextAvailableDate;
+  if (err.existingDate != null) extraData.existingDate = err.existingDate;
+  if (err.suggestedDate != null) extraData.suggestedDate = err.suggestedDate;
+  if (err.requestedDate != null) extraData.requestedDate = err.requestedDate;
+  if (err.allowedDate != null) extraData.allowedDate = err.allowedDate;
+  if (Object.keys(extraData).length > 0) {
+    response.data = extraData;
   }
 
   // Include stack trace in development mode only

@@ -3,6 +3,7 @@ import { Router, CanActivateFn } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { map, take, filter, timeout, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
+import { getAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
 export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
@@ -48,10 +49,7 @@ export const adminGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  // TODO: Migrate to httpOnly cookies for secure token storage
-  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
-  // Check if token exists first
-  const token = sessionStorage.getItem('token');
+  const token = getAuthToken();
   if (!token) {
     router.navigate(['/admin/login'], { queryParams: { returnUrl: state.url } });
     return false;
@@ -75,7 +73,7 @@ export const adminGuard: CanActivateFn = (route, state) => {
     take(1),
     map(user => {
       if (!user) {
-        sessionStorage.removeItem('token');
+        clearAuthToken();
         router.navigate(['/admin/login'], { queryParams: { returnUrl: state.url } });
         return false;
       }
@@ -88,8 +86,7 @@ export const adminGuard: CanActivateFn = (route, state) => {
       return false;
     }),
     catchError(() => {
-      // Timeout or error - redirect to login
-      sessionStorage.removeItem('token');
+      clearAuthToken();
       router.navigate(['/admin/login'], { queryParams: { returnUrl: state.url } });
       return of(false);
     })

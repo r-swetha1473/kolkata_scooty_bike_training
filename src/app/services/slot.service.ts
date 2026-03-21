@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { getAuthToken } from '../utils/auth-token.storage';
 
 export interface Slot {
   id: string;
@@ -15,7 +16,13 @@ export interface Slot {
   is_auto_generated: boolean;
   created_at: string;
   updated_at: string;
-  // PHASE 4: Vehicle-specific capacity and bookings
+  /** Per-vehicle rows from API (preferred over legacy electric_* fields) */
+  vehicle_capacities?: Array<{
+    vehicle_id: string;
+    vehicle_name: string;
+    capacity: number;
+    booked: number;
+  }>;
   electric_capacity?: number;
   petrol_capacity?: number;
   bike_capacity?: number;
@@ -38,13 +45,11 @@ export class SlotService {
 
   constructor(private http: HttpClient) {}
 
-  // TODO: Migrate to httpOnly cookies for secure token storage
-  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private getAuthHeaders(): HttpHeaders {
-    const token = sessionStorage.getItem('token');
+    const token = getAuthToken();
     return new HttpHeaders({
       'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` })
+      ...(token && { Authorization: `Bearer ${token}` })
     });
   }
 
@@ -159,10 +164,10 @@ export class SlotService {
     );
   }
 
-  // PHASE 4: Update vehicle capacity for a slot
-  async updateVehicleCapacity(slotId: string, capacities: { electric_capacity?: number; petrol_capacity?: number; bike_capacity?: number }): Promise<Slot> {
+  /** vehicleCapacities: map of vehicle UUID -> capacity */
+  async updateVehicleCapacity(slotId: string, vehicleCapacities: Record<string, number>): Promise<Slot> {
     return firstValueFrom(
-      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/vehicle-capacity`, capacities, {
+      this.http.put<Slot>(`${this.apiUrl}/slots/${slotId}/vehicle-capacity`, { vehicle_capacities: vehicleCapacities }, {
         headers: this.getAuthHeaders()
       })
     );

@@ -57,6 +57,33 @@ async function getVehicleBookedCount(slotId, vehicleId) {
 }
 
 /**
+ * Per-slot capacity from slot_vehicle_capacity when present, else vehicles.max_per_slot
+ */
+async function getEffectiveCapacityForSlot(slotId, vehicleId) {
+  const vehicle = await getVehicleById(vehicleId);
+  if (!vehicle || !vehicle.is_active) {
+    return 0;
+  }
+
+  try {
+    const svc = await db.query(
+      `SELECT capacity FROM slot_vehicle_capacity 
+       WHERE slot_id = $1 AND vehicle_id = $2`,
+      [slotId, vehicleId]
+    );
+    if (svc.rows.length > 0) {
+      return parseInt(svc.rows[0].capacity, 10) || vehicle.max_per_slot;
+    }
+  } catch (e) {
+    if (e.code !== '42P01') {
+      throw e;
+    }
+  }
+
+  return vehicle.max_per_slot;
+}
+
+/**
  * Check if vehicle has available capacity in a slot
  * @param {string} slotId - Slot UUID
  * @param {string} vehicleId - Vehicle UUID
@@ -69,7 +96,7 @@ async function checkVehicleAvailability(slotId, vehicleId) {
   }
 
   const booked = await getVehicleBookedCount(slotId, vehicleId);
-  const capacity = vehicle.max_per_slot;
+  const capacity = await getEffectiveCapacityForSlot(slotId, vehicleId);
 
   return {
     available: booked < capacity,
@@ -83,5 +110,6 @@ module.exports = {
   getVehicleById,
   getVehicleCapacity,
   getVehicleBookedCount,
+  getEffectiveCapacityForSlot,
   checkVehicleAvailability
 };

@@ -12,7 +12,6 @@ const {
   SLOT_VISIBILITY_HOURS,
   WEEKLY_BOOKING_LIMIT,
   TOTAL_BOOKING_LIMIT,
-  BOOKING_ADVANCE_HOURS,
   ENTITLEMENT_VALIDITY_DAYS
 } = require('../config/app.config');
 const { validateBookingEligibility, validateCancellationEligibility } = require('../services/bookingValidation.service');
@@ -20,15 +19,26 @@ const vehicleService = require('../services/vehicle.service');
 const auditService = require('../services/audit.service');
 const router = express.Router();
 
-router.post('/', authenticate, validateBookingCreation, async (req, res, next) => {
+/** OAuth profiles use a synthetic phone (GOOGLE_<id>) until the user saves a real number. */
+function isPlaceholderProfilePhone(phone) {
+  if (phone == null || String(phone).trim() === '') return true;
+  return String(phone).startsWith('GOOGLE_');
+}
+
+function logPostBookingRequest(req, res, next) {
+  if (process.env.NODE_ENV === 'development') {
+    const b = req.body || {};
+    console.log('[Bookings][POST] user:', req.user?.id, '| body keys:', Object.keys(b));
+  }
+  next();
+}
+
+router.post('/', authenticate, logPostBookingRequest, validateBookingCreation, async (req, res, next) => {
   const client = await db.getClient();
 
   try {
-    console.log('[Bookings][POST /] Incoming body:', req.body);
-    console.log('[Bookings][POST /] Auth user:', req.user ? { id: req.user.id, role: req.user.role } : null);
-
     if (!req.user || !req.user.id) {
-      const authError = new Error('Authentication required. User context missing.');
+      const authError = new Error('Unauthorized');
       authError.status = 401;
       authError.errorCode = 'AUTH_USER_MISSING';
       throw authError;
@@ -172,7 +182,9 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     );
     
     if (userCheck.rows.length === 0) {
-      throw new Error('User not found');
+      const err = new Error('User not found');
+      err.status = 404;
+      throw err;
     }
 
     const user = userCheck.rows[0];
@@ -180,25 +192,26 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     // PHASE 5: Fix MBR-002 - Enforce phone number must match registered profile phone
     // Business rule: "Booking allowed only for registered phone numbers"
     // If user has no phone registered, require them to provide one (and it will be registered)
-    if (!user.phone && !phone) {
-      throw new Error('Phone number is required to make bookings. Please provide your mobile number.');
+    if (isPlaceholderProfilePhone(user.phone) && !phone) {
+      const err = new Error('Phone number is required to make bookings. Please provide your mobile number.');
+      err.status = 400;
+      throw err;
     }
     
-    // PHASE 5: If phone is provided, it must match user's registered phone
-    // Exception: If user has no phone registered, allow setting it during booking
     if (phone) {
-      // Validate phone number format (10 digits)
       if (!config.booking.phoneNumberPattern.test(phone)) {
-        throw new Error(config.booking.phoneNumberErrorMessage);
+        const err = new Error(config.booking.phoneNumberErrorMessage);
+        err.status = 400;
+        throw err;
       }
       
-      // If user already has a phone registered, it must match
-      if (user.phone && phone !== user.phone) {
-        throw new Error('Phone number must match your registered phone number. Only registered phone numbers can make bookings.');
+      if (!isPlaceholderProfilePhone(user.phone) && phone !== user.phone) {
+        const err = new Error('Phone number must match your registered phone number. Only registered phone numbers can make bookings.');
+        err.status = 400;
+        throw err;
       }
       
-      // If user has no phone registered, set it now
-      if (!user.phone) {
+      if (isPlaceholderProfilePhone(user.phone)) {
         try {
           await client.query(
             'UPDATE profiles SET phone = $1, updated_at = NOW() WHERE id = $2',
@@ -225,7 +238,9 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     );
 
     if (slotCheck.rows.length === 0) {
-      throw new Error('Slot not found');
+      const err = new Error('Slot not found');
+      err.status = 404;
+      throw err;
     }
 
     const slot = slotCheck.rows[0];
@@ -243,7 +258,10 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
     );
 
     if (!validationResult.eligible) {
-      throw new Error(validationResult.message || `Booking not eligible: ${validationResult.reason}`);
+      const err = new Error(validationResult.message || `Booking not eligible: ${validationResult.reason}`);
+      err.status = 400;
+      err.errorCode = validationResult.reason || 'BOOKING_NOT_ELIGIBLE';
+      throw err;
     }
 
     // Get vehicle details dynamically
@@ -283,24 +301,30 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
         FOR UPDATE NOWAIT
       ),
       vehicle_check AS (
-        SELECT v.max_per_slot, v.name
+        SELECT 
+          v.max_per_slot,
+          v.name,
+          COALESCE(
+            (SELECT svc.capacity FROM slot_vehicle_capacity svc
+             WHERE svc.slot_id = $1 AND svc.vehicle_id = v.id),
+            v.max_per_slot
+          ) AS vehicle_capacity
         FROM vehicles v
         WHERE v.id = $4 AND v.is_active = true
       ),
       slot_validation AS (
         SELECT 
           ls.*,
-          vc.max_per_slot as vehicle_capacity,
+          vc.vehicle_capacity,
           vc.name as vehicle_name,
           CASE 
             WHEN ls.id IS NULL THEN 'SLOT_NOT_FOUND'
-            WHEN vc.max_per_slot IS NULL THEN 'INVALID_VEHICLE'
+            WHEN vc.vehicle_capacity IS NULL THEN 'INVALID_VEHICLE'
             WHEN ls.status IN ('disabled', 'cancelled') THEN 'SLOT_NOT_AVAILABLE'
             WHEN ls.status NOT IN ('available', 'full') THEN 'SLOT_INVALID_STATUS'
-            WHEN NOT ls.is_visible THEN 'SLOT_NOT_VISIBLE'
-            WHEN ls.start_time < (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours') THEN 'SLOT_TOO_SOON'
-            -- Check vehicle capacity dynamically using vehicle.max_per_slot
-            WHEN ls.vehicle_booked_count >= vc.max_per_slot THEN 'VEHICLE_CAPACITY_FULL'
+            WHEN ls.start_time <= NOW() THEN 'SLOT_PAST'
+            WHEN ls.start_time > (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours') THEN 'BOOKING_NOT_OPEN_YET'
+            WHEN ls.vehicle_booked_count >= vc.vehicle_capacity THEN 'VEHICLE_CAPACITY_FULL'
             ELSE 'VALID'
           END as validation_status
         FROM locked_slot ls
@@ -377,7 +401,8 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
         'SLOT_FULL': 'Slot is already fully booked',
         'SLOT_INVALID_CAPACITY': config.slot.maxCapacityErrorMessage,
         'SLOT_NOT_VISIBLE': config.slot.visibilityWindowMessage,
-        'SLOT_TOO_SOON': config.booking.bookingWindowMessage,
+        'SLOT_PAST': 'This slot has already started or passed',
+        'BOOKING_NOT_OPEN_YET': config.booking.bookingWindowMessage,
         'VEHICLE_CAPACITY_FULL': `All ${vehicle.name} slots are full for this time slot`,
         'INVALID_VEHICLE': 'Invalid or inactive vehicle selected'
       };
@@ -486,16 +511,16 @@ router.post('/', authenticate, validateBookingCreation, async (req, res, next) =
       // Don't fail the request if email fails
     }
 
-    res.status(201).json(booking);
+    res.status(200).json(booking);
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('[Bookings][POST /] Error:', {
-      message: error.message,
-      code: error.code,
-      status: error.status,
-      userId: req.user?.id || null,
-      body: req.body
-    });
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('[Bookings][POST /] Rollback failed:', rollbackErr.message);
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Bookings][POST /] Error:', error.message, error.code);
+    }
     
     // PHASE 5: Fix DIR-002 - Handle lock timeout errors (NOWAIT failures)
     // If slot is locked by another transaction, provide clear error message
@@ -634,20 +659,15 @@ router.put('/:id/cancel', authenticate, async (req, res, next) => {
       [booking.slot_id]
     );
 
-    // Log audit trail if cancelled by admin
     if (req.user.role === 'admin' || req.user.role === 'superadmin') {
       await auditService.logBookingCancellation(req.user.id, req.params.id, booking, cancellation_reason || 'Admin cancellation');
+    } else {
+      await auditService.logUserBookingCancellation(req.user.id, req.params.id, booking, cancellation_reason || 'User cancellation');
     }
 
-    // PHASE 5: Update slot status based on capacity
-    // Check if slot should be marked as full or available
+    // Update slot aggregate status from booked_count (per-vehicle counts live in bookings + slot_vehicle_capacity)
     const slotStatusCheck = await client.query(
-      `SELECT booked_count, capacity, 
-              COALESCE(electric_booked, 0) as electric_booked,
-              COALESCE(petrol_booked, 0) as petrol_booked,
-              COALESCE(bike_booked, 0) as bike_booked,
-              electric_capacity, petrol_capacity, bike_capacity
-       FROM slots WHERE id = $1`,
+      `SELECT booked_count, capacity FROM slots WHERE id = $1`,
       [booking.slot_id]
     );
     

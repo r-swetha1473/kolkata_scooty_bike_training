@@ -6,6 +6,7 @@ import { TrainerService, Trainer } from '../../../services/trainer.service';
 import { ToastService } from '../../../services/toast.service';
 import { environment } from '../../../../environments/environment';
 import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../../utils/date.utils';
+import { getAuthToken } from '../../../utils/auth-token.storage';
 
 @Component({
   selector: 'app-admin-slots',
@@ -103,22 +104,31 @@ import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMi
                 </div>
               </ng-template>
 
-              <!-- PHASE 4: Vehicle-aware capacity display -->
               <div class="slot-capacity-compact">
-                <div class="vehicle-capacity-grid">
-                  <div class="vehicle-capacity-item" [class.full]="(slot.electric_booked || 0) >= (slot.electric_capacity || 0)" [class.warning]="(slot.electric_booked || 0) >= (slot.electric_capacity || 0) * 0.8">
-                    <span class="vehicle-label">⚡ Electric</span>
-                    <span class="vehicle-count">{{ slot.electric_booked || 0 }} / {{ slot.electric_capacity || 3 }}</span>
-                  </div>
-                  <div class="vehicle-capacity-item" [class.full]="(slot.petrol_booked || 0) >= (slot.petrol_capacity || 1)" [class.warning]="(slot.petrol_booked || 0) >= (slot.petrol_capacity || 1) * 0.8">
-                    <span class="vehicle-label">⛽ Petrol</span>
-                    <span class="vehicle-count">{{ slot.petrol_booked || 0 }} / {{ slot.petrol_capacity || 1 }}</span>
-                  </div>
-                  <div class="vehicle-capacity-item" [class.full]="(slot.bike_booked || 0) >= (slot.bike_capacity || 1)" [class.warning]="(slot.bike_booked || 0) >= (slot.bike_capacity || 1) * 0.8">
-                    <span class="vehicle-label">🏍️ Bike</span>
-                    <span class="vehicle-count">{{ slot.bike_booked || 0 }} / {{ slot.bike_capacity || 1 }}</span>
+                <div class="vehicle-capacity-grid" *ngIf="vehicleRows(slot).length > 0; else legacyVehicleCap">
+                  <div *ngFor="let vc of vehicleRows(slot)" class="vehicle-capacity-item"
+                    [class.full]="vc.booked >= vc.capacity"
+                    [class.warning]="vc.capacity > 0 && vc.booked >= vc.capacity * 0.8 && vc.booked < vc.capacity">
+                    <span class="vehicle-label">{{ vc.vehicle_name }}</span>
+                    <span class="vehicle-count">{{ vc.booked }} / {{ vc.capacity }}</span>
                   </div>
                 </div>
+                <ng-template #legacyVehicleCap>
+                  <div class="vehicle-capacity-grid">
+                    <div class="vehicle-capacity-item">
+                      <span class="vehicle-label">⚡ Electric</span>
+                      <span class="vehicle-count">{{ slot.electric_booked || 0 }} / {{ slot.electric_capacity || 3 }}</span>
+                    </div>
+                    <div class="vehicle-capacity-item">
+                      <span class="vehicle-label">⛽ Petrol</span>
+                      <span class="vehicle-count">{{ slot.petrol_booked || 0 }} / {{ slot.petrol_capacity || 1 }}</span>
+                    </div>
+                    <div class="vehicle-capacity-item">
+                      <span class="vehicle-label">🏍️ Bike</span>
+                      <span class="vehicle-count">{{ slot.bike_booked || 0 }} / {{ slot.bike_capacity || 1 }}</span>
+                    </div>
+                  </div>
+                </ng-template>
                 <!-- Legacy total capacity (keep for reference) -->
                 <div class="capacity-header" style="margin-top: 8px;">
                   <span class="capacity-text" style="font-size: 11px; color: var(--admin-text-secondary);">Total: {{ slot.booked_count }} / {{ slot.capacity }}</span>
@@ -212,24 +222,32 @@ import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMi
               Trainer: <strong>{{ selectedSlot.trainer.profile.full_name }}</strong>
             </div>
             
-            <!-- PHASE 4: Vehicle-aware capacity display -->
-            <div class="popup-vehicle-capacity">
-              <div class="vehicle-capacity-row">
-                <span class="vehicle-label-popup">⚡ Electric:</span>
-                <span class="vehicle-count-popup">{{ selectedSlot.electric_booked || 0 }} / {{ selectedSlot.electric_capacity || 3 }}</span>
-                <button class="vehicle-control-btn" (click)="openVehicleCapacityModal('ELECTRIC')" title="Adjust capacity">⚙️</button>
-              </div>
-              <div class="vehicle-capacity-row">
-                <span class="vehicle-label-popup">⛽ Petrol:</span>
-                <span class="vehicle-count-popup">{{ selectedSlot.petrol_booked || 0 }} / {{ selectedSlot.petrol_capacity || 1 }}</span>
-                <button class="vehicle-control-btn" (click)="showVehicleCapacityModal('PETROL')" title="Adjust capacity">⚙️</button>
-              </div>
-              <div class="vehicle-capacity-row">
-                <span class="vehicle-label-popup">🏍️ Bike:</span>
-                <span class="vehicle-count-popup">{{ selectedSlot.bike_booked || 0 }} / {{ selectedSlot.bike_capacity || 1 }}</span>
-                <button class="vehicle-control-btn" (click)="openVehicleCapacityModal('BIKE')" title="Adjust capacity">⚙️</button>
+            <div class="popup-vehicle-capacity" *ngIf="vehicleRows(selectedSlot).length > 0; else legacyPopupVc">
+              <div class="vehicle-capacity-row" *ngFor="let vc of vehicleRows(selectedSlot)">
+                <span class="vehicle-label-popup">{{ vc.vehicle_name }}:</span>
+                <span class="vehicle-count-popup">{{ vc.booked }} / {{ vc.capacity }}</span>
+                <button type="button" class="vehicle-control-btn" (click)="openVehicleCapacityModal(vc)" title="Adjust capacity">⚙️</button>
               </div>
             </div>
+            <ng-template #legacyPopupVc>
+              <div class="popup-vehicle-capacity">
+                <div class="vehicle-capacity-row">
+                  <span class="vehicle-label-popup">⚡ Electric:</span>
+                  <span class="vehicle-count-popup">{{ selectedSlot.electric_booked || 0 }} / {{ selectedSlot.electric_capacity || 3 }}</span>
+                  <button type="button" class="vehicle-control-btn" (click)="openVehicleCapacityModalLegacy('ELECTRIC')">⚙️</button>
+                </div>
+                <div class="vehicle-capacity-row">
+                  <span class="vehicle-label-popup">⛽ Petrol:</span>
+                  <span class="vehicle-count-popup">{{ selectedSlot.petrol_booked || 0 }} / {{ selectedSlot.petrol_capacity || 1 }}</span>
+                  <button type="button" class="vehicle-control-btn" (click)="openVehicleCapacityModalLegacy('PETROL')">⚙️</button>
+                </div>
+                <div class="vehicle-capacity-row">
+                  <span class="vehicle-label-popup">🏍️ Bike:</span>
+                  <span class="vehicle-count-popup">{{ selectedSlot.bike_booked || 0 }} / {{ selectedSlot.bike_capacity || 1 }}</span>
+                  <button type="button" class="vehicle-control-btn" (click)="openVehicleCapacityModalLegacy('BIKE')">⚙️</button>
+                </div>
+              </div>
+            </ng-template>
             
             <div class="popup-capacity">Total: {{ selectedSlot.booked_count }} / {{ selectedSlot.capacity }}</div>
             <div class="popup-status">Status: <span class="status-badge" [class]="'status-' + selectedSlot.status">{{ selectedSlot.status }}</span></div>
@@ -308,14 +326,13 @@ import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMi
         </div>
       </div>
 
-      <!-- PHASE 4: Vehicle Capacity Modal -->
-      <div *ngIf="showVehicleCapacityModal" class="modal-overlay" (click)="showVehicleCapacityModal = false; editingVehicleType = 'ELECTRIC'; newVehicleCapacity = 0">
+      <div *ngIf="showVehicleCapacityModal" class="modal-overlay" (click)="closeVehicleCapacityModal()">
         <div class="modal-content" (click)="$event.stopPropagation()">
-          <h2>Adjust {{ editingVehicleType }} Capacity</h2>
-          <div class="confirm-message" *ngIf="selectedSlot">
-            <p><strong>Current:</strong> {{ getVehicleBooked(editingVehicleType) }} / {{ getVehicleCapacity(editingVehicleType) }} booked</p>
-            <p class="warning-text" *ngIf="getVehicleBooked(editingVehicleType) > 0">
-              ⚠️ Cannot reduce capacity below {{ getVehicleBooked(editingVehicleType) }} (current bookings)
+          <h2>Adjust {{ selectedVehicleRow?.vehicle_name || 'vehicle' }} capacity</h2>
+          <div class="confirm-message" *ngIf="selectedVehicleRow">
+            <p><strong>Current:</strong> {{ selectedVehicleRow.booked }} / {{ selectedVehicleRow.capacity }} booked</p>
+            <p class="warning-text" *ngIf="selectedVehicleRow.booked > 0">
+              Cannot reduce capacity below {{ selectedVehicleRow.booked }} (current bookings)
             </p>
           </div>
           <div class="form-group">
@@ -323,14 +340,14 @@ import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMi
             <input 
               type="number" 
               [(ngModel)]="newVehicleCapacity" 
-              [min]="getVehicleBooked(editingVehicleType)"
+              [min]="selectedVehicleRow?.booked || 0"
               [max]="10"
               required>
-            <p class="form-help">Minimum: {{ getVehicleBooked(editingVehicleType) }} (current bookings)</p>
+            <p class="form-help">Minimum: {{ selectedVehicleRow?.booked || 0 }} (current bookings)</p>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" (click)="showVehicleCapacityModal = false">Cancel</button>
-            <button type="button" class="btn-primary" (click)="updateVehicleCapacity()" [disabled]="!newVehicleCapacity || newVehicleCapacity < getVehicleBooked(editingVehicleType)">Update</button>
+            <button type="button" class="btn-secondary" (click)="closeVehicleCapacityModal()">Cancel</button>
+            <button type="button" class="btn-primary" (click)="updateVehicleCapacity()" [disabled]="!newVehicleCapacity || !selectedVehicleRow || newVehicleCapacity < selectedVehicleRow.booked">Update</button>
           </div>
         </div>
       </div>
@@ -338,6 +355,21 @@ import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMi
   `,
   styles: [`
     .slots-page { max-width: 1400px; }
+
+    .admin-search-group {
+      flex: 0 1 280px;
+      max-width: 100%;
+    }
+
+    .admin-search-input {
+      max-width: 280px;
+      width: 100%;
+    }
+
+    .admin-select {
+      min-width: 140px;
+      max-width: 200px;
+    }
 
     /* Date Navigation - Compact */
     .date-navigation-compact {
@@ -1023,9 +1055,8 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
   newSlot = { trainer_id: '', start_time: '', end_time: '', capacity: 1 };
   editingSlot: any = { id: '', start_time: '', end_time: '', capacity: 1, status: 'available' };
   
-  // PHASE 4: Vehicle capacity management
   showVehicleCapacityModal = false;
-  editingVehicleType: 'ELECTRIC' | 'PETROL' | 'BIKE' = 'ELECTRIC';
+  selectedVehicleRow: { vehicle_id: string; vehicle_name: string; capacity: number; booked: number } | null = null;
   newVehicleCapacity: number = 0;
   
   // Search (no pagination for slots - display all slots for selected date)
@@ -1248,15 +1279,18 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
     if (!this.selectedDate) return;
     
     try {
-      // Normalize date to YYYY-MM-DD format
       const normalizedDate = this.normalizeDate(this.selectedDate);
+      const today = getToday();
+      let generateDate = normalizedDate;
+      if (generateDate <= today) {
+        generateDate = addDays(today, 1);
+        this.toastService.info(`Generation is only for future dates. Using ${this.formatReadableDate(generateDate)}.`);
+      }
       
-      // Check if slots already exist for this date
-      const existingSlots = await this.slotService.getSlotsByDate(normalizedDate);
+      const existingSlots = await this.slotService.getSlotsByDate(generateDate);
       
       if (existingSlots && existingSlots.length > 0) {
-        // Slots exist, find next available date
-        const nextDate = await this.findNextAvailableDate(normalizedDate);
+        const nextDate = await this.findNextAvailableDate(generateDate);
         
         if (nextDate) {
           // Show confirmation modal
@@ -1268,8 +1302,7 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
           this.toastService.warning('Slots already exist for this date and no available date found within 30 days.');
         }
       } else {
-        // No slots exist, generate directly
-        await this.doGenerateSlots(normalizedDate);
+        await this.doGenerateSlots(generateDate);
       }
     } catch (error: any) {
       console.error('Generate slots error:', error);
@@ -1464,8 +1497,7 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          // TODO: Migrate to httpOnly cookies for secure token storage
-          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+          Authorization: `Bearer ${getAuthToken() || ''}`
         }
       });
       
@@ -1648,63 +1680,71 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
     this.onSelectedDateChange();
   }
 
-  // PHASE 4: Vehicle capacity management methods
-  openVehicleCapacityModal(vehicleType: 'ELECTRIC' | 'PETROL' | 'BIKE') {
-    if (!this.selectedSlot) return;
-    this.editingVehicleType = vehicleType;
-    this.newVehicleCapacity = this.getVehicleCapacity(vehicleType);
+  vehicleRows(slot: Slot | null | undefined): { vehicle_id: string; vehicle_name: string; capacity: number; booked: number }[] {
+    const raw = slot?.vehicle_capacities as unknown;
+    if (!raw || !Array.isArray(raw)) return [];
+    return raw.filter(
+      (x: any) => x && x.vehicle_id && typeof x.capacity === 'number'
+    ) as { vehicle_id: string; vehicle_name: string; capacity: number; booked: number }[];
+  }
+
+  openVehicleCapacityModal(vc: { vehicle_id: string; vehicle_name: string; capacity: number; booked: number }) {
+    this.selectedVehicleRow = vc;
+    this.newVehicleCapacity = vc.capacity;
     this.showVehicleCapacityModal = true;
   }
 
-  getVehicleCapacity(vehicleType: 'ELECTRIC' | 'PETROL' | 'BIKE'): number {
-    if (!this.selectedSlot) return 0;
-    switch (vehicleType) {
-      case 'ELECTRIC': return this.selectedSlot.electric_capacity || 3;
-      case 'PETROL': return this.selectedSlot.petrol_capacity || 1;
-      case 'BIKE': return this.selectedSlot.bike_capacity || 1;
-      default: return 0;
-    }
+  /** Fallback when API has no vehicle_capacities (legacy DB) */
+  openVehicleCapacityModalLegacy(vehicleType: 'ELECTRIC' | 'PETROL' | 'BIKE') {
+    if (!this.selectedSlot) return;
+    const id = `legacy-${vehicleType}`;
+    const cap =
+      vehicleType === 'ELECTRIC'
+        ? this.selectedSlot.electric_capacity || 3
+        : vehicleType === 'PETROL'
+          ? this.selectedSlot.petrol_capacity || 1
+          : this.selectedSlot.bike_capacity || 1;
+    const booked =
+      vehicleType === 'ELECTRIC'
+        ? this.selectedSlot.electric_booked || 0
+        : vehicleType === 'PETROL'
+          ? this.selectedSlot.petrol_booked || 0
+          : this.selectedSlot.bike_booked || 0;
+    this.openVehicleCapacityModal({
+      vehicle_id: id,
+      vehicle_name: vehicleType,
+      capacity: cap,
+      booked
+    });
   }
 
-  getVehicleBooked(vehicleType: 'ELECTRIC' | 'PETROL' | 'BIKE'): number {
-    if (!this.selectedSlot) return 0;
-    switch (vehicleType) {
-      case 'ELECTRIC': return this.selectedSlot.electric_booked || 0;
-      case 'PETROL': return this.selectedSlot.petrol_booked || 0;
-      case 'BIKE': return this.selectedSlot.bike_booked || 0;
-      default: return 0;
-    }
+  closeVehicleCapacityModal() {
+    this.showVehicleCapacityModal = false;
+    this.selectedVehicleRow = null;
+    this.newVehicleCapacity = 0;
   }
 
   async updateVehicleCapacity() {
-    if (!this.selectedSlot || !this.newVehicleCapacity) return;
-    
-    try {
-      const updateData: any = {};
-      switch (this.editingVehicleType) {
-        case 'ELECTRIC':
-          updateData.electric_capacity = this.newVehicleCapacity;
-          break;
-        case 'PETROL':
-          updateData.petrol_capacity = this.newVehicleCapacity;
-          break;
-        case 'BIKE':
-          updateData.bike_capacity = this.newVehicleCapacity;
-          break;
-      }
+    if (!this.selectedSlot || !this.selectedVehicleRow || !this.newVehicleCapacity) return;
+    if (String(this.selectedVehicleRow.vehicle_id).startsWith('legacy-')) {
+      this.toastService.warning('Run DB migration for slot_vehicle_capacity to edit per-vehicle limits.');
+      this.closeVehicleCapacityModal();
+      return;
+    }
 
-      await this.slotService.updateVehicleCapacity(this.selectedSlot.id, updateData);
-      this.toastService.success(`${this.editingVehicleType} capacity updated successfully`);
-      this.showVehicleCapacityModal = false;
+    try {
+      await this.slotService.updateVehicleCapacity(this.selectedSlot.id, {
+        [this.selectedVehicleRow.vehicle_id]: this.newVehicleCapacity
+      });
+      this.toastService.success('Vehicle capacity updated');
+      this.closeVehicleCapacityModal();
       await this.loadSlotsForSelectedDate();
-      
-      // Refresh selected slot
-      const updatedSlot = this.slots.find(s => s.id === this.selectedSlot.id);
+
+      const updatedSlot = this.slots.find(s => s.id === this.selectedSlot!.id);
       if (updatedSlot) {
         this.selectedSlot = updatedSlot;
       }
     } catch (error: any) {
-      console.error('Update vehicle capacity error:', error);
       this.toastService.error(error?.error?.message || error?.message || 'Failed to update vehicle capacity');
     }
   }

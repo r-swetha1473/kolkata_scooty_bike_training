@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { HttpService } from './http.service';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { getAuthToken, setAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
 export interface UserProfile {
   id: string;
@@ -41,7 +42,7 @@ export class AuthService {
         return;
       }
 
-      sessionStorage.setItem('token', token);
+      setAuthToken(token);
       url.searchParams.delete('token');
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     } catch (error) {
@@ -49,28 +50,21 @@ export class AuthService {
     }
   }
 
-  // Load user from token (sessionStorage) or httpOnly cookie
+  /** JWT in localStorage and/or httpOnly cookie */
   private loadUserFromToken() {
-    // Check sessionStorage first (for email/password login)
-    const token = sessionStorage.getItem('token');
+    const token = getAuthToken();
     if (token) {
       this.http.get<UserProfile>('/auth/me').subscribe({
         next: (user) => this.userProfileSubject.next(user),
         error: () => {
-          sessionStorage.removeItem('token');
+          clearAuthToken();
           this.userProfileSubject.next(null);
         }
       });
     } else {
-      // No sessionStorage token - check for httpOnly cookie (from Google OAuth)
-      // Make API call with credentials to check if cookie exists
       this.http.get<UserProfile>('/auth/me').subscribe({
-        next: (user) => {
-          // User authenticated via cookie - update state
-          this.userProfileSubject.next(user);
-        },
+        next: (user) => this.userProfileSubject.next(user),
         error: () => {
-          // No valid cookie or token - user not authenticated
           this.userProfileSubject.next(null);
         }
       });
@@ -90,8 +84,7 @@ export class AuthService {
     try {
       const response = await firstValueFrom(this.http.post<AuthResponse>('/auth/login', { email, password }));
       if (response && response.token) {
-        // TODO: Migrate to httpOnly cookies - backend already supports cookie-based auth
-        sessionStorage.setItem('token', response.token);
+        setAuthToken(response.token);
         this.userProfileSubject.next(response.user);
         return response.user;
       }
@@ -107,7 +100,7 @@ export class AuthService {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      sessionStorage.removeItem('token');
+      clearAuthToken();
       this.userProfileSubject.next(null);
       this.router.navigate(['/']);
     }

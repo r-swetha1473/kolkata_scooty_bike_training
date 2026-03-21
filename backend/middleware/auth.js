@@ -3,28 +3,41 @@ const db = require('../db');
 
 const authenticate = async (req, res, next) => {
   try {
-    // Try to get token from httpOnly cookie first (preferred method)
-    let token = req.cookies?.auth_token;
-    let tokenSource = 'cookie';
-    
-    // If not in cookie, fall back to Authorization header (for backward compatibility)
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader) {
-        const [scheme, value] = authHeader.split(' ');
-        if (scheme !== 'Bearer' || !value) {
-          const error = new Error('Malformed Authorization header');
+    if (!process.env.JWT_SECRET) {
+      const err = new Error('Server configuration error');
+      err.status = 500;
+      err.errorCode = 'SERVER_CONFIG_ERROR';
+      return next(err);
+    }
+
+    let token = null;
+    let tokenSource = null;
+
+    // Prefer explicit Authorization: Bearer <token> when present (SPA / mobile clients),
+    // then fall back to httpOnly cookie (Google OAuth redirect flow).
+    const rawAuth = req.headers.authorization && String(req.headers.authorization).trim();
+    if (rawAuth) {
+      if (/^Bearer\b/i.test(rawAuth)) {
+        const match = /^Bearer\s+(\S+)$/i.exec(rawAuth);
+        if (!match || !match[1]) {
+          const error = new Error('Authorization header must be: Bearer <token>');
           error.status = 401;
           error.errorCode = 'MALFORMED_AUTH_HEADER';
           return next(error);
         }
-        token = value;
+        token = match[1];
         tokenSource = 'authorization_header';
       }
+      // Other schemes (e.g. accidental "Basic …") are ignored so cookie auth still works
+    }
+
+    if (!token && req.cookies?.auth_token) {
+      token = req.cookies.auth_token;
+      tokenSource = 'cookie';
     }
 
     if (!token) {
-      const error = new Error('No token provided');
+      const error = new Error('Authentication required. No token provided. Sign in again or send Authorization: Bearer <token>.');
       error.status = 401;
       error.errorCode = 'NO_TOKEN';
       return next(error);
@@ -49,9 +62,14 @@ const authenticate = async (req, res, next) => {
     next();
   } catch (error) {
     // Handle JWT verification errors
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    if (error.name === 'JsonWebTokenError') {
       error.status = 401;
       error.errorCode = 'INVALID_TOKEN';
+      error.message = 'Invalid token. Sign in again.';
+    } else if (error.name === 'TokenExpiredError') {
+      error.status = 401;
+      error.errorCode = 'TOKEN_EXPIRED';
+      error.message = 'Session expired. Please sign in again.';
     } else {
       error.status = 401;
       error.errorCode = 'AUTHENTICATION_ERROR';

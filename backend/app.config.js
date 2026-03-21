@@ -10,9 +10,9 @@ module.exports = {
     weeklyLimit: 2,
     weeklyLimitMessage: 'Maximum 2 bookings per week allowed.',
     
-    // Booking window (hours before slot start time)
+    // Booking opens inside the 24 hours before the slot (not earlier)
     bookingWindowHours: 24,
-    bookingWindowMessage: 'Slots can only be booked 24 hours in advance',
+    bookingWindowMessage: 'Booking opens 24 hours before the class. This slot is outside the booking window.',
     
     // Cancellation window (hours before slot start time)
     cancellationWindowHours: 5,
@@ -46,7 +46,7 @@ module.exports = {
     
     // Visibility window (hours before slot start time)
     visibilityWindowHours: 24,
-    visibilityWindowMessage: 'Slot is not yet available for booking (opens 24 hours before start time)',
+    visibilityWindowMessage: 'This slot is not available for booking yet (opens 24 hours before start time)',
     
     // Default status
     defaultStatus: 'available',

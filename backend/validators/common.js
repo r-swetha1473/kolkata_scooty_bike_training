@@ -16,7 +16,15 @@ const handleValidationErrors = (req, res, next) => {
       location: error.location
     }));
 
+    const first = formattedErrors[0];
+    const summary = first
+      ? `${first.field}: ${first.message}`
+      : 'Validation failed';
+
     return res.status(400).json({
+      success: false,
+      message: summary,
+      errorCode: 'VALIDATION_ERROR',
       error: 'Validation failed',
       errors: formattedErrors
     });

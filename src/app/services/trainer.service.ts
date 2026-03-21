@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { getAuthToken } from '../utils/auth-token.storage';
 
 export interface Trainer {
   id: string;
@@ -31,13 +32,11 @@ export class TrainerService {
 
   constructor(private http: HttpClient) {}
 
-  // TODO: Migrate to httpOnly cookies for secure token storage
-  // Currently using sessionStorage as temporary fix (tokens cleared on tab close)
   private getAuthHeaders(): HttpHeaders {
-    const token = sessionStorage.getItem('token');
+    const token = getAuthToken();
     return new HttpHeaders({
       'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` })
+      ...(token && { Authorization: `Bearer ${token}` })
     });
   }
 

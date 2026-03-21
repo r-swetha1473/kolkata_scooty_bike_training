@@ -8,6 +8,8 @@ import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
 import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
+import { getAuthToken } from '../../utils/auth-token.storage';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-booking',
@@ -243,7 +245,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     // Load user profile to pre-populate phone number if available
     try {
       const user = await this.apiService.get<any>('/auth/me');
-      if (user && user.phone && !user.phone.startsWith('GOOGLE_')) {
+      if (user?.phone && !String(user.phone).startsWith('GOOGLE_')) {
         this.bookingForm.phone = user.phone;
       }
     } catch (error) {
@@ -251,7 +253,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
 
     this.selectedSlot = slot;
-    this.bookingForm.trainer_id = slot.trainer_id || '';
+    this.bookingForm.trainer_id = slot.trainer_id || slot.trainer?.id || '';
     this.showBookingModal = true;
     this.captchaVerified = false;
   }
@@ -296,13 +298,25 @@ export class BookingComponent implements OnInit, OnDestroy {
         throw new Error('Not authenticated');
       }
 
-      await this.apiService.post('/bookings', {
+      const payload = {
         slot_id: this.selectedSlot.id,
         trainer_id: this.bookingForm.trainer_id,
         vehicle_id: this.bookingForm.vehicle_id,
-        phone: this.bookingForm.phone,
-        notes: this.bookingForm.notes
+        phone: this.bookingForm.phone.trim(),
+        notes: (this.bookingForm.notes || '').trim()
+      };
+      console.log('[BookingComponent] Confirm booking request:', {
+        ...payload,
+        notes: payload.notes ? '[set]' : ''
       });
+      console.log('[BookingComponent] Bearer token in localStorage:', !!getAuthToken());
+
+      await firstValueFrom(
+        this.apiService.createBooking(payload.slot_id, payload.trainer_id, payload.vehicle_id, {
+          phone: payload.phone,
+          notes: payload.notes
+        })
+      );
 
       this.closeBookingModal();
       this.showConfirmation = true;
@@ -313,7 +327,17 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       await this.loadSlots();
     } catch (error: any) {
-      this.errorMessage = error.error?.error || error.message || 'Failed to create booking';
+      const body = error?.error;
+      const fromValidation =
+        Array.isArray(body?.errors) && body.errors.length
+          ? body.errors.map((e: { message?: string }) => e.message).filter(Boolean).join(' ')
+          : '';
+      this.errorMessage =
+        fromValidation ||
+        body?.message ||
+        body?.error ||
+        error?.message ||
+        'Failed to create booking';
     } finally {
       this.loading = false;
     }
