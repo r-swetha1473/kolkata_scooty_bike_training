@@ -27,18 +27,40 @@ function isPlaceholderProfilePhone(phone) {
 }
 
 function logPostBookingRequest(req, res, next) {
-  if (process.env.NODE_ENV === 'development') {
-    const b = req.body || {};
-    console.log('[Bookings][POST] user:', req.user?.id, '| body keys:', Object.keys(b));
-  }
+  const enabled =
+    process.env.LOG_BOOKING_DEBUG === '1' || process.env.NODE_ENV === 'development';
+  if (!enabled) return next();
+
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  const u = req.user || {};
+  const bodyForLog = {
+    slot_id: b.slot_id,
+    trainer_id: b.trainer_id,
+    vehicle_id: b.vehicle_id,
+    phone: b.phone
+      ? `***${String(b.phone).slice(-4)} (${String(b.phone).length} digits)`
+      : b.phone === '' ? '(empty)' : '(omitted)',
+    notes: typeof b.notes === 'string' && b.notes.length ? `[${b.notes.length} chars]` : '(empty)'
+  };
+  console.log('[Bookings][POST] req.user:', {
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    phone_registered: u.phone
+      ? String(u.phone).startsWith('GOOGLE_')
+        ? '(placeholder)'
+        : `***${String(u.phone).slice(-4)}`
+      : '(none)'
+  });
+  console.log('[Bookings][POST] req.body (normalized, phone masked):', bodyForLog);
   next();
 }
 
 router.post(
   '/',
   authenticate,
-  logPostBookingRequest,
   normalizeBookingCreateBody,
+  logPostBookingRequest,
   validateBookingCreation,
   async (req, res, next) => {
   const client = await db.getClient();

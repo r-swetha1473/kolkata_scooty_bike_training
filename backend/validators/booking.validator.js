@@ -44,7 +44,9 @@ const validateBookingCreation = [
     .withMessage('phone must be a string')
     .bail()
     .matches(/^[0-9]{10}$/)
-    .withMessage('phone must be exactly 10 digits (no spaces or country code)'),
+    .withMessage(
+      'phone must be exactly 10 Indian mobile digits (you can send +91 or spaces; server normalizes to 10 digits)'
+    ),
 
   body('notes')
     .optional({ values: 'falsy' })
