@@ -65,7 +65,24 @@ export class ApiService {
   public currentUser$ = this.currentUserSubject.asObservable();
 
   constructor(private http: HttpClient) {
+    this.captureOAuthTokenFromUrl();
     this.loadUserFromToken();
+  }
+
+  private captureOAuthTokenFromUrl(): void {
+    try {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token');
+      if (!token) {
+        return;
+      }
+
+      sessionStorage.setItem('token', token);
+      url.searchParams.delete('token');
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    } catch (error) {
+      console.error('Failed to capture OAuth token from URL:', error);
+    }
   }
 
   // TODO: Migrate to httpOnly cookies for secure token storage
@@ -73,7 +90,7 @@ export class ApiService {
   private loadUserFromToken() {
     // Try to load user from either sessionStorage token OR httpOnly cookie
     // Cookie-based auth (from Google OAuth) is preferred
-    this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(false)).subscribe({
+    this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(true)).subscribe({
       next: (user) => {
         this.currentUserSubject.next(user);
       },
@@ -139,7 +156,7 @@ export class ApiService {
 
   getProfile(): Observable<User> {
     // Try /auth/me first (supports cookie auth), fallback to /profiles/me
-    return this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(false));
+    return this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(true));
   }
 
   updateProfile(data: Partial<User>): Observable<User> {
