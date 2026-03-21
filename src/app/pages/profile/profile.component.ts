@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { AuthService, UserProfile } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
 import { BookingService } from '../../services/booking.service';
@@ -649,6 +649,7 @@ export class ProfileComponent implements OnInit {
 
   constructor(
     private authService: AuthService,
+    private route: ActivatedRoute,
     private apiService: ApiService,
     private bookingService: BookingService,
     private httpService: HttpService
@@ -657,6 +658,14 @@ export class ProfileComponent implements OnInit {
   async ngOnInit() {
     this.loading = true;
     try {
+      const oauthToken = this.route.snapshot.queryParamMap.get('token');
+      console.log('OAuth token from query params:', oauthToken);
+      if (oauthToken) {
+        localStorage.setItem('token', oauthToken);
+        // Keep sessionStorage in sync because current auth headers use sessionStorage.
+        sessionStorage.setItem('token', oauthToken);
+      }
+
       // Check if user profile is already loaded
       this.userProfile = this.authService.getUserProfile();
       
