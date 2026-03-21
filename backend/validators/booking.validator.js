@@ -1,40 +1,56 @@
 const { body } = require('express-validator');
 const { handleValidationErrors } = require('./common');
 
+const ID_HINT =
+  'Send JSON with snake_case: slot_id, trainer_id, vehicle_id (and optional phone, notes) — or camelCase: slotId, trainerId, vehicleId.';
+
 /**
- * Validation rules for booking creation
+ * Validation for POST /api/bookings (runs after normalizeBookingCreateBody).
  */
 const validateBookingCreation = [
   body('slot_id')
-    .trim()
     .notEmpty()
-    .withMessage('slot_id is required (the time slot you selected)')
+    .withMessage(`slot_id is required. ${ID_HINT}`)
+    .bail()
+    .isString()
+    .withMessage('slot_id must be a string UUID')
+    .bail()
     .isUUID()
     .withMessage('slot_id must be a valid UUID from the slots list'),
 
   body('trainer_id')
-    .trim()
     .notEmpty()
-    .withMessage('trainer_id is required (select a trainer)')
+    .withMessage(`trainer_id is required. ${ID_HINT}`)
+    .bail()
+    .isString()
+    .withMessage('trainer_id must be a string UUID')
+    .bail()
     .isUUID()
     .withMessage('trainer_id must be a valid UUID from the trainers list'),
 
   body('vehicle_id')
-    .trim()
     .notEmpty()
-    .withMessage('vehicle_id is required (select a vehicle)')
+    .withMessage(`vehicle_id is required. ${ID_HINT}`)
+    .bail()
+    .isString()
+    .withMessage('vehicle_id must be a string UUID')
+    .bail()
     .isUUID()
     .withMessage('vehicle_id must be a valid UUID from the vehicles list'),
 
-  // Treat null / empty as "not sent" so optional fields do not fail .matches / .isLength
   body('phone')
     .optional({ values: 'falsy' })
-    .trim()
+    .isString()
+    .withMessage('phone must be a string')
+    .bail()
     .matches(/^[0-9]{10}$/)
     .withMessage('phone must be exactly 10 digits (no spaces or country code)'),
 
   body('notes')
     .optional({ values: 'falsy' })
+    .isString()
+    .withMessage('notes must be a string')
+    .bail()
     .trim()
     .isLength({ max: 1000 })
     .withMessage('notes must not exceed 1000 characters')

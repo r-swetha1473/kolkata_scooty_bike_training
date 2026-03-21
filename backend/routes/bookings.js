@@ -17,6 +17,7 @@ const {
 const { validateBookingEligibility, validateCancellationEligibility } = require('../services/bookingValidation.service');
 const vehicleService = require('../services/vehicle.service');
 const auditService = require('../services/audit.service');
+const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
 const router = express.Router();
 
 /** OAuth profiles use a synthetic phone (GOOGLE_<id>) until the user saves a real number. */
@@ -33,7 +34,13 @@ function logPostBookingRequest(req, res, next) {
   next();
 }
 
-router.post('/', authenticate, logPostBookingRequest, validateBookingCreation, async (req, res, next) => {
+router.post(
+  '/',
+  authenticate,
+  logPostBookingRequest,
+  normalizeBookingCreateBody,
+  validateBookingCreation,
+  async (req, res, next) => {
   const client = await db.getClient();
 
   try {
