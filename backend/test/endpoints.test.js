@@ -315,11 +315,9 @@ async function runTests() {
   await testEndpoint('POST', '/api/bookings', {
     auth: 'user',
     body: {
-      slot_id: '123e4567-e89b-12d3-a456-426614174000',
-      trainer_id: '123e4567-e89b-12d3-a456-426614174001',
-      vehicle_id: '123e4567-e89b-12d3-a456-426614174002'
+      slot_id: '123e4567-e89b-12d3-a456-426614174000'
     },
-    description: 'Create booking (may fail validation)'
+    description: 'Create booking (may fail validation; server assigns trainer/vehicle)'
   });
   await testEndpoint('GET', '/api/bookings/my-bookings', {
     auth: null,
@@ -374,7 +372,8 @@ async function runTests() {
   });
   await testEndpoint('GET', '/api/admin/slots', {
     auth: 'admin',
-    description: 'List slots'
+    expectedStatus: 410,
+    description: 'Legacy admin slots route deprecated'
   });
   await testEndpoint('GET', '/api/admin/settings', {
     auth: 'admin',

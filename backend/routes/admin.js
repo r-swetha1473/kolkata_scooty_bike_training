@@ -8,10 +8,9 @@ const {
   validateUserUpdate,
   validateUserRoleUpdate,
   validateUserCreation,
-  validateSettingsUpdate,
-  validateSlotCreation,
-  validateSlotUpdate
+  validateSettingsUpdate
 } = require('../validators');
+const auditService = require('../services/audit.service');
 const router = express.Router();
 
 router.use(authenticate);
@@ -19,7 +18,62 @@ router.use(authorize('admin', 'superadmin'));
 
 router.get('/bookings', async (req, res, next) => {
   try {
-    const result = await db.query(`
+    const status = req.query.status ? String(req.query.status).trim() : '';
+    const startDate = req.query.startDate ? String(req.query.startDate).trim() : '';
+    const endDate = req.query.endDate ? String(req.query.endDate).trim() : '';
+    const searchRaw = req.query.search != null ? String(req.query.search).trim() : '';
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const conditions = ['1=1'];
+    const params = [];
+    let idx = 1;
+
+    if (searchRaw) {
+      const q = `%${searchRaw}%`;
+      conditions.push(
+        `(COALESCE(u.full_name, '') ILIKE $${idx} OR COALESCE(u.email, '') ILIKE $${idx} OR COALESCE(u.phone::text, '') ILIKE $${idx} OR COALESCE(p.full_name, '') ILIKE $${idx} OR b.id::text ILIKE $${idx})`
+      );
+      params.push(q);
+      idx++;
+    }
+
+    if (status) {
+      conditions.push(`b.status = $${idx++}`);
+      params.push(status);
+    }
+
+    if (startDate) {
+      conditions.push(
+        `COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'Asia/Kolkata')::date) >= $${idx++}::date`
+      );
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(
+        `COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'Asia/Kolkata')::date) <= $${idx++}::date`
+      );
+      params.push(endDate);
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS total
+       FROM bookings b
+       LEFT JOIN slots s ON b.slot_id = s.id
+       WHERE ${whereSql}`,
+      params
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+
+    params.push(limit, offset);
+    const limIdx = idx;
+    const offIdx = idx + 1;
+
+    const result = await db.query(
+      `
       SELECT b.*,
              s.start_time, s.end_time, s.slot_date,
              u.id as user_id, u.full_name as user_name, u.email as user_email,
@@ -30,11 +84,13 @@ router.get('/bookings', async (req, res, next) => {
       LEFT JOIN profiles u ON b.user_id = u.id
       LEFT JOIN trainers t ON b.trainer_id = t.id
       LEFT JOIN profiles p ON t.user_id = p.id
+      WHERE ${whereSql}
       ORDER BY s.start_time DESC NULLS LAST, b.created_at DESC
-      LIMIT 100
-    `);
+      LIMIT $${limIdx} OFFSET $${offIdx}
+    `,
+      params
+    );
 
-    // Format response to match frontend expectations
     const bookings = result.rows.map(row => ({
       id: row.id,
       user_id: row.user_id,
@@ -68,7 +124,7 @@ router.get('/bookings', async (req, res, next) => {
       trainer_name: row.trainer_name
     }));
 
-    res.json(bookings);
+    res.json({ bookings, total, limit, offset });
   } catch (error) {
     next(error);
   }
@@ -577,164 +633,14 @@ router.delete('/trainers/:id', async (req, res, next) => {
   }
 });
 
-// Get all slots with trainer information
-router.get('/slots', async (req, res, next) => {
-  try {
-    const result = await db.query(`
-      SELECT s.*,
-             t.id as trainer_table_id,
-             p.id as trainer_profile_id, p.full_name as trainer_name, p.email as trainer_email
-      FROM slots s
-      JOIN trainers t ON s.trainer_id = t.id
-      JOIN profiles p ON t.user_id = p.id
-      ORDER BY s.start_time DESC
-    `);
-
-    // Format response to match frontend expectations
-    const slots = result.rows.map(row => ({
-      id: row.id,
-      trainer_id: row.trainer_id,
-      start_time: row.start_time,
-      end_time: row.end_time,
-      capacity: row.capacity,
-      booked_count: row.booked_count,
-      status: row.status,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      trainer: {
-        id: row.trainer_table_id,
-        profile: {
-          id: row.trainer_profile_id,
-          full_name: row.trainer_name,
-          email: row.trainer_email
-        }
-      }
-    }));
-
-    res.json(slots);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Create slot
-router.post('/slots', validateSlotCreation, async (req, res, next) => {
-  try {
-    const { trainer_id, start_time, end_time, capacity } = req.body;
-
-    if (!trainer_id || !start_time || !end_time || !capacity) {
-      const error = new Error('Missing required fields');
-      error.status = 400;
-      error.errorCode = 'MISSING_REQUIRED_FIELDS';
-      return next(error);
-    }
-
-    const result = await db.query(`
-      INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status)
-      VALUES ($1, $2, $3, $4, 0, 'available')
-      RETURNING *
-    `, [trainer_id, start_time, end_time, capacity]);
-
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    if (error.code === '23505') { // Unique constraint violation
-      const error = new Error('Slot already exists at this time');
-      error.status = 409;
-      error.errorCode = 'DUPLICATE_SLOT';
-      return next(error);
-    }
-    next(error);
-  }
-});
-
-// Update slot
-router.put('/slots/:id', validateSlotUpdate, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { start_time, end_time, capacity, status } = req.body;
-
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
-
-    if (start_time !== undefined) {
-      updates.push(`start_time = $${paramCount++}`);
-      values.push(start_time);
-    }
-    if (end_time !== undefined) {
-      updates.push(`end_time = $${paramCount++}`);
-      values.push(end_time);
-    }
-    if (capacity !== undefined) {
-      updates.push(`capacity = $${paramCount++}`);
-      values.push(capacity);
-    }
-    if (status !== undefined) {
-      updates.push(`status = $${paramCount++}`);
-      values.push(status);
-    }
-
-    if (updates.length === 0) {
-      const error = new Error('No fields to update');
-      error.status = 400;
-      error.errorCode = 'NO_FIELDS_TO_UPDATE';
-      return next(error);
-    }
-
-    values.push(id);
-    const query = `UPDATE slots SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-    
-    const result = await db.query(query, values);
-    
-    if (result.rows.length === 0) {
-      const error = new Error('Slot not found');
-      error.status = 404;
-      error.errorCode = 'SLOT_NOT_FOUND';
-      return next(error);
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Delete slot
-router.delete('/slots/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const bookingsCheck = await db.query(
-      'SELECT COUNT(*) as count FROM bookings WHERE slot_id = $1',
-      [id]
-    );
-
-    if (parseInt(bookingsCheck.rows[0].count) > 0) {
-      const error = new Error('Cannot delete slot with existing bookings. Please cancel all bookings for this slot first');
-      error.status = 400;
-      error.errorCode = 'CANNOT_DELETE_SLOT';
-      return next(error);
-    }
-
-    const result = await db.query('DELETE FROM slots WHERE id = $1 RETURNING *', [id]);
-
-    if (result.rows.length === 0) {
-      const error = new Error('Slot not found');
-      error.status = 404;
-      error.errorCode = 'SLOT_NOT_FOUND';
-      return next(error);
-    }
-
-    res.json({ message: 'Slot deleted successfully' });
-  } catch (error) {
-    if (error.code === '23503') {
-      const error = new Error('Cannot delete slot. This slot has related bookings that must be removed first');
-      error.status = 400;
-      error.errorCode = 'CANNOT_DELETE_SLOT';
-      return next(error);
-    }
-    next(error);
-  }
+/** Legacy admin slot CRUD removed — slots are created by automation (cron) and public /api/slots. */
+router.use('/slots', (req, res) => {
+  res.status(410).json({
+    error: 'Gone',
+    errorCode: 'ADMIN_SLOTS_DEPRECATED',
+    message:
+      'Admin slot management has been removed. Slots are auto-generated; use GET /api/slots for read-only access if needed.'
+  });
 });
 
 // Get settings
@@ -924,6 +830,19 @@ router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
     const { id } = req.params;
     const { full_name, phone, email, total_bookings, weekly_booking_count, inactive_blocked } = req.body;
 
+    const beforeSnap = await db.query(
+      `SELECT id, email, full_name, phone, role, created_at, total_bookings, last_booking_date, weekly_booking_count, inactive_blocked
+       FROM profiles WHERE id = $1`,
+      [id]
+    );
+
+    if (beforeSnap.rows.length === 0) {
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
+    }
+
     const updates = [];
     const params = [];
     let paramIndex = 1;
@@ -976,11 +895,15 @@ router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
       return next(error);
     }
 
-    // Log audit
-    await db.query(`
-      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_data)
-      VALUES ($1, 'update', 'profile', $2, $3)
-    `, [req.user.id, id, JSON.stringify(result.rows[0])]);
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'UPDATE_USER_PROFILE',
+      entityType: 'user',
+      entityId: id,
+      beforeValue: beforeSnap.rows[0],
+      afterValue: result.rows[0],
+      details: {}
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -1040,11 +963,15 @@ router.put('/users/:id/role', validateUserRoleUpdate, async (req, res, next) => 
       return next(error);
     }
 
-    // Log audit
-    await db.query(`
-      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_data, new_data)
-      VALUES ($1, 'update_role', 'profile', $2, $3, $4)
-    `, [req.user.id, id, JSON.stringify(oldData.rows[0] || {}), JSON.stringify(result.rows[0])]);
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'UPDATE_USER_ROLE',
+      entityType: 'user',
+      entityId: id,
+      beforeValue: oldData.rows[0] || {},
+      afterValue: result.rows[0],
+      details: {}
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -1083,11 +1010,15 @@ router.delete('/users/:id', async (req, res, next) => {
       return next(error);
     }
 
-    // Log audit
-    await db.query(`
-      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_data)
-      VALUES ($1, 'delete', 'profile', $2, $3)
-    `, [req.user.id, id, JSON.stringify(oldData.rows[0] || {})]);
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'DELETE_USER',
+      entityType: 'user',
+      entityId: id,
+      beforeValue: oldData.rows[0] || {},
+      afterValue: null,
+      details: {}
+    });
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {

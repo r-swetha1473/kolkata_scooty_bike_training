@@ -9,6 +9,8 @@ const auditService = require('../services/audit.service');
 const router = express.Router();
 const events = require('../events');
 const { normalizeDate, addDays, getDayOfWeek, getToday } = require('../utils/dateUtils');
+const { sqlBookableSlotConditions } = require('../utils/slotBookableSql');
+const slotGenerationService = require('../services/slotGeneration.service');
 
 // Get slots with various filters
 router.get('/', async (req, res, next) => {
@@ -193,6 +195,7 @@ router.get('/date/:date', async (req, res, next) => {
         WHERE b.slot_id = s.id AND b.vehicle_id = v.id AND b.status NOT IN ('cancelled')
       ) vehicle_booked ON true
       WHERE (s.slot_date = $1::date OR s.start_time::date = $1::date)
+      ${req.query.bookable_only === 'true' || req.query.bookable_only === '1' ? `AND (${sqlBookableSlotConditions('s')})` : ''}
       GROUP BY s.id, s.trainer_id, s.start_time, s.end_time, s.slot_date, s.capacity, s.booked_count,
                s.status, s.is_auto_generated, s.is_visible, s.created_at, s.updated_at,
                t.id, t.user_id, t.is_active, p.full_name
@@ -250,40 +253,63 @@ router.get('/range', async (req, res, next) => {
   }
 });
 
-// Get available slots (with 24-hour visibility rule)
+// Get available slots — same predicate as GET /date/:date?bookable_only=true (full payload + vehicle_capacities)
 router.get('/available', async (req, res, next) => {
   try {
     const { date } = req.query;
-    let query = `
+    const params = [];
+    let dateFilter = '';
+    if (date) {
+      params.push(date);
+      dateFilter = `AND (s.slot_date = $${params.length}::date OR s.start_time::date = $${params.length}::date)`;
+    }
+
+    const result = await db.query(
+      `
       SELECT s.*,
+             CASE WHEN s.slot_date IS NOT NULL THEN s.slot_date ELSE s.start_time::date END as slot_date,
              t.id as trainer_id,
-             json_build_object(
-               'id', t.id,
-               'profile', json_build_object(
-                 'full_name', p.full_name
-               )
-             ) as trainer
+             CASE
+               WHEN t.id IS NOT NULL THEN
+                 json_build_object(
+                   'id', t.id,
+                   'profile', json_build_object(
+                     'full_name', p.full_name
+                   )
+                 )
+               ELSE NULL
+             END as trainer,
+             COALESCE(
+               json_agg(
+                 DISTINCT jsonb_build_object(
+                   'vehicle_id', v.id,
+                   'vehicle_name', v.name,
+                   'capacity', svc.capacity,
+                   'booked', COALESCE(vehicle_booked.booked_count, 0)
+                 )
+               ) FILTER (WHERE v.id IS NOT NULL),
+               '[]'::json
+             ) as vehicle_capacities
       FROM slots s
       LEFT JOIN trainers t ON s.trainer_id = t.id
       LEFT JOIN profiles p ON t.user_id = p.id
-      WHERE s.status = '${config.slot.defaultStatus}' 
-        AND s.status != 'disabled'
-        AND s.trainer_id IS NOT NULL
-        AND s.booked_count < s.capacity
-        AND t.is_active = true
-        AND s.start_time > NOW()
-        AND s.start_time <= (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours')
-    `;
-    const params = [];
+      LEFT JOIN slot_vehicle_capacity svc ON svc.slot_id = s.id
+      LEFT JOIN vehicles v ON svc.vehicle_id = v.id AND v.is_active = true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) as booked_count
+        FROM bookings b
+        WHERE b.slot_id = s.id AND b.vehicle_id = v.id AND b.status NOT IN ('cancelled')
+      ) vehicle_booked ON true
+      WHERE (${sqlBookableSlotConditions('s')})
+      ${dateFilter}
+      GROUP BY s.id, s.trainer_id, s.start_time, s.end_time, s.slot_date, s.capacity, s.booked_count,
+               s.status, s.is_auto_generated, s.is_visible, s.created_at, s.updated_at,
+               t.id, t.user_id, t.is_active, p.full_name
+      ORDER BY s.start_time ASC
+    `,
+      params
+    );
 
-    if (date) {
-      params.push(date);
-      query += ` AND (s.slot_date = $${params.length}::date OR s.start_time::date = $${params.length}::date)`;
-    }
-
-    query += ' ORDER BY s.start_time ASC';
-
-    const result = await db.query(query, params);
     res.json(result.rows);
   } catch (error) {
     next(error);
@@ -1057,10 +1083,8 @@ router.delete('/date/:date', authenticate, async (req, res, next) => {
   }
 });
 
-// Generate daily slots (admin only) - Auto-generates if missing
+// Generate daily slots (admin only)
 router.post('/generate', authenticate, async (req, res, next) => {
-  const client = await db.getClient();
-  
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       const error = new Error('Forbidden');
@@ -1068,540 +1092,17 @@ router.post('/generate', authenticate, async (req, res, next) => {
       error.errorCode = 'FORBIDDEN';
       return next(error);
     }
-
     const { date, force } = req.body;
-    // Use the provided date string directly (first 10 chars) to avoid timezone shifts
     const dateString = normalizeDate(date || getToday());
-
-    // Do not generate for today or the past (one-day-at-a-time admin workflow; use tomorrow+)
-    const todayStr = getToday();
-    if (dateString <= todayStr) {
-      client.release();
-      const nextDay = addDays(todayStr, 1);
-      const error = new Error(
-        `Slot generation is only allowed for future dates. Use tomorrow (${nextDay}) or later.`
-      );
-      error.status = 400;
-      error.errorCode = 'GENERATE_FUTURE_DATE_REQUIRED';
-      error.suggestedDate = nextDay;
-      error.requestedDate = dateString;
-      return next(error);
-    }
-
-    // PHASE 2: Wrap slot generation in transaction
-    await client.query('BEGIN');
-    
-    // Check if slots already exist for this date
-    const existingSlotsCheck = await client.query(`
-      SELECT COUNT(*) as count 
-      FROM slots 
-      WHERE slot_date = $1::date AND trainer_id IS NULL
-    `, [dateString]);
-    
-    const existingCount = parseInt(existingSlotsCheck.rows[0]?.count || 0);
-    
-    // If slots exist and force is not true, suggest next available date
-    if (existingCount > 0 && !force) {
-      await client.query('ROLLBACK');
-      client.release();
-      
-      // Find next available date
-      let nextDate = addDays(dateString, 1);
-      let attempts = 0;
-      const maxAttempts = 30;
-      
-      while (attempts < maxAttempts) {
-        const checkResult = await db.query(
-          `SELECT COUNT(*) as count FROM slots WHERE slot_date = $1::date AND trainer_id IS NULL`,
-          [nextDate]
-        );
-        
-        if (parseInt(checkResult.rows[0]?.count || 0) === 0) {
-          const error = new Error(`Slots already exist for ${dateString}. Next available date: ${nextDate}`);
-          error.status = 409;
-          error.errorCode = 'SLOTS_ALREADY_EXIST';
-          error.nextAvailableDate = nextDate;
-          error.existingDate = dateString;
-          return next(error);
-        }
-        
-        nextDate = addDays(nextDate, 1);
-        attempts++;
-      }
-      
-      const error = new Error(`Slots already exist for ${dateString}. No available date found within 30 days.`);
-      error.status = 409;
-      error.errorCode = 'SLOTS_ALREADY_EXIST';
-      error.existingDate = dateString;
-      return next(error);
-    }
-    
-    const targetDate = new Date(dateString + 'T00:00:00');
-
-    // Get active vehicles for capacity assignment
-    const vehicles = await vehicleService.getActiveVehicles();
-    if (vehicles.length === 0) {
-      await client.query('ROLLBACK');
-      client.release();
-      const error = new Error('No active vehicles found. Please create vehicles first.');
-      error.status = 400;
-      error.errorCode = 'NO_VEHICLES';
-      return next(error);
-    }
-
-    // PHASE 3: Generate slots based on day of week using utility
-    const slots = [];
-    const dayOfWeek = getDayOfWeek(dateString); // 0=Sunday, 1=Monday, ..., 6=Saturday
-    
-    // PHASE 5: Extract date components explicitly to avoid undefined variable errors
-    // Fix LB-002: Explicitly extract year, month, day from dateString
-    // CRITICAL: Extract date components once and reuse to prevent date mutation bugs
-    const [year, month, day] = dateString.split('-').map(Number);
-    
-    // Map day of week to readable name
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = dayNames[dayOfWeek];
-    
-    // PHASE 3: Log slot generation attempt with clear date and day information
-    console.log(`[Slot Generation] Admin ${req.user.id} generating slots for ${dateString} (${dayName}, Day of Week: ${dayOfWeek})`);
-    
-    // Helper function to convert IST time (hours, minutes) to UTC time
-    // IST is UTC+5:30, so subtract 5:30 from IST time to get UTC time
-    // Example: 7:00 IST = 1:30 UTC (7:00 - 5:30 = 1:30)
-    // This function is used for all slot generation to ensure times are stored correctly in UTC
-    // PostgreSQL will display them in server timezone (IST) when queried
-    const convertISTToUTC = (hoursIST, minutesIST) => {
-      let hoursUTC = hoursIST - 5; // Subtract 5 hours
-      let minutesUTC = minutesIST - 30; // Subtract 30 minutes
-      
-      // Handle minute underflow
-      if (minutesUTC < 0) {
-        minutesUTC += 60;
-        hoursUTC -= 1;
-      }
-      
-      // Handle hour underflow (shouldn't happen for valid IST times, but safety check)
-      if (hoursUTC < 0) {
-        hoursUTC += 24;
-      }
-      
-      return { hours: hoursUTC, minutes: minutesUTC };
-    };
-    
-    // PHASE 3: Monday-Saturday: configured hours with configured interval (7 AM - 9 PM)
-    // Business Rules:
-    // - Start: 07:00, End: 21:00
-    // - Slot duration: 30 minutes
-    // - Last slot must be exactly 20:30-21:00 (no slots exceed 21:00)
-    // 
-    // CRITICAL: Use minute-based calculations to prevent date arithmetic issues
-    // Why minute-based logic?
-    // - Date.setMinutes() and Date arithmetic can cause problems when crossing day boundaries
-    // - Converting to minutes-from-midnight ensures no AM/PM rollover or midnight crossing issues
-    // - Pure arithmetic on minutes (0-1440) is safer than Date object manipulation
-    // - This guarantees slots stay within the same day (07:00-21:00) and never cross midnight
-    if (dayOfWeek >= 1 && dayOfWeek <= 6) {
-      const weekdayConfig = config.slot.generation.weekday;
-      
-      // PHASE 3: Validate timing (must be 7 AM - 9 PM)
-      if (weekdayConfig.startHour !== 7 || weekdayConfig.endHour !== 21) {
-        await client.query('ROLLBACK');
-        client.release();
-        const error = new Error('Invalid weekday slot timing. Must be 7:00 AM - 9:00 PM');
-        error.status = 400;
-        error.errorCode = 'INVALID_SLOT_TIMING';
-        return next(error);
-      }
-      
-      // Convert times to minutes from midnight to avoid date arithmetic issues
-      // This is the key to preventing midnight crossing and AM/PM rollover bugs
-      // Start: 07:00 = 7 * 60 = 420 minutes from midnight
-      // End: 21:00 = 21 * 60 = 1260 minutes from midnight
-      // Interval: 30 minutes per slot
-      const startMinutes = weekdayConfig.startHour * 60; // 420 minutes (07:00)
-      const endMinutes = weekdayConfig.endHour * 60; // 1260 minutes (21:00)
-      const intervalMinutes = weekdayConfig.intervalMinutes; // 30 minutes
-      
-      // Generate slots using minute-based loop (NO Date.setMinutes or Date arithmetic)
-      // Loop condition: currentStartMinutes + intervalMinutes <= endMinutes
-      // This ensures:
-      // - No slot exceeds 21:00 (endMinutes = 1260)
-      // - Last slot is exactly 20:30-21:00 (1230-1260 minutes)
-      // - Exactly 28 slots: 07:00-07:30, 07:30-08:00, ..., 20:30-21:00
-      // - No slots cross midnight (all times are between 420-1260 minutes = 07:00-21:00)
-      let currentStartMinutes = startMinutes;
-      
-      while (currentStartMinutes + intervalMinutes <= endMinutes) {
-        // Calculate slot boundaries in minutes (pure arithmetic, no Date manipulation)
-        const slotStartMinutes = currentStartMinutes;
-        const slotEndMinutes = currentStartMinutes + intervalMinutes;
-        
-        // Convert minutes back to hours and minutes for Date object creation
-        // Extract hours and minutes from total minutes using integer division
-        const startHoursIST = Math.floor(slotStartMinutes / 60);
-        const startMinsIST = slotStartMinutes % 60;
-        const endHoursIST = Math.floor(slotEndMinutes / 60);
-        const endMinsIST = slotEndMinutes % 60;
-        
-        // Convert IST time to UTC time (IST = UTC+5:30)
-        const startUTC = convertISTToUTC(startHoursIST, startMinsIST);
-        const endUTC = convertISTToUTC(endHoursIST, endMinsIST);
-        
-        // Create Date objects using Date.UTC to store times in UTC
-        // This ensures PostgreSQL stores them correctly and displays them in server timezone (IST)
-        const slotStart = new Date(Date.UTC(year, month - 1, day, startUTC.hours, startUTC.minutes, 0, 0));
-        const slotEnd = new Date(Date.UTC(year, month - 1, day, endUTC.hours, endUTC.minutes, 0, 0));
-        
-        // Safety check: ensure slot end doesn't exceed end time
-        // This should never trigger with correct minute-based logic, but provides extra safety
-        if (slotEndMinutes > endMinutes) {
-          break; // Stop if slot would exceed end time
-        }
-        
-        // Increment for next iteration (pure arithmetic on minutes)
-        currentStartMinutes += intervalMinutes;
-
-        // PHASE 5: Fix MBR-001 - Slot open rule clarification
-        // Slot becomes visible when current_time >= slot_start_time - 24 hours
-        // Deterministic check: slot is visible if slot_start_time <= current_time + 24 hours
-        const now = new Date();
-        const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
-
-        const slot = {
-          trainer_id: null,
-          start_time: slotStart.toISOString(),
-          end_time: slotEnd.toISOString(),
-          capacity: SLOT_CAPACITY.DEFAULT,
-          booked_count: 0,
-          status: config.slot.defaultStatus,
-          slot_date: dateString,
-          is_auto_generated: true,
-          is_visible: isVisible
-        };
-
-        slots.push(slot);
-      }
-      
-      // Verify we generated exactly 28 slots (07:00-21:00 in 30-minute intervals)
-      // Expected: (1260 - 420) / 30 = 28 slots
-      const expectedSlots = (endMinutes - startMinutes) / intervalMinutes;
-      if (slots.length !== expectedSlots) {
-        console.warn(`[Slot Generation] Warning: Generated ${slots.length} slots, expected ${expectedSlots} for ${dateString}`);
-      }
-      console.log(`[Slot Generation] Generated ${slots.length} weekday slots for ${dateString} (${dayName}) - Expected: ${expectedSlots} slots`);
-    }
-    // PHASE 3: Sunday: Exact times only (10:30 AM - 12:30 PM & 3:00 PM - 8:00 PM)
-    // Business Rules:
-    // Morning: 10:30-12:30 (30-minute intervals, last slot: 12:00-12:30)
-    // Evening: 15:00-20:00 (30-minute intervals, last slot: 19:30-20:00)
-    // NO slots exceed the end times
-    else if (dayOfWeek === 0) {
-      const sundayConfig = config.slot.generation.sunday;
-      
-      // PHASE 3: Validate Sunday timing
-      const morningStart = sundayConfig.morning[0];
-      const morningEnd = sundayConfig.morning[sundayConfig.morning.length - 1];
-      if (morningStart.hour !== 10 || morningStart.minute !== 30 || 
-          morningEnd.hour !== 12 || morningEnd.minute !== 30) {
-        await client.query('ROLLBACK');
-        client.release();
-        const error = new Error('Invalid Sunday morning slot timing. Must be 10:30 AM - 12:30 PM');
-        error.status = 400;
-        error.errorCode = 'INVALID_SLOT_TIMING';
-        return next(error);
-      }
-      
-      if (sundayConfig.evening.startHour !== 15 || sundayConfig.evening.endHour !== 20) {
-        await client.query('ROLLBACK');
-        client.release();
-        const error = new Error('Invalid Sunday evening slot timing. Must be 3:00 PM - 8:00 PM');
-        error.status = 400;
-        error.errorCode = 'INVALID_SLOT_TIMING';
-        return next(error);
-      }
-      
-      // Morning slots (10:30 AM - 12:30 PM) - 30-minute intervals
-      // Generate slots from morning array: each slot is 30 minutes long
-      // CRITICAL: Use minute-based calculations to prevent date arithmetic issues
-      // Why minute-based logic? Same reason as weekday slots - prevents midnight crossing
-      // Convert end time to minutes: 12:30 = 750 minutes from midnight
-      const morningEndMinutes = 12 * 60 + 30; // 750 minutes (12:30)
-      const morningSlotInterval = 30; // 30 minutes for morning slots
-      
-      for (const time of sundayConfig.morning) {
-        // Convert time to minutes from midnight for calculation (NO Date.setMinutes)
-        // Pure arithmetic: time.hour * 60 + time.minute
-        const startMinutes = time.hour * 60 + time.minute; // e.g., 10:30 = 630 minutes
-        const endMinutes = startMinutes + morningSlotInterval; // e.g., 11:00 = 660 minutes
-        
-        // Ensure slot doesn't exceed morning end time (12:30) using minute-based check
-        if (endMinutes > morningEndMinutes) {
-          break; // Stop if slot would exceed end time
-        }
-        
-        // Convert minutes back to hours and minutes for Date object creation
-        // Extract hours and minutes from total minutes using integer division
-        const startHours = Math.floor(startMinutes / 60);
-        const startMins = startMinutes % 60;
-        const endHoursIST = Math.floor(endMinutes / 60);
-        const endMinsIST = endMinutes % 60;
-
-        const startUTC = convertISTToUTC(startHours, startMins);
-        const endUTC = convertISTToUTC(endHoursIST, endMinsIST);
-        const slotStart = new Date(Date.UTC(year, month - 1, day, startUTC.hours, startUTC.minutes, 0, 0));
-        const slotEnd = new Date(Date.UTC(year, month - 1, day, endUTC.hours, endUTC.minutes, 0, 0));
-
-        const now = new Date();
-        const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
-
-        const slot = {
-          trainer_id: null,
-          start_time: slotStart.toISOString(),
-          end_time: slotEnd.toISOString(),
-          capacity: SLOT_CAPACITY.DEFAULT,
-          booked_count: 0,
-          status: config.slot.defaultStatus,
-          slot_date: dateString,
-          is_auto_generated: true,
-          is_visible: isVisible
-        };
-
-        slots.push(slot);
-      }
-      
-      // Evening slots (15:00 - 20:00) - 30-minute intervals
-      // Last slot must be exactly 19:30-20:00 (no slots exceed 20:00)
-      // CRITICAL: Use minute-based calculations to prevent date arithmetic issues
-      // Why minute-based logic? Same reason as weekday slots - prevents midnight crossing
-      // Convert times to minutes from midnight: 15:00 = 900 minutes, 20:00 = 1200 minutes
-      const eveningStartMinutes = sundayConfig.evening.startHour * 60; // 900 minutes (15:00)
-      const eveningEndMinutes = sundayConfig.evening.endHour * 60; // 1200 minutes (20:00)
-      const eveningIntervalMinutes = sundayConfig.evening.intervalMinutes; // 30 minutes
-      
-      // Generate slots using minute-based loop (NO Date.setMinutes or Date arithmetic)
-      // Loop condition: currentEveningStartMinutes + eveningIntervalMinutes <= eveningEndMinutes
-      // This ensures:
-      // - No slot exceeds 20:00 (eveningEndMinutes = 1200)
-      // - Last slot is exactly 19:30-20:00 (1170-1200 minutes)
-      // - Exactly 10 slots: 15:00-15:30, 15:30-16:00, ..., 19:30-20:00
-      // - No slots cross midnight (all times are between 900-1200 minutes = 15:00-20:00)
-      let currentEveningStartMinutes = eveningStartMinutes;
-      
-      while (currentEveningStartMinutes + eveningIntervalMinutes <= eveningEndMinutes) {
-        // Calculate slot boundaries in minutes (pure arithmetic, no Date manipulation)
-        const slotStartMinutes = currentEveningStartMinutes;
-        const slotEndMinutes = currentEveningStartMinutes + eveningIntervalMinutes;
-        
-        // Convert minutes back to hours and minutes for Date object creation
-        // Extract hours and minutes from total minutes using integer division
-        const startHoursIST = Math.floor(slotStartMinutes / 60);
-        const startMinsIST = slotStartMinutes % 60;
-        const endHoursIST = Math.floor(slotEndMinutes / 60);
-        const endMinsIST = slotEndMinutes % 60;
-        
-        // Convert IST time to UTC time (IST = UTC+5:30)
-        const startUTC = convertISTToUTC(startHoursIST, startMinsIST);
-        const endUTC = convertISTToUTC(endHoursIST, endMinsIST);
-        
-        // Create Date objects using Date.UTC to store times in UTC
-        // This ensures PostgreSQL stores them correctly and displays them in server timezone (IST)
-        const slotStart = new Date(Date.UTC(year, month - 1, day, startUTC.hours, startUTC.minutes, 0, 0));
-        const slotEnd = new Date(Date.UTC(year, month - 1, day, endUTC.hours, endUTC.minutes, 0, 0));
-        
-        // Safety check: ensure slot end doesn't exceed end time
-        // This should never trigger with correct minute-based logic, but provides extra safety
-        if (slotEndMinutes > eveningEndMinutes) {
-          break; // Stop if slot would exceed end time
-        }
-        
-        // Increment for next iteration (pure arithmetic on minutes)
-        currentEveningStartMinutes += eveningIntervalMinutes;
-
-        // PHASE 5: Fix MBR-001 - Slot open rule clarification
-        // Slot becomes visible when current_time >= slot_start_time - 24 hours
-        // Deterministic check: slot is visible if slot_start_time <= current_time + 24 hours
-        const now = new Date();
-        const visibilityThreshold = new Date(now.getTime() + SLOT_VISIBILITY_HOURS * 60 * 60 * 1000);
-        const isVisible = slotStart > now && slotStart <= visibilityThreshold;
-
-        const slot = {
-          trainer_id: null,
-          start_time: slotStart.toISOString(),
-          end_time: slotEnd.toISOString(),
-          capacity: SLOT_CAPACITY.DEFAULT,
-          booked_count: 0,
-          status: config.slot.defaultStatus,
-          slot_date: dateString,
-          is_auto_generated: true,
-          is_visible: isVisible
-        };
-
-        slots.push(slot);
-      }
-      
-      console.log(`[Slot Generation] Generated ${slots.length} Sunday slots for ${dateString} (Morning: ${sundayConfig.morning.length}, Evening: ${slots.length - sundayConfig.morning.length})`);
-    }
-
-    // PHASE 2: Insert slots within transaction
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-
-    for (const slot of slots) {
-      try {
-        // Check if slot exists first (using transaction client)
-        const existing = await client.query(`
-          SELECT id, capacity FROM slots 
-          WHERE slot_date = $1 
-            AND start_time = $2 
-            AND trainer_id IS NULL
-        `, [slot.slot_date, slot.start_time]);
-        
-        if (existing.rows.length > 0) {
-          // Update existing slot
-          await client.query(`
-            UPDATE slots 
-            SET capacity = ${SLOT_CAPACITY.DEFAULT}, 
-                is_visible = $1,
-                updated_at = NOW()
-            WHERE id = $2
-          `, [slot.is_visible, existing.rows[0].id]);
-          
-          // Ensure vehicle capacities exist for this slot
-          try {
-            const tableCheck = await client.query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'slot_vehicle_capacity'
-              ) as exists
-            `);
-            
-            if (tableCheck.rows[0]?.exists) {
-              await client.query('SELECT ensure_slot_vehicle_capacities($1)', [existing.rows[0].id]);
-            }
-          } catch (funcError) {
-            // Function might not exist, skip
-            if (!funcError.message.includes('does not exist')) {
-              console.warn(`Failed to ensure capacities for slot ${existing.rows[0].id}:`, funcError.message);
-            }
-          }
-          updatedCount++;
-        } else {
-          // Insert new slot (without vehicle capacity columns)
-          const insertResult = await client.query(`
-            INSERT INTO slots (trainer_id, start_time, end_time, capacity, booked_count, status, slot_date, is_auto_generated, is_visible)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id
-          `, [
-            slot.trainer_id, 
-            slot.start_time, 
-            slot.end_time, 
-            slot.capacity, 
-            slot.booked_count, 
-            slot.status, 
-            slot.slot_date, 
-            slot.is_auto_generated, 
-            slot.is_visible
-          ]);
-          
-          const slotId = insertResult.rows[0].id;
-          
-          // Insert vehicle capacities for this slot
-          // Check if slot_vehicle_capacity table exists before inserting
-          try {
-            const tableCheck = await client.query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'slot_vehicle_capacity'
-              ) as exists
-            `);
-            
-            if (tableCheck.rows[0]?.exists) {
-              for (const vehicle of vehicles) {
-                await client.query(`
-                  INSERT INTO slot_vehicle_capacity (slot_id, vehicle_id, capacity)
-                  VALUES ($1, $2, $3)
-                  ON CONFLICT (slot_id, vehicle_id) DO UPDATE SET capacity = EXCLUDED.capacity
-                `, [slotId, vehicle.id, vehicle.max_per_slot]);
-              }
-              
-              // Ensure all vehicles have capacity entries
-              await client.query('SELECT ensure_slot_vehicle_capacities($1)', [slotId]);
-            } else {
-              console.warn(`slot_vehicle_capacity table does not exist. Skipping vehicle capacity insertion for slot ${slotId}.`);
-            }
-          } catch (capacityError) {
-            // If table doesn't exist or function doesn't exist, log warning but continue
-            if (capacityError.code === '42P01' || capacityError.message.includes('does not exist')) {
-              console.warn(`Could not insert vehicle capacities for slot ${slotId}:`, capacityError.message);
-            } else {
-              throw capacityError;
-            }
-          }
-          
-          insertedCount++;
-        }
-      } catch (error) {
-        // If it's a duplicate key error, skip it
-        if (error.code === '23505' || error.message.includes('duplicate key')) {
-          skippedCount++;
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    // Ensure all slots for this date have vehicle capacity entries
-    const slotsToUpdate = await client.query(`
-      SELECT id FROM slots 
-      WHERE slot_date = $1 AND trainer_id IS NULL
-    `, [dateString]);
-    
-    for (const slotRow of slotsToUpdate.rows) {
-      await client.query('SELECT ensure_slot_vehicle_capacities($1)', [slotRow.id]);
-    }
-    
-    // Update total capacity for slots - always set to 5 to satisfy constraint
-    // Vehicle capacities are tracked separately in slot_vehicle_capacity table
-    await client.query(`
-      UPDATE slots s
-      SET capacity = ${SLOT_CAPACITY.DEFAULT},
-      updated_at = NOW()
-      WHERE slot_date = $1 
-        AND trainer_id IS NULL
-        AND booked_count <= ${SLOT_CAPACITY.MAX}
-    `, [dateString]);
-
-    // PHASE 2: Commit transaction
-    await client.query('COMMIT');
-
-    // PHASE 3: Log successful generation with detailed summary
-    // Reuse dayName variable that was already calculated earlier in the function
-    console.log(`[Slot Generation] Success for ${dateString} (${dayName}): ${slots.length} total slots generated (${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped)`);
-    
-    const payload = {
-      success: true,
-      status: 'GENERATED',
-      message: `Processed ${slots.length} slots for ${dateString}: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped`,
-      slotsCreated: insertedCount,
-      slotsUpdated: updatedCount,
-      slotsSkipped: skippedCount,
-      totalProcessed: slots.length,
-      date: dateString,
-      adminId: req.user.id
-    };
+    const payload = await slotGenerationService.generateSlotsForDate(dateString, {
+      mode: 'admin',
+      force: !!force,
+      actorProfileId: req.user.id
+    });
     res.json(payload);
-    events.broadcast('slot.generated', payload);
   } catch (error) {
-    // PHASE 2: Rollback transaction on error
-    await client.query('ROLLBACK');
+    if (error.status == null) error.status = 400;
     next(error);
-  } finally {
-    client.release();
   }
 });
 
@@ -1625,7 +1126,7 @@ router.get('/next-available-date', authenticate, async (req, res, next) => {
     
     while (attempts < maxAttempts) {
       const result = await db.query(
-        `SELECT COUNT(*) as count FROM slots WHERE slot_date = $1 AND trainer_id IS NULL`,
+        `SELECT COUNT(*) as count FROM slots WHERE slot_date = $1::date`,
         [checkDate]
       );
       
@@ -1654,11 +1155,27 @@ router.get('/next-available-date', authenticate, async (req, res, next) => {
   }
 });
 
-// Generate daily slots (admin only) - Legacy endpoint for backward compatibility
+// Legacy alias — same as POST /generate
 router.post('/generate-daily', authenticate, async (req, res, next) => {
-  // Forward to new endpoint
-  req.url = '/generate';
-  router.handle(req, res, next);
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
+    }
+    const { date, force } = req.body;
+    const dateString = normalizeDate(date || getToday());
+    const payload = await slotGenerationService.generateSlotsForDate(dateString, {
+      mode: 'admin',
+      force: !!force,
+      actorProfileId: req.user.id
+    });
+    res.json(payload);
+  } catch (error) {
+    if (error.status == null) error.status = 400;
+    next(error);
+  }
 });
 
 // Update slot visibility for all slots (admin only, can be called periodically)
@@ -1705,67 +1222,6 @@ router.post('/update-visibility', authenticate, async (req, res, next) => {
         updated_count: result.rowCount || 0
       });
     }
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Auto-generate slots for today if missing (public endpoint, can be called by cron)
-router.post('/ensure-daily', async (req, res, next) => {
-  try {
-    const { date } = req.body;
-    const dateString = (date ? String(date).slice(0, 10) : new Date().toISOString().slice(0, 10));
-    const targetDate = new Date(dateString + 'T00:00:00');
-
-    // Use database function if available, otherwise generate manually
-    const hasFunction = await db.query(`
-      SELECT EXISTS (
-        SELECT 1 FROM pg_proc WHERE proname = 'ensure_daily_slots'
-      ) as exists
-    `).then(r => r.rows[0].exists);
-
-    let slotsCreated = 0;
-    if (hasFunction) {
-      const result = await db.query('SELECT ensure_daily_slots($1::date) as count', [dateString]);
-      slotsCreated = result.rows[0].count || 0;
-    } else {
-      // Fallback to manual generation
-      const result = await db.query(`
-        SELECT COUNT(*) as count FROM slots 
-        WHERE slot_date = $1 AND is_auto_generated = true
-      `, [dateString]);
-      
-      if (parseInt(result.rows[0].count) === 0) {
-        // Generate slots (9 AM to 9 PM, 30-minute intervals)
-        const generateResult = await db.query(`
-          INSERT INTO slots (trainer_id, start_time, end_time, slot_date, capacity, booked_count, status, is_auto_generated)
-          SELECT 
-            NULL,
-            generate_series(
-              $1::date + INTERVAL '${config.slot.generation.legacy.startHour} hours',
-              $1::date + INTERVAL '${config.slot.generation.legacy.endHour} hours',
-              INTERVAL '${config.slot.generation.legacy.intervalMinutes} minutes'
-            )::timestamptz as start_time,
-            generate_series(
-              $1::date + INTERVAL '${config.slot.generation.legacy.startHour} hours ${config.slot.generation.legacy.intervalMinutes} minutes',
-              $1::date + INTERVAL '${config.slot.generation.legacy.endHour} hours ${config.slot.generation.legacy.intervalMinutes} minutes',
-              INTERVAL '${config.slot.generation.legacy.intervalMinutes} minutes'
-            )::timestamptz as end_time,
-            $1::date,
-            ${config.slot.defaultCapacity}, 0, '${config.slot.defaultStatus}', true
-          ON CONFLICT DO NOTHING
-          RETURNING id
-        `, [dateString]);
-        slotsCreated = generateResult.rows.length;
-      }
-    }
-
-    res.json({
-      success: true,
-      message: `Ensured slots exist for ${dateString}`,
-      slotsCreated: slotsCreated,
-      date: dateString
-    });
   } catch (error) {
     next(error);
   }

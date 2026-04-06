@@ -89,20 +89,20 @@ export class BookingService {
 
   async createBooking(
     slotId: string,
-    trainerId: string,
-    vehicleId: string,
     notes: string,
-    phone?: string
+    phone?: string,
+    trainerId?: string
   ): Promise<BookingWithDetails> {
     try {
       const body: Record<string, string> = {
         slot_id: slotId,
-        trainer_id: trainerId,
-        vehicle_id: vehicleId,
         notes: notes || ''
       };
       if (phone?.trim()) {
         body.phone = phone.trim();
+      }
+      if (trainerId?.trim()) {
+        body.trainer_id = trainerId.trim();
       }
       const booking = await firstValueFrom(this.http.post<BookingWithDetails>('/bookings', body));
 

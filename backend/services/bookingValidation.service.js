@@ -70,8 +70,7 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         return {
           eligible: false,
           reason: 'ACTIVE_BOOKING_EXISTS',
-          message:
-            'You already have an active booking. Please cancel it before booking another.'
+          message: 'You already have a booking. Cancel it to book another.'
         };
       }
     }

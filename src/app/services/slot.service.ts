@@ -53,17 +53,19 @@ export class SlotService {
     });
   }
 
-  async generateDailySlots(date?: string): Promise<any> {
+  async generateDailySlots(date?: string, force?: boolean): Promise<any> {
     return firstValueFrom(
-      this.http.post<any>(`${this.apiUrl}/slots/generate-daily`, { date }, {
+      this.http.post<any>(`${this.apiUrl}/slots/generate`, { date, force }, {
         headers: this.getAuthHeaders()
       })
     );
   }
 
-  async getSlotsByDate(date: string): Promise<Slot[]> {
+  async getSlotsByDate(date: string, options?: { bookableOnly?: boolean }): Promise<Slot[]> {
+    const q =
+      options?.bookableOnly === true ? '?bookable_only=true' : '';
     return firstValueFrom(
-      this.http.get<Slot[]>(`${this.apiUrl}/slots/date/${date}`)
+      this.http.get<Slot[]>(`${this.apiUrl}/slots/date/${date}${q}`)
     );
   }
 

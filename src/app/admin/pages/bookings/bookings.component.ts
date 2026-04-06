@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
 import { firstValueFrom } from 'rxjs';
-import { extractDateFromDateTime } from '../../../utils/date.utils';
 
 @Component({
   selector: 'app-admin-bookings',
@@ -26,12 +25,12 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
             <input 
               type="text" 
               [(ngModel)]="searchTerm" 
-              (input)="applyFilters()"
+              (ngModelChange)="onSearchChange()"
               placeholder="Search customer, trainer, phone, booking ID..." 
               class="admin-search-input">
           </div>
 
-          <select [(ngModel)]="statusFilter" (change)="applyFilters()" class="admin-select">
+          <select [(ngModel)]="statusFilter" (change)="onServerFiltersChange()" class="admin-select">
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
             <option value="confirmed">Confirmed</option>
@@ -51,13 +50,13 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
               <input
                 type="date"
                 [(ngModel)]="startDateFilter"
-                (change)="applyFilters()"
+                (change)="onServerFiltersChange()"
                 class="admin-select date-input">
               <span class="date-separator">–</span>
               <input
                 type="date"
                 [(ngModel)]="endDateFilter"
-                (change)="applyFilters()"
+                (change)="onServerFiltersChange()"
                 class="admin-select date-input">
             </div>
           </div>
@@ -83,7 +82,8 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
       </div>
 
       <div class="admin-table-container">
-        <table class="admin-data-table">
+        <p *ngIf="loadingList" class="loading-hint">Loading…</p>
+        <table class="admin-data-table" *ngIf="!loadingList">
           <thead>
             <tr>
               <th>Customer</th>
@@ -95,7 +95,7 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let booking of getPaginatedBookings()">
+            <tr *ngFor="let booking of bookings">
               <td>
                 <div class="customer-info">
                   <div class="name">{{ booking.user?.full_name || booking.user_name || 'N/A' }}</div>
@@ -141,15 +141,15 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
           </tbody>
         </table>
 
-        <div *ngIf="filteredBookings.length === 0" class="empty-state">
+        <div *ngIf="bookings.length === 0 && !loadingList" class="empty-state">
           <p>No bookings found</p>
         </div>
       </div>
 
-      <div class="admin-pagination" *ngIf="filteredBookings.length > 0">
+      <div class="admin-pagination" *ngIf="totalRecords > 0">
         <div class="admin-pagination-info">
-          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ filteredBookings.length }} bookings</span>
-          <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="admin-page-size-select">
+          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ totalRecords }} bookings</span>
+          <select [(ngModel)]="itemsPerPage" (ngModelChange)="onPageSizeChange()" class="admin-page-size-select">
             <option [value]="10">10</option>
             <option [value]="20">20</option>
             <option [value]="50">50</option>
@@ -193,6 +193,12 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
   styles: [`
     .bookings-page {
       max-width: 1400px;
+    }
+
+    .loading-hint {
+      padding: 12px 0;
+      color: var(--admin-text-secondary);
+      font-size: 14px;
     }
 
     .date-inputs {
@@ -351,17 +357,18 @@ import { extractDateFromDateTime } from '../../../utils/date.utils';
 })
 export class AdminBookingsComponent implements OnInit {
   bookings: any[] = [];
-  filteredBookings: any[] = [];
   statusFilter = '';
   startDateFilter = '';
   endDateFilter = '';
   searchTerm = '';
   datePreset = 'all';
-  
-  // Pagination
+  loadingList = false;
+  totalRecords = 0;
+
   currentPage = 1;
   itemsPerPage = 20;
   totalPages = 1;
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private adminService: AdminService,
@@ -373,77 +380,52 @@ export class AdminBookingsComponent implements OnInit {
   }
 
   async loadBookings() {
+    this.loadingList = true;
     try {
-      const filters: any = {};
-      if (this.statusFilter) filters.status = this.statusFilter;
-      if (this.startDateFilter) filters.startDate = this.startDateFilter;
-      if (this.endDateFilter) filters.endDate = this.endDateFilter;
-
-      this.bookings = await this.adminService.getAllBookings(filters);
-      this.applyFilters();
+      const limit = Number(this.itemsPerPage) || 20;
+      const offset = (this.currentPage - 1) * limit;
+      const res = await this.adminService.getAllBookings({
+        status: this.statusFilter || undefined,
+        startDate: this.startDateFilter || undefined,
+        endDate: this.endDateFilter || undefined,
+        search: this.searchTerm.trim() || undefined,
+        limit,
+        offset
+      });
+      this.bookings = res.bookings;
+      this.totalRecords = res.total;
+      this.totalPages = Math.max(1, Math.ceil(this.totalRecords / limit));
+      if (this.bookings.length === 0 && this.totalRecords > 0 && offset > 0) {
+        this.currentPage = 1;
+        await this.loadBookings();
+        return;
+      }
     } catch {
       this.toastService.error('Failed to load bookings');
+      this.bookings = [];
+      this.totalRecords = 0;
+    } finally {
+      this.loadingList = false;
     }
   }
 
-  applyFilters() {
-    let filtered = [...this.bookings];
-    
-    // Filter by search term
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(booking => {
-        const customerName = (booking.user?.full_name || booking.user_name || '').toLowerCase();
-        const customerEmail = (booking.user?.email || booking.user_email || '').toLowerCase();
-        const trainerName = (booking.trainer?.profile?.full_name || booking.trainer_name || '').toLowerCase();
-        const phone = (booking.user?.phone || booking.user_phone || '').toLowerCase();
-        const bookingId = (booking.id || '').toLowerCase();
-        return customerName.includes(term) || 
-               customerEmail.includes(term) || 
-               trainerName.includes(term) ||
-               phone.includes(term) ||
-               bookingId.includes(term);
-      });
-    }
-    
-    // Filter by status
-    if (this.statusFilter) {
-      filtered = filtered.filter(booking => booking.status === this.statusFilter);
-    }
-    
-    // Filter by date range
-    if (this.startDateFilter) {
-      filtered = filtered.filter(booking => {
-        const bookingDate = booking.slot?.slot_date || extractDateFromDateTime(booking.slot?.start_time);
-        return bookingDate && bookingDate >= this.startDateFilter;
-      });
-    }
-    
-    if (this.endDateFilter) {
-      filtered = filtered.filter(booking => {
-        const bookingDate = booking.slot?.slot_date || extractDateFromDateTime(booking.slot?.start_time);
-        return bookingDate && bookingDate <= this.endDateFilter;
-      });
-    }
-    
-    this.filteredBookings = filtered;
+  onServerFiltersChange() {
     this.currentPage = 1;
-    this.updatePagination();
+    void this.loadBookings();
   }
 
-  updatePagination() {
-    this.totalPages = Math.ceil(this.filteredBookings.length / this.itemsPerPage);
-  }
-
-  getPaginatedBookings(): any[] {
-    const start = (this.currentPage - 1) * this.itemsPerPage;
-    const end = start + this.itemsPerPage;
-    return this.filteredBookings.slice(start, end);
+  onSearchChange() {
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => {
+      this.currentPage = 1;
+      void this.loadBookings();
+    }, 400);
   }
 
   goToPage(page: number) {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
+      void this.loadBookings();
     }
   }
 
@@ -479,7 +461,7 @@ export class AdminBookingsComponent implements OnInit {
 
   onPageSizeChange() {
     this.currentPage = 1;
-    this.updatePagination();
+    void this.loadBookings();
   }
 
   onDatePresetChange() {
@@ -511,7 +493,7 @@ export class AdminBookingsComponent implements OnInit {
         // Keep existing dates or leave empty
         break;
     }
-    this.applyFilters();
+    this.onServerFiltersChange();
   }
 
   resetFilters() {
@@ -521,16 +503,16 @@ export class AdminBookingsComponent implements OnInit {
     this.startDateFilter = '';
     this.endDateFilter = '';
     this.currentPage = 1;
-    this.applyFilters();
+    void this.loadBookings();
   }
 
   getStartIndex(): number {
-    return this.filteredBookings.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
+    return this.totalRecords === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
   }
 
   getEndIndex(): number {
     const end = this.currentPage * this.itemsPerPage;
-    return end > this.filteredBookings.length ? this.filteredBookings.length : end;
+    return end > this.totalRecords ? this.totalRecords : end;
   }
 
   async updateStatus(bookingId: string, status: string) {

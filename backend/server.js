@@ -21,6 +21,7 @@ const adminManagementRoutes = require('./routes/adminManagement');
 const errorHandler = require('./middleware/errorHandler');
 const cron = require('node-cron');
 const { runInactivityBlockCheck } = require('./services/inactivity.service');
+const { runNightlyAutoGeneration } = require('./services/slotGeneration.service');
 
 const app = express();
 const events = require('./events');
@@ -198,6 +199,27 @@ if (process.env.DISABLE_INACTIVITY_CRON !== '1') {
     runInactivityBlockCheck().catch((err) => {
       console.error('[Inactivity cron]', err.message);
     });
+  });
+}
+
+/** Auto-generate training slots for 7 days starting today (server date) at cron time (default midnight Asia/Kolkata) */
+if (process.env.DISABLE_AUTO_SLOT_CRON !== '1') {
+  const autoSlotCron = process.env.AUTO_SLOT_CRON || '0 0 * * *';
+  const autoSlotTz = process.env.AUTO_SLOT_CRON_TZ || 'Asia/Kolkata';
+  cron.schedule(
+    autoSlotCron,
+    () => {
+      runNightlyAutoGeneration().catch((err) => {
+        console.error('[Auto slot cron]', err.message);
+      });
+    },
+    { timezone: autoSlotTz }
+  );
+}
+
+if (process.env.AUTO_SLOT_RUN_ON_START === '1') {
+  runNightlyAutoGeneration().catch((err) => {
+    console.error('[Auto slot startup]', err.message);
   });
 }
 

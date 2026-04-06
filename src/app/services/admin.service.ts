@@ -16,19 +16,29 @@ export class AdminService {
     return firstValueFrom(this.http.get('/admin/stats'));
   }
 
-  async getAllBookings(filters?: any): Promise<any[]> {
-    let query = '/admin/bookings';
-    if (filters) {
-      const params = new URLSearchParams(filters).toString();
-      query += `?${params}`;
-    }
-    const result = await firstValueFrom(this.http.get<any[]>(query));
-    return result || [];
-  }
-
-  async getAllSlots(): Promise<any[]> {
-    const result = await firstValueFrom(this.http.get<any[]>('/admin/slots'));
-    return result || [];
+  async getAllBookings(filters?: {
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ bookings: any[]; total: number; limit: number; offset: number }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.startDate) params.set('startDate', filters.startDate);
+    if (filters?.endDate) params.set('endDate', filters.endDate);
+    if (filters?.search) params.set('search', filters.search);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    const result = await firstValueFrom(this.http.get<any>(`/admin/bookings${qs ? `?${qs}` : ''}`));
+    return {
+      bookings: Array.isArray(result?.bookings) ? result.bookings : [],
+      total: typeof result?.total === 'number' ? result.total : 0,
+      limit: typeof result?.limit === 'number' ? result.limit : 50,
+      offset: typeof result?.offset === 'number' ? result.offset : 0
+    };
   }
 
   async getAllTrainers(): Promise<any[]> {
@@ -51,18 +61,6 @@ export class AdminService {
 
   updateUserRole(userId: string, role: string): Observable<any> {
     return this.http.put(`/admin/users/${userId}/role`, { role });
-  }
-
-  createSlot(slotData: any): Observable<any> {
-    return this.http.post('/admin/slots', slotData);
-  }
-
-  updateSlot(slotId: string, slotData: any): Observable<any> {
-    return this.http.put(`/admin/slots/${slotId}`, slotData);
-  }
-
-  deleteSlot(slotId: string): Observable<any> {
-    return this.http.delete(`/admin/slots/${slotId}`);
   }
 
   createTrainer(trainerData: any): Observable<any> {

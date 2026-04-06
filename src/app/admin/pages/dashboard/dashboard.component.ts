@@ -100,10 +100,10 @@ import { AdminService } from '../../../services/admin.service';
         <div class="actions-grid">
           <button class="action-card" (click)="navigateTo('/admin/slots')">
             <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
-            <span class="action-label">Create New Slot</span>
+            <span class="action-label">Slots (automated)</span>
           </button>
           <button class="action-card" (click)="navigateTo('/admin/bookings')">
             <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

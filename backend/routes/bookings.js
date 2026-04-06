@@ -19,6 +19,10 @@ const vehicleService = require('../services/vehicle.service');
 const auditService = require('../services/audit.service');
 const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
+const {
+  assignTrainerAndVehicleForSlot,
+  assignVehicleForSlot
+} = require('../services/bookingAssignment.service');
 const router = express.Router();
 
 /** OAuth profiles use a synthetic phone (GOOGLE_<id>) until the user saves a real number. */
@@ -36,8 +40,6 @@ function logPostBookingRequest(req, res, next) {
   const u = req.user || {};
   const bodyForLog = {
     slot_id: b.slot_id,
-    trainer_id: b.trainer_id,
-    vehicle_id: b.vehicle_id,
     phone: b.phone
       ? `***${String(b.phone).slice(-4)} (${String(b.phone).length} digits)`
       : b.phone === '' ? '(empty)' : '(omitted)',
@@ -182,26 +184,15 @@ router.post(
       }
     }
 
-    const { slot_id, trainer_id, vehicle_id, phone, notes } = req.body;
+    let { slot_id, phone, notes, trainer_id: clientTrainerId } = req.body;
+    // Vehicle is always chosen server-side (capacity-aware). Trainer may be chosen by the customer.
+    delete req.body.vehicle_id;
+    delete req.body.vehicleId;
 
     if (!slot_id) {
       const error = new Error('slot_id is required');
       error.status = 400;
       error.errorCode = 'MISSING_SLOT_ID';
-      throw error;
-    }
-
-    if (!trainer_id) {
-      const error = new Error('trainer_id is required');
-      error.status = 400;
-      error.errorCode = 'MISSING_TRAINER_ID';
-      throw error;
-    }
-
-    if (!vehicle_id) {
-      const error = new Error('vehicle_id is required');
-      error.status = 400;
-      error.errorCode = 'MISSING_VEHICLE_ID';
       throw error;
     }
 
@@ -236,9 +227,7 @@ router.post(
       [req.user.id]
     );
     if (activeBookingRow.rows.length > 0) {
-      const dup = new Error(
-        'You already have an active booking. Please cancel it before booking another.'
-      );
+      const dup = new Error('You already have a booking. Cancel it to book another.');
       dup.status = 400;
       dup.errorCode = 'ACTIVE_BOOKING_EXISTS';
       throw dup;
@@ -293,7 +282,77 @@ router.post(
     // Use registered phone number (either existing or newly set); normalize profile storage (+91, etc.)
     const bookingPhone = phone || normalizeIndianMobileDigits(user.phone) || user.phone;
 
-    // Get slot details for validation
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const chosenTrainerId =
+      clientTrainerId && uuidPattern.test(String(clientTrainerId).trim())
+        ? String(clientTrainerId).trim()
+        : null;
+
+    let trainer_id;
+    let vehicle_id;
+
+    if (chosenTrainerId) {
+      const trainerRow = await client.query(
+        `SELECT id FROM trainers WHERE id = $1 AND is_active = true`,
+        [chosenTrainerId]
+      );
+      if (trainerRow.rows.length === 0) {
+        const err = new Error('Selected trainer is not available.');
+        err.status = 400;
+        err.errorCode = 'TRAINER_INACTIVE';
+        throw err;
+      }
+      const taken = await client.query(
+        `SELECT 1 FROM bookings b
+         WHERE b.slot_id = $1 AND b.trainer_id = $2 AND b.status NOT IN ('cancelled')
+         LIMIT 1`,
+        [slot_id, chosenTrainerId]
+      );
+      if (taken.rows.length > 0) {
+        const err = new Error(
+          'This trainer is already booked for this time slot. Choose another trainer.'
+        );
+        err.status = 409;
+        err.errorCode = 'TRAINER_SLOT_TAKEN';
+        throw err;
+      }
+      trainer_id = chosenTrainerId;
+      const v = await assignVehicleForSlot(client, slot_id);
+      if (!v.ok) {
+        const assignMessages = {
+          NO_VEHICLE_CAPACITY:
+            'This time slot is full for all training vehicles. Please choose another slot.'
+        };
+        const err = new Error(
+          assignMessages[v.code] || 'Unable to assign a vehicle for this slot.'
+        );
+        err.status = 409;
+        err.errorCode = v.code || 'ASSIGNMENT_FAILED';
+        throw err;
+      }
+      vehicle_id = v.vehicleId;
+    } else {
+      const assignResult = await assignTrainerAndVehicleForSlot(client, slot_id);
+      if (!assignResult.ok) {
+        const assignMessages = {
+          SLOT_NOT_FOUND: 'Slot not found',
+          NO_TRAINER_AVAILABLE:
+            'No trainer is available for this slot. Try another time or contact support.',
+          NO_VEHICLE_CAPACITY:
+            'This time slot is full for all training vehicles. Please choose another slot.'
+        };
+        const err = new Error(
+          assignMessages[assignResult.code] || 'Unable to assign trainer or vehicle for this slot.'
+        );
+        err.status = assignResult.code === 'SLOT_NOT_FOUND' ? 404 : 409;
+        err.errorCode = assignResult.code || 'ASSIGNMENT_FAILED';
+        throw err;
+      }
+      trainer_id = assignResult.trainerId;
+      vehicle_id = assignResult.vehicleId;
+    }
+
     const slotCheck = await client.query(
       `SELECT start_time, end_time, slot_date FROM slots WHERE id = $1`,
       [slot_id]
@@ -309,7 +368,6 @@ router.post(
     const slotDate = slot.slot_date || slot.start_time.toISOString().split('T')[0];
     const slotTime = slot.start_time;
 
-    // PHASE 1: Use centralized validation function (phone-based identity)
     const validationResult = await validateBookingEligibility(
       bookingPhone,
       slotDate,
@@ -495,6 +553,19 @@ router.post(
          WHERE id = $1`,
         [req.user.id]
       );
+    }
+
+    if (studentEntitlementsEnabled) {
+      try {
+        await client.query(
+          `UPDATE student_entitlements
+           SET used_slots = COALESCE(used_slots, 0) + 1, updated_at = NOW()
+           WHERE user_id = $1`,
+          [req.user.id]
+        );
+      } catch (usedErr) {
+        console.warn('[Bookings] student_entitlements used_slots increment:', usedErr.message);
+      }
     }
 
     // Check if this is the first booking and set entitlement dates (only if table exists)
@@ -742,6 +813,19 @@ router.put('/:id/cancel', authenticate, async (req, res, next) => {
       await auditService.logBookingCancellation(req.user.id, req.params.id, booking, cancellation_reason || 'Admin cancellation');
     } else {
       await auditService.logUserBookingCancellation(req.user.id, req.params.id, booking, cancellation_reason || 'User cancellation');
+    }
+
+    try {
+      await client.query(
+        `UPDATE student_entitlements
+         SET used_slots = GREATEST(COALESCE(used_slots, 0) - 1, 0), updated_at = NOW()
+         WHERE user_id = $1`,
+        [req.user.id]
+      );
+    } catch (entErr) {
+      if (entErr.code !== '42P01') {
+        console.warn('[Bookings] student_entitlements used_slots decrement:', entErr.message);
+      }
     }
 
     // Update slot aggregate status from booked_count (per-vehicle counts live in bookings + slot_vehicle_capacity)

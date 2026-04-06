@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject, firstValueFrom } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { map, tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { getAuthToken, setAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
@@ -27,6 +27,12 @@ export interface Trainer {
   is_active: boolean;
   full_name?: string;
   avatar_url?: string;
+  profile?: {
+    full_name: string;
+    email?: string;
+    phone?: string | null;
+    avatar_url?: string | null;
+  };
 }
 
 export interface Slot {
@@ -165,7 +171,7 @@ export class ApiService {
     return this.http.get<Trainer>(`${this.apiUrl}/trainers/${id}`, this.getHttpOptions(false));
   }
 
-  /** Active trainers not yet booked for this slot (non-cancelled). */
+  /** Active trainers for booking UI; each slot may use any active trainer once per booking (enforced on submit). */
   getAvailableTrainersForSlot(slotId: string): Observable<Trainer[]> {
     return this.http.get<Trainer[]>(
       `${this.apiUrl}/trainers/available-for-slot/${encodeURIComponent(slotId)}`,
@@ -181,21 +187,24 @@ export class ApiService {
     return this.http.get<Slot[]>(url, this.getHttpOptions(false));
   }
 
+  /**
+   * Create booking: customer chooses trainer_id; server assigns vehicle. slot_id + trainer_id + phone typical.
+   */
   createBooking(
     slotId: string,
-    trainerId: string,
-    vehicleId: string,
-    options?: { phone?: string; notes?: string }
+    options?: { phone?: string; notes?: string; trainer_id?: string }
   ): Observable<Booking> {
     const payload: Record<string, string> = {
       slot_id: slotId,
-      trainer_id: trainerId,
-      vehicle_id: vehicleId,
       notes: (options?.notes ?? '').trim()
     };
     const phone = options?.phone?.trim();
     if (phone) {
       payload.phone = phone;
+    }
+    const tid = options?.trainer_id?.trim();
+    if (tid) {
+      payload.trainer_id = tid;
     }
     return this.http.post<Booking>(`${this.apiUrl}/bookings`, payload, this.getHttpOptions(true));
   }
@@ -231,8 +240,16 @@ export class ApiService {
     });
   }
 
-  getAllBookings(): Observable<Booking[]> {
-    return this.http.get<Booking[]>(`${this.apiUrl}/admin/bookings`, this.getHttpOptions(true));
+  /** Admin bookings list (paginated JSON: { bookings, total, limit, offset }). */
+  getAllBookings(): Observable<{ bookings: Booking[]; total: number }> {
+    return this.http
+      .get<any>(`${this.apiUrl}/admin/bookings`, this.getHttpOptions(true))
+      .pipe(
+        map((r) => ({
+          bookings: Array.isArray(r?.bookings) ? r.bookings : [],
+          total: typeof r?.total === 'number' ? r.total : 0
+        }))
+      );
   }
 
   getAllUsers(): Observable<User[]> {

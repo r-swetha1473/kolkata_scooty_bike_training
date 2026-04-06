@@ -2,7 +2,7 @@ const { body } = require('express-validator');
 const { handleValidationErrors } = require('./common');
 
 const ID_HINT =
-  'Send JSON with snake_case: slot_id, trainer_id, vehicle_id (and optional phone, notes) — or camelCase: slotId, trainerId, vehicleId.';
+  'Send JSON with slot_id (UUID), optional trainer_id (active trainer for this booking), and optional phone, notes. Vehicle is assigned automatically by the server.';
 
 /**
  * Validation for POST /api/bookings (runs after normalizeBookingCreateBody).
@@ -19,24 +19,13 @@ const validateBookingCreation = [
     .withMessage('slot_id must be a valid UUID from the slots list'),
 
   body('trainer_id')
-    .notEmpty()
-    .withMessage(`trainer_id is required. ${ID_HINT}`)
-    .bail()
-    .isString()
-    .withMessage('trainer_id must be a string UUID')
-    .bail()
+    .optional({ values: 'falsy' })
     .isUUID()
-    .withMessage('trainer_id must be a valid UUID (use GET /trainers/available-for-slot/:slotId)'),
-
+    .withMessage(`If trainer_id is sent it must be a valid UUID. ${ID_HINT}`),
   body('vehicle_id')
-    .notEmpty()
-    .withMessage(`vehicle_id is required. ${ID_HINT}`)
-    .bail()
-    .isString()
-    .withMessage('vehicle_id must be a string UUID')
-    .bail()
+    .optional({ values: 'falsy' })
     .isUUID()
-    .withMessage('vehicle_id must be a valid UUID from the vehicles list'),
+    .withMessage('If vehicle_id is sent it must be a UUID (ignored; server assigns the vehicle automatically).'),
 
   body('phone')
     .optional({ values: 'falsy' })

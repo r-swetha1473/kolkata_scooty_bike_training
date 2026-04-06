@@ -32,16 +32,14 @@ export class BookingComponent implements OnInit, OnDestroy {
   errorMessage = '';
   refreshInterval: any;
   slotEvents?: EventSource;
-  vehicles: any[] = [];
-  /** Trainers still available for the slot in the booking modal (excludes already-booked). */
-  availableTrainers: Trainer[] = [];
-  loadingTrainers = false;
+  trainersForSlot: Trainer[] = [];
+  trainersLoadError = '';
+  trainersLoading = false;
 
   bookingForm = {
-    trainer_id: '',
-    vehicle_id: '',
     phone: '',
-    notes: ''
+    notes: '',
+    trainerId: ''
   };
 
   constructor(
@@ -95,7 +93,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     const today = new Date();
     this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
     await this.loadSlots();
-    await this.loadVehicles();
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
   }
@@ -119,7 +116,9 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.selectedDate = normalizedDate;
         
         // Show all slots for the selected date
-        const allSlotsForDate = await this.slotService.getSlotsByDate(normalizedDate);
+        const allSlotsForDate = await this.slotService.getSlotsByDate(normalizedDate, {
+          bookableOnly: true
+        });
         // Filter only by time for today (hide past times today)
         const today = getToday();
         let filtered = (allSlotsForDate || []);
@@ -168,23 +167,11 @@ export class BookingComponent implements OnInit, OnDestroy {
           const affectedDate = data.slot_date || extractDateFromDateTime(data.start_time) || payload.date;
           if (!affectedDate || affectedDate === this.selectedDate) {
             await this.loadSlots();
-            if (this.showBookingModal && this.selectedSlot) {
-              await this.loadAvailableTrainers(this.selectedSlot.id);
-            }
           }
         } catch (_) {}
       };
     } catch {
       /* SSE optional; polling still runs */
-    }
-  }
-
-  async loadVehicles() {
-    try {
-      const response = await this.apiService.get<any[]>('/vehicles');
-      this.vehicles = response;
-    } catch {
-      this.vehicles = [];
     }
   }
 
@@ -221,29 +208,24 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
 
     this.selectedSlot = slot;
-    this.bookingForm.trainer_id = '';
-    this.availableTrainers = [];
     this.showBookingModal = true;
     this.captchaVerified = false;
-    await this.loadAvailableTrainers(slot.id);
-  }
+    this.trainersForSlot = [];
+    this.trainersLoadError = '';
+    this.bookingForm.trainerId = '';
+    this.trainersLoading = true;
 
-  async loadAvailableTrainers(slotId: string): Promise<void> {
-    this.loadingTrainers = true;
-    this.errorMessage = '';
     try {
-      this.availableTrainers = await firstValueFrom(
-        this.apiService.getAvailableTrainersForSlot(slotId)
+      this.trainersForSlot = await firstValueFrom(
+        this.apiService.getAvailableTrainersForSlot(slot.id)
       );
-      if (!this.availableTrainers.length) {
-        this.errorMessage =
-          'No trainers are available for this time slot right now. They may all be booked — try another slot or refresh.';
+      if (this.trainersForSlot.length === 1) {
+        this.bookingForm.trainerId = this.trainersForSlot[0].id;
       }
     } catch {
-      this.availableTrainers = [];
-      this.errorMessage = 'Could not load trainers for this slot. Please try again.';
+      this.trainersLoadError = 'Could not load trainers. Please try again.';
     } finally {
-      this.loadingTrainers = false;
+      this.trainersLoading = false;
     }
   }
 
@@ -272,13 +254,8 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
     if (!this.selectedSlot || !this.captchaVerified) return;
 
-    if (!this.bookingForm.trainer_id) {
-      this.errorMessage = 'Please select a trainer';
-      return;
-    }
-
-    if (!this.bookingForm.vehicle_id) {
-      this.errorMessage = 'Please select a vehicle';
+    if (!this.bookingForm.trainerId) {
+      this.errorMessage = 'Please select a trainer.';
       return;
     }
 
@@ -297,18 +274,11 @@ export class BookingComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const payload = {
-        slot_id: this.selectedSlot.id,
-        trainer_id: this.bookingForm.trainer_id,
-        vehicle_id: this.bookingForm.vehicle_id,
-        phone: this.bookingForm.phone.trim(),
-        notes: (this.bookingForm.notes || '').trim()
-      };
-
       await firstValueFrom(
-        this.apiService.createBooking(payload.slot_id, payload.trainer_id, payload.vehicle_id, {
-          phone: payload.phone,
-          notes: payload.notes
+        this.apiService.createBooking(this.selectedSlot.id, {
+          phone: this.bookingForm.phone.trim(),
+          notes: (this.bookingForm.notes || '').trim(),
+          trainer_id: this.bookingForm.trainerId.trim()
         })
       );
 
@@ -338,6 +308,10 @@ export class BookingComponent implements OnInit, OnDestroy {
       if (code === 'ACTIVE_BOOKING_EXISTS') {
         this.showActiveBookingPopup = true;
         this.errorMessage = '';
+      } else if (code === 'TRAINER_SLOT_TAKEN') {
+        this.errorMessage =
+          body?.message ||
+          'That trainer was just taken for this slot. Choose another trainer and try again.';
       } else {
         const fromValidation =
           Array.isArray(body?.errors) && body.errors.length
@@ -362,12 +336,13 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   resetForm() {
     this.bookingForm = {
-      trainer_id: '',
-      vehicle_id: '',
       phone: '',
-      notes: ''
+      notes: '',
+      trainerId: ''
     };
-    this.availableTrainers = [];
+    this.trainersForSlot = [];
+    this.trainersLoadError = '';
+    this.trainersLoading = false;
     this.errorMessage = '';
   }
 

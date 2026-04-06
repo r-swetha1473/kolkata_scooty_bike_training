@@ -6,7 +6,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * GET /trainers/available-for-slot/:slotId
- * Active trainers not already booked for this slot (non-cancelled bookings).
+ * All active trainers for the booking UI. Slot must exist.
+ * Same trainer cannot be booked twice for one slot; that is enforced when creating the booking.
  */
 router.get('/available-for-slot/:slotId', async (req, res, next) => {
   try {
@@ -46,12 +47,6 @@ router.get('/available-for-slot/:slotId', async (req, res, next) => {
       FROM trainers t
       JOIN profiles p ON t.user_id = p.id
       WHERE t.is_active = true
-        AND NOT EXISTS (
-          SELECT 1 FROM bookings b
-          WHERE b.slot_id = $1
-            AND b.trainer_id = t.id
-            AND b.status NOT IN ('cancelled')
-        )
       ORDER BY t.rating DESC NULLS LAST, t.total_sessions DESC NULLS LAST, p.full_name ASC
       `,
       [slotId]

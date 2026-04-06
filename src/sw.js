@@ -3,7 +3,7 @@
  * Never cache index.html, *.js, or *.css (hashed Angular chunks). Serving stale
  * bundles causes "Failed to fetch dynamically imported module" after deploy.
  */
-const VERSION = 'v5-chunk-safe';
+const VERSION = 'v6-slot-auto-hash-safe';
 const STATIC_CACHE = `kolkata-scotty-static-${VERSION}`;
 const PRECACHE_URLS = ['/manifest.json', '/icon-192.png', '/icon-512.png'];
 

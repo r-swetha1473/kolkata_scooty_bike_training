@@ -3,7 +3,7 @@
     <div class="container">
       <div class="hero-content">
         <h1 class="hero-title">Book Your Training Slot</h1>
-        <p class="hero-subtitle">Choose your preferred date and time, then pick an available trainer and vehicle. Multiple students can use the same time slot with different trainers.</p>
+        <p class="hero-subtitle">Choose your preferred date and time, then pick an available trainer. The training vehicle is assigned automatically when you confirm.</p>
       </div>
     </div>
   </section>
@@ -96,7 +96,7 @@
               Default: {{ slot.trainer.profile.full_name }}
             </div>
             <div class="slot-trainer slot-trainer-hint" *ngIf="!slot.trainer?.profile?.full_name">
-              Choose trainer when booking
+              Trainer assigned when you book
             </div>
             <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
           </div>
@@ -152,7 +152,7 @@
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>Free cancellation 24 hours before</span>
+              <span>Free cancellation up to 5 hours before your session</span>
             </li>
             <li>
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -164,7 +164,7 @@
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>Pick your trainer when you book (only trainers free for that time are listed)</span>
+              <span>Booking opens within 24 hours before the class; weekly limits apply</span>
             </li>
             <li>
               <svg class="list-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -187,37 +187,25 @@
       </p>
 
       <form (ngSubmit)="confirmBooking()">
-        <div class="form-group" *ngIf="selectedSlot">
-          <label for="bookingTrainer">Trainer *</label>
-          <div *ngIf="loadingTrainers" class="loading-inline">Loading trainers…</div>
-          <select
-            *ngIf="!loadingTrainers"
-            id="bookingTrainer"
-            [(ngModel)]="bookingForm.trainer_id"
-            name="trainer_id"
-            required>
-            <option value="">-- Select trainer --</option>
-            <option *ngFor="let t of availableTrainers" [value]="t.id">
-              {{ t.profile?.full_name || 'Trainer' }} ({{ t.rating | number:'1.1-1' }}/5)
-            </option>
-          </select>
-          <small class="form-hint" *ngIf="!loadingTrainers && availableTrainers.length">
-            Trainers already booked for this time are hidden from the list.
-          </small>
-        </div>
+        <p *ngIf="trainersLoading" class="form-hint">Loading trainers…</p>
 
-        <div class="form-group">
-          <label for="vehicle">Select Vehicle *</label>
+        <div class="form-group" *ngIf="!trainersLoading && trainersForSlot.length > 0">
+          <label for="trainer">Trainer (driver) *</label>
           <select
-            id="vehicle"
-            [(ngModel)]="bookingForm.vehicle_id"
-            name="vehicle_id"
+            id="trainer"
+            name="trainer"
+            [(ngModel)]="bookingForm.trainerId"
             required>
-            <option value="">-- Select Vehicle --</option>
-            <option *ngFor="let vehicle of vehicles" [value]="vehicle.id">
-              {{ vehicle.name }} ({{ vehicle.type }})
+            <option value="" disabled>Choose a trainer</option>
+            <option *ngFor="let t of trainersForSlot" [value]="t.id">
+              {{ t.profile?.full_name || 'Trainer' }}
             </option>
           </select>
+          <small class="form-hint">Each trainer can only be booked once per time slot.</small>
+        </div>
+        <div class="error-message" *ngIf="trainersLoadError">{{ trainersLoadError }}</div>
+        <div class="error-message" *ngIf="!trainersLoading && !trainersLoadError && trainersForSlot.length === 0">
+          No active trainers are available. Please contact support.
         </div>
 
         <div class="form-group">
@@ -253,7 +241,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="!captchaVerified || loading || loadingTrainers || !bookingForm.trainer_id || !bookingForm.vehicle_id || !bookingForm.phone || !availableTrainers.length">
+          [disabled]="trainersLoading || !captchaVerified || loading || !bookingForm.phone || !bookingForm.trainerId || trainersForSlot.length === 0">
           {{ loading ? 'Booking…' : 'Confirm Booking' }}
         </button>
       </form>
@@ -283,7 +271,7 @@
       <button type="button" class="close-btn" (click)="closeActiveBookingPopup()" aria-label="Close">×</button>
       <h2>Active booking</h2>
       <p class="modal-subtitle">
-        You already have an active booking. Please cancel it before booking another.
+        You already have a booking. Cancel it to book another.
       </p>
       <a routerLink="/my-bookings" class="btn btn-confirm" (click)="closeActiveBookingPopup()">Go to My Bookings</a>
     </div>
