@@ -7,13 +7,13 @@ import { ApiService, Trainer } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
 import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
-import { getAuthToken } from '../../utils/auth-token.storage';
 import { firstValueFrom } from 'rxjs';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule, CaptchaComponent],
+  imports: [CommonModule, FormsModule, CaptchaComponent, RouterLink],
   templateUrl: './booking.component.html',
   styleUrls: ['./booking.component.css']
 })
@@ -24,6 +24,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   showBookingModal = false;
   showConfirmation = false;
   showLoginPrompt = false;
+  showActiveBookingPopup = false;
   captchaVerified = false;
   loading = false;
   errorMessage = '';
@@ -310,11 +311,6 @@ export class BookingComponent implements OnInit, OnDestroy {
         phone: this.bookingForm.phone.trim(),
         notes: (this.bookingForm.notes || '').trim()
       };
-      console.log('[BookingComponent] Confirm booking request:', {
-        ...payload,
-        notes: payload.notes ? '[set]' : ''
-      });
-      console.log('[BookingComponent] Bearer token in localStorage:', !!getAuthToken());
 
       await firstValueFrom(
         this.apiService.createBooking(payload.slot_id, payload.trainer_id, payload.vehicle_id, {
@@ -333,19 +329,29 @@ export class BookingComponent implements OnInit, OnDestroy {
       await this.loadSlots();
     } catch (error: any) {
       const body = error?.error;
-      const fromValidation =
-        Array.isArray(body?.errors) && body.errors.length
-          ? body.errors.map((e: { message?: string }) => e.message).filter(Boolean).join(' ')
-          : '';
-      this.errorMessage =
-        fromValidation ||
-        body?.message ||
-        body?.error ||
-        error?.message ||
-        'Failed to create booking';
+      const code = body?.errorCode;
+      if (code === 'ACTIVE_BOOKING_EXISTS') {
+        this.showActiveBookingPopup = true;
+        this.errorMessage = '';
+      } else {
+        const fromValidation =
+          Array.isArray(body?.errors) && body.errors.length
+            ? body.errors.map((e: { message?: string }) => e.message).filter(Boolean).join(' ')
+            : '';
+        this.errorMessage =
+          fromValidation ||
+          body?.message ||
+          body?.error ||
+          error?.message ||
+          'Failed to create booking';
+      }
     } finally {
       this.loading = false;
     }
+  }
+
+  closeActiveBookingPopup(): void {
+    this.showActiveBookingPopup = false;
   }
 
   resetForm() {

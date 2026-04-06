@@ -197,12 +197,6 @@ export class ApiService {
     if (phone) {
       payload.phone = phone;
     }
-    const token = getAuthToken();
-    console.log('[ApiService] POST /bookings', {
-      payload: { ...payload, phone: payload.phone ? '***' + payload.phone.slice(-4) : '(none)', notes: payload.notes ? '[set]' : '' },
-      hasBearerToken: !!token,
-      authorizationHeader: token ? `Bearer <${token.length} chars>` : '(none — relying on httpOnly cookie)'
-    });
     return this.http.post<Booking>(`${this.apiUrl}/bookings`, payload, this.getHttpOptions(true));
   }
 
@@ -258,14 +252,6 @@ export class ApiService {
   }
 
   post<T>(path: string, body: any): Promise<T> {
-    if (path.includes('bookings') && path.replace(/^\//, '') === 'bookings') {
-      console.log('[ApiService] POST /bookings body:', {
-        ...body,
-        phone: body?.phone ? '***' + String(body.phone).slice(-4) : body?.phone,
-        notes: body?.notes ? '[set]' : body?.notes
-      });
-      console.log('[ApiService] Auth: Bearer token present:', !!getAuthToken(), '| withCredentials: true');
-    }
     return firstValueFrom(this.http.post<T>(`${this.apiUrl}${path}`, body, this.getHttpOptions(true)));
   }
 

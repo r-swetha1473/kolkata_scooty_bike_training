@@ -107,7 +107,6 @@ export class BookingService {
       if (phone?.trim()) {
         body.phone = phone.trim();
       }
-      console.log('[BookingService] POST /bookings', { ...body, notes: body.notes ? '[set]' : '' });
       const booking = await firstValueFrom(this.http.post<BookingWithDetails>('/bookings', body));
 
       if (!booking) {
@@ -116,7 +115,6 @@ export class BookingService {
 
       return booking;
     } catch (error) {
-      console.error('Error creating booking:', error);
       throw error;
     }
   }
@@ -125,7 +123,6 @@ export class BookingService {
     try {
       await firstValueFrom(this.http.put(`/bookings/${bookingId}/cancel`, { cancellation_reason: reason }));
     } catch (error) {
-      console.error('Error cancelling booking:', error);
       throw error;
     }
   }

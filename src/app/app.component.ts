@@ -41,7 +41,7 @@ import { filter } from 'rxjs/operators';
                   <a routerLink="/profile" (click)="closeMenus()">
                     <span class="menu-icon">👤</span> My Profile
                   </a>
-                  <a routerLink="/booking" (click)="closeMenus()">
+                  <a routerLink="/my-bookings" (click)="closeMenus()">
                     <span class="menu-icon">📅</span> My Bookings
                   </a>
                   <button class="dropdown-item" (click)="signOut()">

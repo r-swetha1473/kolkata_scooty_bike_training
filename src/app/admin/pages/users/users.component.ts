@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { AdminService } from '../../../services/admin.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../services/toast.service';
@@ -55,6 +56,7 @@ import { ToastService } from '../../../services/toast.service';
               <th>Name</th>
               <th>Email</th>
               <th>Phone</th>
+              <th>Account</th>
               <th>Role</th>
               <th>Joined</th>
               <th *ngIf="auth.isSuperAdmin()">Actions</th>
@@ -62,7 +64,7 @@ import { ToastService } from '../../../services/toast.service';
           </thead>
           <tbody>
             <tr *ngIf="filteredUsers.length === 0">
-              <td [attr.colspan]="auth.isSuperAdmin() ? 6 : 5" class="empty-state-cell">
+              <td [attr.colspan]="auth.isSuperAdmin() ? 7 : 6" class="empty-state-cell">
                 No users found
               </td>
             </tr>
@@ -73,6 +75,17 @@ import { ToastService } from '../../../services/toast.service';
                 <span *ngIf="user.phone" class="auth-badge phone-badge">{{ user.phone }}</span>
                 <span *ngIf="!user.phone && user.google_id" class="auth-badge google-badge">Google</span>
                 <span *ngIf="!user.phone && !user.google_id" class="auth-badge guest-badge">Guest</span>
+              </td>
+              <td>
+                <span *ngIf="user.inactive_blocked" class="status-blocked">Inactive (blocked)</span>
+                <span *ngIf="!user.inactive_blocked" class="status-active">Active</span>
+                <button
+                  *ngIf="user.inactive_blocked"
+                  type="button"
+                  class="btn-reactivate"
+                  (click)="reactivateCustomer(user.id)">
+                  Reactivate
+                </button>
               </td>
               <td><span class="role-badge">{{ user.role }}</span></td>
               <td>{{ formatDate(user.created_at) }}</td>
@@ -167,6 +180,20 @@ import { ToastService } from '../../../services/toast.service';
       background: #FEF3C7;
       color: #92400E;
     }
+
+    .status-active { font-size: 12px; color: #059669; font-weight: 600; }
+    .status-blocked { font-size: 12px; color: #b91c1c; font-weight: 600; display: block; margin-bottom: 6px; }
+    .btn-reactivate {
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 6px;
+      border: 1px solid #2563eb;
+      background: #eff6ff;
+      color: #1d4ed8;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-reactivate:hover { background: #dbeafe; }
 
   `]
 })
@@ -287,6 +314,16 @@ export class AdminUsersComponent implements OnInit {
   onPageSizeChange() {
     this.currentPage = 1;
     this.updatePagination();
+  }
+
+  async reactivateCustomer(userId: string) {
+    try {
+      await firstValueFrom(this.adminService.updateUser(userId, { inactive_blocked: false }));
+      await this.loadUsers();
+      this.toastService.success('Customer reactivated');
+    } catch (error: any) {
+      this.toastService.error(error?.error?.message || 'Failed to reactivate');
+    }
   }
 
   async updateRole(userId: string, role: string) {

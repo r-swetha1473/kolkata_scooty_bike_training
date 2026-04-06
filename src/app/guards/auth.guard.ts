@@ -5,6 +5,26 @@ import { map, take, filter, timeout, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { getAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
+/**
+ * Blocks inactive customers from the booking page (guests and active users allowed).
+ */
+export const activeCustomerGuard: CanActivateFn = () => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  if (!authService.isAuthenticated()) {
+    return true;
+  }
+
+  const profile = authService.getUserProfile();
+  if (profile?.role === 'customer' && profile.inactive_blocked === true) {
+    router.navigate(['/profile'], { queryParams: { inactive: '1' } });
+    return false;
+  }
+
+  return true;
+};
+
 export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);

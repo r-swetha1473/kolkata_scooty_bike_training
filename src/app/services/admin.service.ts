@@ -92,4 +92,8 @@ export class AdminService {
   deleteUser(userId: string): Observable<any> {
     return this.http.delete(`/admin/users/${userId}`);
   }
+
+  updateUser(userId: string, body: Record<string, unknown>): Observable<any> {
+    return this.http.put(`/admin/users/${userId}`, body);
+  }
 }

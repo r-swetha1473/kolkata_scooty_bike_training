@@ -28,14 +28,6 @@ export class HttpService {
   }
 
   post<T>(endpoint: string, data: any): Observable<T> {
-    if (endpoint.replace(/^\//, '') === 'bookings') {
-      const token = getAuthToken();
-      console.log('[HttpService] POST /bookings', {
-        body: { ...data, notes: data?.notes ? '[set]' : data?.notes },
-        hasBearerToken: !!token,
-        authorizationPreview: token ? 'Bearer ***' + token.slice(-8) : '(none — cookie auth may apply)'
-      });
-    }
     return this.http.post<T>(`${this.apiUrl}${endpoint}`, data, {
       headers: this.getHeaders(),
       withCredentials: true

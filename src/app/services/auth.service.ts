@@ -12,6 +12,8 @@ export interface UserProfile {
   phone: string | null;
   avatar_url: string | null;
   role: 'customer' | 'trainer' | 'admin' | 'superadmin';
+  inactive_blocked?: boolean;
+  last_booking_date?: string | null;
 }
 
 export interface AuthResponse {

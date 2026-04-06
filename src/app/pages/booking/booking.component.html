@@ -278,6 +278,17 @@
     </div>
   </div>
 
+  <div class="modal-overlay" *ngIf="showActiveBookingPopup" (click)="closeActiveBookingPopup()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <button type="button" class="close-btn" (click)="closeActiveBookingPopup()" aria-label="Close">×</button>
+      <h2>Active booking</h2>
+      <p class="modal-subtitle">
+        You already have an active booking. Please cancel it before booking another.
+      </p>
+      <a routerLink="/my-bookings" class="btn btn-confirm" (click)="closeActiveBookingPopup()">Go to My Bookings</a>
+    </div>
+  </div>
+
   <div class="toast success" [class.show]="showConfirmation">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
       <polyline points="20 6 9 17 4 12"></polyline>
