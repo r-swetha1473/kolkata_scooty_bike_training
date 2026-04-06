@@ -87,6 +87,33 @@ class EmailService {
     return this.sendEmail(user.email, subject, html);
   }
 
+  async sendAdminInactivityBlockAlert(users, days) {
+    const adminEmail = process.env.ADMIN_ALERT_EMAIL || process.env.SMTP_USER;
+    if (!adminEmail) {
+      if (!this.enabled) {
+        console.log(`[Email] Inactivity block: ${users.length} user(s); set ADMIN_ALERT_EMAIL to notify`);
+      }
+      return { success: false, message: 'No ADMIN_ALERT_EMAIL' };
+    }
+
+    const lines = users
+      .map(
+        (u) =>
+          `<li>${u.full_name} &lt;${u.email}&gt; — last booking: ${u.last_booking_date || 'never'} — joined: ${u.created_at}</li>`
+      )
+      .join('');
+
+    const subject = `[Kolkata Scotty] ${users.length} customer(s) blocked for ${days}-day inactivity`;
+    const html = `
+      <h2>Inactive customer accounts blocked</h2>
+      <p>The following customers had no booking activity for at least <strong>${days}</strong> days and were marked <code>inactive_blocked</code>:</p>
+      <ul>${lines}</ul>
+      <p>They can be reactivated from Admin → Users (clear inactive flag).</p>
+    `;
+
+    return this.sendEmail(adminEmail, subject, html);
+  }
+
   async sendTrainerChangeNotification(booking, user, slot, oldTrainer, newTrainer, vehicle) {
     const subject = 'Trainer Changed - Kolkata Scotty Bike Training';
     const html = `

@@ -183,6 +183,12 @@ const validateUserUpdate = [
     .isInt({ min: 0, max: 2 })
     .withMessage('weekly_booking_count must be an integer between 0 and 2')
     .toInt(),
+
+  body('inactive_blocked')
+    .optional()
+    .isBoolean()
+    .withMessage('inactive_blocked must be a boolean')
+    .toBoolean(),
   
   handleValidationErrors
 ];

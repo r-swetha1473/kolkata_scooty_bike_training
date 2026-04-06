@@ -91,6 +91,7 @@ router.get('/users', async (req, res, next) => {
         p.last_booking_date,
         p.weekly_booking_count,
         p.weekly_reset_date,
+        p.inactive_blocked,
         COUNT(b.id) FILTER (WHERE b.status NOT IN ('cancelled')) as active_bookings
       FROM profiles p
       LEFT JOIN bookings b ON p.id = b.user_id
@@ -119,7 +120,8 @@ router.get('/users', async (req, res, next) => {
     
     query += `
       GROUP BY p.id, p.email, p.full_name, p.phone, p.google_id, p.role, p.created_at, 
-               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date
+               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date,
+               p.inactive_blocked
       ORDER BY p.created_at DESC
     `;
 
@@ -146,6 +148,7 @@ router.get('/customers', async (req, res, next) => {
         p.last_booking_date,
         p.weekly_booking_count,
         p.weekly_reset_date,
+        p.inactive_blocked,
         COUNT(b.id) FILTER (WHERE b.status = 'confirmed') as confirmed_bookings,
         COUNT(b.id) FILTER (WHERE b.status = 'completed') as completed_bookings,
         COUNT(b.id) FILTER (WHERE b.status = 'cancelled') as cancelled_bookings
@@ -167,7 +170,8 @@ router.get('/customers', async (req, res, next) => {
     
     query += `
       GROUP BY p.id, p.email, p.full_name, p.phone, p.created_at, 
-               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date
+               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date,
+               p.inactive_blocked
       ORDER BY p.created_at DESC
     `;
 
@@ -918,7 +922,7 @@ router.post('/users', validateUserCreation, async (req, res, next) => {
 router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { full_name, phone, email, total_bookings, weekly_booking_count } = req.body;
+    const { full_name, phone, email, total_bookings, weekly_booking_count, inactive_blocked } = req.body;
 
     const updates = [];
     const params = [];
@@ -944,6 +948,10 @@ router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
       updates.push(`weekly_booking_count = $${paramIndex++}`);
       params.push(weekly_booking_count);
     }
+    if (inactive_blocked !== undefined) {
+      updates.push(`inactive_blocked = $${paramIndex++}`);
+      params.push(!!inactive_blocked);
+    }
 
     if (updates.length === 0) {
       const error = new Error('No fields to update');
@@ -957,7 +965,7 @@ router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
 
     const result = await db.query(
       `UPDATE profiles SET ${updates.join(', ')} WHERE id = $${paramIndex} 
-       RETURNING id, email, full_name, phone, role, created_at, total_bookings, last_booking_date, weekly_booking_count`,
+       RETURNING id, email, full_name, phone, role, created_at, total_bookings, last_booking_date, weekly_booking_count, inactive_blocked`,
       params
     );
 

@@ -205,12 +205,11 @@ router.post(
       throw error;
     }
 
-    // PHASE 1: Get user's phone number (phone is the unique identity)
     const userCheck = await client.query(
-      'SELECT phone, role FROM profiles WHERE id = $1',
+      'SELECT phone, role, inactive_blocked FROM profiles WHERE id = $1',
       [req.user.id]
     );
-    
+
     if (userCheck.rows.length === 0) {
       const err = new Error('User not found');
       err.status = 404;
@@ -218,6 +217,32 @@ router.post(
     }
 
     const user = userCheck.rows[0];
+
+    if (user.role === 'customer' && user.inactive_blocked === true) {
+      const blocked = new Error('Your account is inactive. Contact admin.');
+      blocked.status = 403;
+      blocked.errorCode = 'INACTIVE_BLOCKED';
+      throw blocked;
+    }
+
+    const activeBookingRow = await client.query(
+      `SELECT b.id
+       FROM bookings b
+       JOIN slots s ON b.slot_id = s.id
+       WHERE b.user_id = $1
+         AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+         AND s.end_time > NOW()
+       LIMIT 1`,
+      [req.user.id]
+    );
+    if (activeBookingRow.rows.length > 0) {
+      const dup = new Error(
+        'You already have an active booking. Please cancel it before booking another.'
+      );
+      dup.status = 400;
+      dup.errorCode = 'ACTIVE_BOOKING_EXISTS';
+      throw dup;
+    }
     
     // PHASE 5: Fix MBR-002 - Enforce phone number must match registered profile phone
     // Business rule: "Booking allowed only for registered phone numbers"
@@ -297,7 +322,7 @@ router.post(
 
     if (!validationResult.eligible) {
       const err = new Error(validationResult.message || `Booking not eligible: ${validationResult.reason}`);
-      err.status = 400;
+      err.status = validationResult.reason === 'INACTIVE_BLOCKED' ? 403 : 400;
       err.errorCode = validationResult.reason || validationResult.errorCode || 'BOOKING_NOT_ELIGIBLE';
       throw err;
     }
@@ -459,12 +484,17 @@ router.post(
       updated_at: result.updated_at
     };
 
-    // Increment weekly booking count (if function exists)
     try {
       await client.query('SELECT increment_weekly_booking_count($1)', [req.user.id]);
     } catch (err) {
-      // Function doesn't exist, skip (optional feature)
-      console.warn('increment_weekly_booking_count function not found, skipping');
+      await client.query(
+        `UPDATE profiles
+         SET last_booking_date = CURRENT_DATE,
+             total_bookings = COALESCE(total_bookings, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [req.user.id]
+      );
     }
 
     // Check if this is the first booking and set entitlement dates (only if table exists)

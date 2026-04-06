@@ -41,7 +41,41 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         message: config.booking.phoneNumberErrorMessage
       };
     }
-    
+
+    if (userId) {
+      const profileRow = await db.query(
+        'SELECT inactive_blocked, role FROM profiles WHERE id = $1',
+        [userId]
+      );
+      const pr = profileRow.rows[0];
+      if (pr?.role === 'customer' && pr?.inactive_blocked === true) {
+        return {
+          eligible: false,
+          reason: 'INACTIVE_BLOCKED',
+          message: 'Your account is inactive. Contact admin.'
+        };
+      }
+
+      const activeBooking = await db.query(
+        `SELECT b.id
+         FROM bookings b
+         JOIN slots s ON b.slot_id = s.id
+         WHERE b.user_id = $1
+           AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+           AND s.end_time > NOW()
+         LIMIT 1`,
+        [userId]
+      );
+      if (activeBooking.rows.length > 0) {
+        return {
+          eligible: false,
+          reason: 'ACTIVE_BOOKING_EXISTS',
+          message:
+            'You already have an active booking. Please cancel it before booking another.'
+        };
+      }
+    }
+
     // Validate vehicle_id - must be a UUID and vehicle must exist and be active
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidPattern.test(vehicleId)) {

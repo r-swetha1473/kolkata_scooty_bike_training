@@ -19,6 +19,8 @@ const vehiclesRoutes = require('./routes/vehicles');
 const recognitionRoutes = require('./routes/recognition');
 const adminManagementRoutes = require('./routes/adminManagement');
 const errorHandler = require('./middleware/errorHandler');
+const cron = require('node-cron');
+const { runInactivityBlockCheck } = require('./services/inactivity.service');
 
 const app = express();
 const events = require('./events');
@@ -188,6 +190,16 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// Daily inactivity check (customers with no booking for N days → inactive_blocked)
+if (process.env.DISABLE_INACTIVITY_CRON !== '1') {
+  const cronExpr = process.env.INACTIVITY_CRON || '0 2 * * *';
+  cron.schedule(cronExpr, () => {
+    runInactivityBlockCheck().catch((err) => {
+      console.error('[Inactivity cron]', err.message);
+    });
+  });
+}
 
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
