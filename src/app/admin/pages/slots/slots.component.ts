@@ -1132,12 +1132,12 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
           
           // Reload only for the selected date
           await this.loadSlotsForSelectedDate();
-        } catch (e) {
-          console.warn('SSE parse error:', e);
+        } catch {
+          /* ignore bad SSE payload */
         }
       };
-    } catch (e) {
-      console.warn('SSE unavailable for admin panel');
+    } catch {
+      /* SSE optional */
     }
   }
 
@@ -1167,8 +1167,7 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
       this.trainers = await this.trainerService.getAllTrainers();
       this.onDutyTrainers = await this.trainerService.getOnDutyTrainers();
       await this.loadSlotsForSelectedDate();
-    } catch (error) {
-      console.error('Failed to load data:', error);
+    } catch {
       this.toastService.error('Failed to load data');
       this.filteredSlots = [];
     }
@@ -1199,8 +1198,7 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
       });
       
       this.filterSlots();
-    } catch (error) {
-      console.error('Failed to load slots:', error);
+    } catch {
       this.toastService.error('Failed to load slots');
       this.filteredSlots = [];
     }
@@ -1305,7 +1303,6 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
         await this.doGenerateSlots(generateDate);
       }
     } catch (error: any) {
-      console.error('Generate slots error:', error);
       this.toastService.error(error?.error?.message || error?.message || 'Failed to check/generate slots');
     }
   }
@@ -1327,7 +1324,6 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
         await this.loadSlotsForSelectedDate();
       }
     } catch (error: any) {
-      console.error('Generate slots error:', error);
       this.toastService.error(error?.error?.message || error?.message || 'Failed to generate slots');
     }
   }

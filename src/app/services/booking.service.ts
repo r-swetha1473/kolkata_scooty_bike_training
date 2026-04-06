@@ -65,7 +65,6 @@ export class BookingService {
       const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>(`/slots?date=${date}`));
       this.slotsSubject.next(slots || []);
     } catch (error) {
-      console.error('Error fetching slots:', error);
       throw error;
     }
   }
@@ -75,7 +74,6 @@ export class BookingService {
       const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>('/slots'));
       this.slotsSubject.next(slots || []);
     } catch (error) {
-      console.error('Error fetching all slots:', error);
       throw error;
     }
   }
@@ -85,7 +83,6 @@ export class BookingService {
       const bookings = await firstValueFrom(this.http.get<BookingWithDetails[]>('/bookings/my-bookings'));
       this.bookingsSubject.next(bookings || []);
     } catch (error) {
-      console.error('Error fetching bookings:', error);
       throw error;
     }
   }
@@ -132,8 +129,7 @@ export class BookingService {
       const slots = await firstValueFrom(this.http.get<SlotWithTrainer[]>('/slots'));
       this.slotsSubject.next(slots || []);
       return slots || [];
-    } catch (error) {
-      console.error('Error loading slots:', error);
+    } catch {
       return [];
     }
   }
@@ -142,8 +138,7 @@ export class BookingService {
     try {
       const trainers = await firstValueFrom(this.http.get<any[]>('/trainers/active'));
       return trainers || [];
-    } catch (error) {
-      console.error('Error loading trainers:', error);
+    } catch {
       return [];
     }
   }

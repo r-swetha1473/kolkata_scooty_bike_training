@@ -260,8 +260,8 @@ export class AdminLoginComponent {
         await this.authService.signOut();
       }
     } catch (error: any) {
-      console.error('Login error:', error);
-      this.errorMessage = error.message || 'Invalid email or password';
+      this.errorMessage =
+        error?.error?.message || error?.message || 'Invalid email or password';
     } finally {
       this.loading = false;
     }

@@ -222,8 +222,7 @@ export class AdminUsersComponent implements OnInit {
     try {
       this.users = await this.adminService.getAllUsers();
       this.filterUsers();
-    } catch (error) {
-      console.error('Failed to load users:', error);
+    } catch {
       this.toastService.error('Failed to load users');
     }
   }
@@ -333,7 +332,6 @@ export class AdminUsersComponent implements OnInit {
       await this.loadUsers();
       this.toastService.success(`User role updated to ${role} successfully`);
     } catch (error: any) {
-      console.error('Error updating user role:', error);
       this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to update user role');
     }
   }

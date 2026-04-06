@@ -73,10 +73,8 @@ export class SettingsService {
         }
       } catch (error: any) {
         if (error?.status === 429) {
-          console.log('Rate limited loading settings, will retry');
           return;
         }
-        console.error('Error loading settings:', error);
       } finally {
         setTimeout(() => {
           this.loadingPromise = null;

@@ -27,6 +27,8 @@ export class BookingComponent implements OnInit, OnDestroy {
   showActiveBookingPopup = false;
   captchaVerified = false;
   loading = false;
+  /** Prevents double-submit before Angular disables the button. */
+  private bookingInFlight = false;
   errorMessage = '';
   refreshInterval: any;
   slotEvents?: EventSource;
@@ -69,8 +71,8 @@ export class BookingComponent implements OnInit, OnDestroy {
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       }
-    } catch (e) {
-      console.warn('Failed to parse date:', dateStr);
+    } catch {
+      /* invalid date string */
     }
     
     // Fallback to today
@@ -96,17 +98,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     await this.loadVehicles();
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
-  }
-
-  private async loadUserProfile() {
-    try {
-      const user = await this.apiService.get<any>('/auth/me');
-      if (user) {
-        (this.authService as any).userProfileSubject.next(user);
-      }
-    } catch (error) {
-      console.error('Failed to load user profile:', error);
-    }
   }
 
   ngOnDestroy() {
@@ -154,8 +145,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       } else {
         this.slots = [];
       }
-    } catch (error) {
-      console.error('Failed to load slots:', error);
+    } catch {
       this.errorMessage = 'Failed to load slots. Please try again.';
       this.slots = [];
     } finally {
@@ -184,9 +174,8 @@ export class BookingComponent implements OnInit, OnDestroy {
           }
         } catch (_) {}
       };
-    } catch (e) {
-      // SSE may fail on some environments; fallback to polling already enabled
-      console.warn('SSE unavailable, using polling only');
+    } catch {
+      /* SSE optional; polling still runs */
     }
   }
 
@@ -194,8 +183,8 @@ export class BookingComponent implements OnInit, OnDestroy {
     try {
       const response = await this.apiService.get<any[]>('/vehicles');
       this.vehicles = response;
-    } catch (error) {
-      console.error('Failed to load vehicles:', error);
+    } catch {
+      this.vehicles = [];
     }
   }
 
@@ -227,8 +216,8 @@ export class BookingComponent implements OnInit, OnDestroy {
       if (user?.phone && !String(user.phone).startsWith('GOOGLE_')) {
         this.bookingForm.phone = user.phone;
       }
-    } catch (error) {
-      console.error('Failed to load user profile:', error);
+    } catch {
+      /* phone stays empty */
     }
 
     this.selectedSlot = slot;
@@ -250,8 +239,7 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.errorMessage =
           'No trainers are available for this time slot right now. They may all be booked — try another slot or refresh.';
       }
-    } catch (e) {
-      console.error('Failed to load trainers for slot', e);
+    } catch {
       this.availableTrainers = [];
       this.errorMessage = 'Could not load trainers for this slot. Please try again.';
     } finally {
@@ -262,7 +250,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   async signInWithGoogle() {
     try {
       await this.authService.signInWithGoogle();
-    } catch (error) {
+    } catch {
       this.errorMessage = 'Failed to sign in';
     }
   }
@@ -279,6 +267,9 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async confirmBooking() {
+    if (this.bookingInFlight || this.loading) {
+      return;
+    }
     if (!this.selectedSlot || !this.captchaVerified) return;
 
     if (!this.bookingForm.trainer_id) {
@@ -296,12 +287,14 @@ export class BookingComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.bookingInFlight = true;
     this.loading = true;
     this.errorMessage = '';
 
     try {
       if (!this.authService.isAuthenticated()) {
-        throw new Error('Not authenticated');
+        this.errorMessage = 'Please sign in to book.';
+        return;
       }
 
       const payload = {
@@ -328,8 +321,20 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       await this.loadSlots();
     } catch (error: any) {
+      const status = error?.status;
       const body = error?.error;
       const code = body?.errorCode;
+
+      if (status === 401 || code === 'TOKEN_EXPIRED' || code === 'INVALID_TOKEN') {
+        this.errorMessage = 'Your session expired. Please sign out and sign in again.';
+        return;
+      }
+
+      if (status === 403 && code === 'INACTIVE_BLOCKED') {
+        this.errorMessage = body?.message || 'Your account is inactive. Contact admin.';
+        return;
+      }
+
       if (code === 'ACTIVE_BOOKING_EXISTS') {
         this.showActiveBookingPopup = true;
         this.errorMessage = '';
@@ -343,10 +348,11 @@ export class BookingComponent implements OnInit, OnDestroy {
           body?.message ||
           body?.error ||
           error?.message ||
-          'Failed to create booking';
+          'Failed to create booking. Please try again.';
       }
     } finally {
       this.loading = false;
+      this.bookingInFlight = false;
     }
   }
 

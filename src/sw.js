@@ -1,93 +1,90 @@
-const CACHE_NAME = 'kolkata-scotty-v2';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/global_styles.css',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
-];
+/**
+ * Service worker — cache only long-lived static assets.
+ * Never cache index.html, *.js, or *.css (hashed Angular chunks). Serving stale
+ * bundles causes "Failed to fetch dynamically imported module" after deploy.
+ */
+const VERSION = 'v5-chunk-safe';
+const STATIC_CACHE = `kolkata-scotty-static-${VERSION}`;
+const PRECACHE_URLS = ['/manifest.json', '/icon-192.png', '/icon-512.png'];
 
-const API_CACHE = 'kolkata-scotty-api-v2';
-const MAX_API_CACHE_AGE = 5 * 60 * 1000;
-
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE).then((cache) =>
+      cache.addAll(PRECACHE_URLS).catch(() => {})
+    )
   );
 });
 
-self.addEventListener('activate', event => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME && cacheName !== API_CACHE) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.map((key) => {
+            if (key !== STATIC_CACHE) {
+              return caches.delete(key);
+            }
+          })
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', event => {
+function isAppShellOrChunk(url, request) {
+  const path = url.pathname;
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    return true;
+  }
+  if (path === '/' || path.endsWith('.html')) {
+    return true;
+  }
+  if (path.endsWith('.js') || path.endsWith('.mjs') || path.endsWith('.css') || path.endsWith('.map')) {
+    return true;
+  }
+  return false;
+}
+
+self.addEventListener('fetch', (event) => {
   const { request } = event;
-  const url = new URL(request.url);
-
   if (request.method !== 'GET') {
     return;
   }
 
-  if (url.origin === location.origin) {
-    event.respondWith(
-      caches.match(request)
-        .then(response => {
-          if (response) {
-            return response;
-          }
-          return fetch(request).then(response => {
-            if (!response || response.status !== 200 || response.type === 'error') {
-              return response;
-            }
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME)
-              .then(cache => cache.put(request, responseToCache));
-            return response;
-          });
-        })
-        .catch(() => {
-          if (request.destination === 'document') {
-            return caches.match('/index.html');
-          }
-        })
-    );
-  } else if (url.hostname.includes('localhost') || url.hostname.includes('your-api-domain.com')) {
-    event.respondWith(
-      caches.open(API_CACHE).then(cache => {
-        return cache.match(request).then(cachedResponse => {
-          const fetchPromise = fetch(request).then(networkResponse => {
-            if (networkResponse.ok) {
-              cache.put(request, networkResponse.clone());
-            }
-            return networkResponse;
-          }).catch(() => cachedResponse);
+  const url = new URL(request.url);
+  if (url.origin !== location.origin) {
+    return;
+  }
 
-          return cachedResponse || fetchPromise;
-        });
+  if (isAppShellOrChunk(url, request)) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' }).catch(() => {
+        if (request.mode === 'navigate' || request.destination === 'document') {
+          return fetch(new Request('/index.html', { cache: 'no-store' }));
+        }
+        return new Response('', { status: 504, statusText: 'Network Error' });
       })
     );
+    return;
   }
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
+  );
 });
 
-self.addEventListener('sync', event => {
+self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-bookings') {
-    event.waitUntil(syncBookings());
+    event.waitUntil(Promise.resolve());
   }
 });
-
-async function syncBookings() {
-  console.log('Background sync: syncing bookings');
-}

@@ -57,8 +57,7 @@ export const authGuard: CanActivateFn = (route, state) => {
       return false;
     }),
     catchError(() => {
-      // Timeout or error - redirect to login
-      sessionStorage.removeItem('token');
+      clearAuthToken();
       router.navigate(['/'], { queryParams: { returnUrl: state.url } });
       return of(false);
     })

@@ -381,8 +381,7 @@ export class AdminBookingsComponent implements OnInit {
 
       this.bookings = await this.adminService.getAllBookings(filters);
       this.applyFilters();
-    } catch (error) {
-      console.error('Error loading bookings:', error);
+    } catch {
       this.toastService.error('Failed to load bookings');
     }
   }
@@ -538,10 +537,8 @@ export class AdminBookingsComponent implements OnInit {
     if (!confirm(`Are you sure you want to mark this booking as ${status}?`)) return;
 
     try {
-      console.log(`[Booking] Updating booking ${bookingId} to status: ${status}`);
-      const result = await firstValueFrom(this.adminService.updateBookingStatus(bookingId, status));
-      console.log(`[Booking] Update result:`, result);
-      
+      await firstValueFrom(this.adminService.updateBookingStatus(bookingId, status));
+
       // Reload bookings to get updated data
       await this.loadBookings();
       
@@ -556,7 +553,6 @@ export class AdminBookingsComponent implements OnInit {
       
       this.toastService.success(statusMessages[status] || `Booking ${status} successfully`);
     } catch (error: any) {
-      console.error('[Booking] Error updating booking status:', error);
       const errorMessage = error?.error?.error || error?.error?.message || error?.message || 'Failed to update booking status';
       this.toastService.error(errorMessage);
     }
@@ -580,7 +576,6 @@ export class AdminBookingsComponent implements OnInit {
       await this.loadBookings();
       this.toastService.success('Booking deleted successfully');
     } catch (error: any) {
-      console.error('Error deleting booking:', error);
       this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete booking');
     }
   }

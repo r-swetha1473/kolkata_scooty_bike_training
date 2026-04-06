@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpService } from './http.service';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
-import { tap } from 'rxjs/operators';
 import { getAuthToken, setAuthToken, clearAuthToken } from '../utils/auth-token.storage';
 
 export interface UserProfile {
@@ -47,8 +46,8 @@ export class AuthService {
       setAuthToken(token);
       url.searchParams.delete('token');
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-    } catch (error) {
-      console.error('Failed to capture OAuth token from URL:', error);
+    } catch {
+      /* ignore malformed URL */
     }
   }
 
@@ -99,8 +98,8 @@ export class AuthService {
   async signOut(): Promise<void> {
     try {
       await firstValueFrom(this.http.post('/auth/logout', {}));
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch {
+      /* still clear local session */
     } finally {
       clearAuthToken();
       this.userProfileSubject.next(null);

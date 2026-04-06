@@ -81,8 +81,8 @@ export class ApiService {
       setAuthToken(token);
       url.searchParams.delete('token');
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-    } catch (error) {
-      console.error('Failed to capture OAuth token from URL:', error);
+    } catch {
+      /* ignore */
     }
   }
 

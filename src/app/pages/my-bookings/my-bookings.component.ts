@@ -44,13 +44,18 @@ export interface BookingRow {
 
       <div *ngIf="loading" class="loading">Loading bookings…</div>
 
-      <div *ngIf="!loading && bookings.length === 0" class="empty-state">
+      <div *ngIf="loadError" class="load-error" role="alert">
+        {{ loadError }}
+        <button type="button" class="btn-retry" (click)="retryLoad()">Try again</button>
+      </div>
+
+      <div *ngIf="!loading && !loadError && bookings.length === 0" class="empty-state">
         <div class="empty-icon">📅</div>
         <p>No bookings yet.</p>
         <a routerLink="/booking" class="btn-primary">Book a Slot</a>
       </div>
 
-      <div *ngIf="!loading && bookings.length > 0" class="bookings-list">
+      <div *ngIf="!loading && !loadError && bookings.length > 0" class="bookings-list">
         <h2 class="section-title">Upcoming</h2>
         <div *ngFor="let b of getUpcomingBookings()" class="booking-card">
           <div class="booking-header">
@@ -201,11 +206,21 @@ export interface BookingRow {
       }
       .page-head {
         margin-bottom: 28px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 16px;
       }
       .page-head h1 {
         margin: 0 0 8px 0;
         font-size: 28px;
         color: var(--text-primary);
+        flex: 1 1 100%;
+      }
+      @media (min-width: 480px) {
+        .page-head h1 {
+          flex: 1 1 auto;
+        }
       }
       .sub {
         color: var(--text-secondary);
@@ -227,6 +242,26 @@ export interface BookingRow {
         text-align: center;
         padding: 48px 16px;
         color: var(--text-secondary);
+      }
+      .load-error {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      .btn-retry {
+        display: block;
+        margin: 12px auto 0;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid #991b1b;
+        background: white;
+        color: #991b1b;
+        font-weight: 600;
+        cursor: pointer;
       }
       .empty-icon {
         font-size: 3rem;
@@ -414,6 +449,7 @@ export interface BookingRow {
 export class MyBookingsComponent implements OnInit {
   bookings: BookingRow[] = [];
   loading = false;
+  loadError: string | null = null;
   cancelOpen = false;
   rateOpen = false;
   selected: BookingRow | null = null;
@@ -425,9 +461,23 @@ export class MyBookingsComponent implements OnInit {
   constructor(private apiService: ApiService) {}
 
   async ngOnInit() {
+    await this.retryLoad();
+  }
+
+  async retryLoad() {
     this.loading = true;
+    this.loadError = null;
     try {
       await this.loadBookings();
+    } catch (e: any) {
+      const status = e?.status;
+      if (status === 401) {
+        this.loadError = 'Please sign in again to view your bookings.';
+      } else {
+        this.loadError =
+          e?.error?.message || e?.message || 'Could not load bookings. Check your connection and try again.';
+      }
+      this.bookings = [];
     } finally {
       this.loading = false;
     }
@@ -512,10 +562,14 @@ export class MyBookingsComponent implements OnInit {
         this.apiService.cancelBooking(this.selected.id, this.cancelReason)
       );
       this.closeCancel();
-      await this.loadBookings();
+      try {
+        await this.loadBookings();
+      } catch {
+        this.loadError = 'Booking was cancelled. Pull to refresh or tap Try again to update the list.';
+      }
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Could not cancel';
-      alert(msg);
+      window.alert(msg);
     } finally {
       this.cancelling = false;
     }
@@ -540,9 +594,13 @@ export class MyBookingsComponent implements OnInit {
         this.apiService.submitRating(this.selected.id, this.ratingValue, this.ratingComments)
       );
       this.closeRate();
-      await this.loadBookings();
+      try {
+        await this.loadBookings();
+      } catch {
+        this.loadError = 'Rating saved. Tap Try again if the list looks out of date.';
+      }
     } catch (e: any) {
-      alert(e?.error?.message || 'Could not submit rating');
+      window.alert(e?.error?.message || 'Could not submit rating');
     }
   }
 }

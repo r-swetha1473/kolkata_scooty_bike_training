@@ -74,8 +74,7 @@ export class TrainersComponent implements OnInit {
       const backendTrainers = await this.trainerService.getActiveTrainers();
       this.trainers = this.mapTrainersToDisplay(backendTrainers);
       this.updateStats();
-    } catch (error: any) {
-      console.error('Error loading trainers:', error);
+    } catch {
       this.error = 'Failed to load trainers. Please try again later.';
       this.trainers = [];
     } finally {

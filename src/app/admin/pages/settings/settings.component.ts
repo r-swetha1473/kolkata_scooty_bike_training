@@ -346,8 +346,7 @@ export class AdminSettingsComponent implements OnInit {
       this.originalSettings = { ...this.settings };
       this.hasChanges = false;
       this.saveSuccess = false;
-    } catch (error) {
-      console.error('Error loading settings:', error);
+    } catch {
       this.toastService.error('Failed to load settings');
     }
   }
@@ -374,8 +373,7 @@ export class AdminSettingsComponent implements OnInit {
       setTimeout(() => {
         this.saveSuccess = false;
       }, 2000);
-    } catch (error) {
-      console.error('Error saving settings:', error);
+    } catch {
       this.toastService.error('Failed to save settings');
     } finally {
       this.saving = false;

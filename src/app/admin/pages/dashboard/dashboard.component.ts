@@ -283,8 +283,8 @@ export class AdminDashboardComponent implements OnInit {
   async loadStats() {
     try {
       this.stats = await this.adminService.getDashboardStats();
-    } catch (error) {
-      console.error('Error loading stats:', error);
+    } catch {
+      /* stats optional */
     }
   }
 

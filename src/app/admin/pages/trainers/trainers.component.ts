@@ -336,8 +336,7 @@ export class AdminTrainersComponent implements OnInit {
     try {
       this.trainers = await this.adminService.getAllTrainers();
       this.filterTrainers();
-    } catch (error) {
-      console.error('Failed to load trainers:', error);
+    } catch {
       this.toastService.error('Failed to load trainers');
     }
   }
@@ -496,7 +495,6 @@ export class AdminTrainersComponent implements OnInit {
       await this.loadTrainers();
       this.toastService.success(this.editingTrainer ? 'Trainer updated successfully' : 'Trainer created successfully');
     } catch (error: any) {
-      console.error('Error saving trainer:', error);
       this.toastService.error(error.error?.error || error.error?.message || 'Failed to save trainer');
     }
   }
@@ -507,7 +505,6 @@ export class AdminTrainersComponent implements OnInit {
       await this.loadTrainers();
       this.toastService.success(`Trainer ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
     } catch (error: any) {
-      console.error('Error updating trainer status:', error);
       this.toastService.error(error.error?.error || error.error?.message || 'Failed to update trainer status');
     }
   }
@@ -522,7 +519,6 @@ export class AdminTrainersComponent implements OnInit {
       await this.loadTrainers();
       this.toastService.success('Trainer deleted successfully');
     } catch (error: any) {
-      console.error('Error deleting trainer:', error);
       this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete trainer');
     }
   }

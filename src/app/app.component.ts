@@ -592,8 +592,8 @@ export class AppComponent implements OnInit {
   async signIn() {
     try {
       await this.authService.signInWithGoogle();
-    } catch (error) {
-      console.error('Sign in error:', error);
+    } catch {
+      /* sign-in redirect handles errors */
     }
   }
 
@@ -601,8 +601,8 @@ export class AppComponent implements OnInit {
     try {
       await this.authService.signOut();
       this.showUserMenu = false;
-    } catch (error) {
-      console.error('Sign out error:', error);
+    } catch {
+      /* session cleared in AuthService.finally */
     }
   }
 }
