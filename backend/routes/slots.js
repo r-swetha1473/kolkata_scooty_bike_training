@@ -44,6 +44,29 @@ async function ensureAutoSlotsIfNeeded(baseQuery, params, mode = 'list') {
   return db.query(baseQuery, params);
 }
 
+async function ensureAutoSlotsForDateIfNeeded(baseQuery, params, dateString, mode = 'date') {
+  const result = await db.query(baseQuery, params);
+  if (result.rows.length > 0) {
+    return result;
+  }
+
+  if (process.env.ENABLE_LIVE_AUTO_SLOT_FALLBACK === '0') {
+    return result;
+  }
+
+  try {
+    const normalized = normalizeDate(dateString);
+    if (normalized < getToday()) {
+      return result;
+    }
+    await slotGenerationService.generateSlotsForDate(normalized, { mode: 'auto', force: false });
+  } catch (err) {
+    console.error(`[slot auto fallback:${mode}]`, err.message);
+  }
+
+  return db.query(baseQuery, params);
+}
+
 // Get slots with various filters
 router.get('/', async (req, res, next) => {
   try {
@@ -196,7 +219,7 @@ router.get('/date/:date', async (req, res, next) => {
     
     // Dynamic vehicle capacity: Use slot_vehicle_capacity table
     // Calculate booked counts per vehicle dynamically from bookings table
-    const result = await db.query(`
+    const dateQuery = `
       SELECT s.*,
              CASE WHEN s.slot_date IS NOT NULL THEN s.slot_date ELSE s.start_time::date END as slot_date,
              t.id as trainer_id,
@@ -238,7 +261,9 @@ router.get('/date/:date', async (req, res, next) => {
                s.status, s.is_auto_generated, s.is_visible, s.created_at, s.updated_at,
                t.id, t.user_id, t.is_active, p.full_name
       ORDER BY s.start_time ASC
-    `, [date]);
+    `;
+
+    const result = await ensureAutoSlotsForDateIfNeeded(dateQuery, [date], date, 'date');
     
     res.json(result.rows);
   } catch (error) {
@@ -302,8 +327,7 @@ router.get('/available', async (req, res, next) => {
       dateFilter = `AND (s.slot_date = $${params.length}::date OR s.start_time::date = $${params.length}::date)`;
     }
 
-    const result = await db.query(
-      `
+    const availableQuery = `
       SELECT s.*,
              CASE WHEN s.slot_date IS NOT NULL THEN s.slot_date ELSE s.start_time::date END as slot_date,
              t.id as trainer_id,
@@ -344,9 +368,11 @@ router.get('/available', async (req, res, next) => {
                s.status, s.is_auto_generated, s.is_visible, s.created_at, s.updated_at,
                t.id, t.user_id, t.is_active, p.full_name
       ORDER BY s.start_time ASC
-    `,
-      params
-    );
+    `;
+
+    const result = date
+      ? await ensureAutoSlotsForDateIfNeeded(availableQuery, params, date, 'available-date')
+      : await ensureAutoSlotsIfNeeded(availableQuery, params, 'available');
 
     res.json(result.rows);
   } catch (error) {
