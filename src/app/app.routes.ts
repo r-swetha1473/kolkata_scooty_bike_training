@@ -79,7 +79,7 @@ export const routes: Routes = [
         path: 'slots',
         loadComponent: () =>
           loadWithRetry(() =>
-            import('./admin/pages/slots-info/slots-info.component').then((m) => m.AdminSlotsInfoComponent)
+            import('./admin/pages/slots/slots.component').then((m) => m.AdminSlotsComponent)
           )
       },
       {
