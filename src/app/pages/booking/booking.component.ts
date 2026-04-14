@@ -274,11 +274,13 @@ export class BookingComponent implements OnInit, OnDestroy {
         return;
       }
 
+      const vehicleId = this.getBookableVehicleId(this.selectedSlot);
       await firstValueFrom(
         this.apiService.createBooking(this.selectedSlot.id, {
           phone: this.bookingForm.phone.trim(),
           notes: (this.bookingForm.notes || '').trim(),
-          trainer_id: this.bookingForm.trainerId.trim()
+          trainer_id: this.bookingForm.trainerId.trim(),
+          vehicle_id: vehicleId || undefined
         })
       );
 
@@ -404,5 +406,17 @@ export class BookingComponent implements OnInit, OnDestroy {
     const selected = new Date(this.selectedDate);
     selected.setHours(0, 0, 0, 0);
     return selected.getTime() <= today.getTime();
+  }
+
+  private getBookableVehicleId(slot: Slot | null): string {
+    if (!slot || !Array.isArray(slot.vehicle_capacities)) {
+      return '';
+    }
+    const match = slot.vehicle_capacities.find((v) => {
+      const cap = Number(v?.capacity || 0);
+      const booked = Number(v?.booked || 0);
+      return !!v?.vehicle_id && cap > booked;
+    });
+    return match?.vehicle_id || '';
   }
 }

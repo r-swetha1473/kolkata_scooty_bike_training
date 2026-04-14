@@ -192,19 +192,33 @@ export class ApiService {
    */
   createBooking(
     slotId: string,
-    options?: { phone?: string; notes?: string; trainer_id?: string }
+    options?: {
+      phone?: string;
+      notes?: string;
+      trainer_id?: string;
+      trainerId?: string;
+      vehicle_id?: string;
+      vehicleId?: string;
+    }
   ): Observable<Booking> {
     const payload: Record<string, string> = {
       slot_id: slotId,
+      slotId,
       notes: (options?.notes ?? '').trim()
     };
     const phone = options?.phone?.trim();
     if (phone) {
       payload.phone = phone;
     }
-    const tid = options?.trainer_id?.trim();
+    const tid = (options?.trainer_id || options?.trainerId || '').trim();
     if (tid) {
       payload.trainer_id = tid;
+      payload.trainerId = tid;
+    }
+    const vid = (options?.vehicle_id || options?.vehicleId || '').trim();
+    if (vid) {
+      payload.vehicle_id = vid;
+      payload.vehicleId = vid;
     }
     return this.http.post<Booking>(`${this.apiUrl}/bookings`, payload, this.getHttpOptions(true));
   }
