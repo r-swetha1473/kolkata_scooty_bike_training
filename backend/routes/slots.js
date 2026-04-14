@@ -12,6 +12,38 @@ const { normalizeDate, addDays, getDayOfWeek, getToday } = require('../utils/dat
 const { sqlBookableSlotConditions } = require('../utils/slotBookableSql');
 const slotGenerationService = require('../services/slotGeneration.service');
 
+let autoGenerationInFlight = null;
+
+async function ensureAutoSlotsIfNeeded(baseQuery, params, mode = 'list') {
+  const result = await db.query(baseQuery, params);
+  if (result.rows.length > 0) {
+    return result;
+  }
+
+  // Fallback for production/serverless deployments where cron may not run.
+  if (process.env.ENABLE_LIVE_AUTO_SLOT_FALLBACK === '0') {
+    return result;
+  }
+
+  try {
+    if (!autoGenerationInFlight) {
+      autoGenerationInFlight = slotGenerationService
+        .runNightlyAutoGeneration()
+        .catch((err) => {
+          console.error(`[slot auto fallback:${mode}]`, err.message);
+        })
+        .finally(() => {
+          autoGenerationInFlight = null;
+        });
+    }
+    await autoGenerationInFlight;
+  } catch (err) {
+    console.error(`[slot auto fallback:${mode}]`, err.message);
+  }
+
+  return db.query(baseQuery, params);
+}
+
 // Get slots with various filters
 router.get('/', async (req, res, next) => {
   try {
@@ -96,7 +128,13 @@ router.get('/', async (req, res, next) => {
                       t.id, t.user_id, t.is_active, p.full_name
                ORDER BY s.start_time ASC`;
 
-    const result = await db.query(query, params);
+    const shouldAttemptAutoFallback =
+      !trainer_id && !date && !start_date && !end_date && available_only !== 'false' && status !== 'disabled';
+
+    const result = shouldAttemptAutoFallback
+      ? await ensureAutoSlotsIfNeeded(query, params, 'root')
+      : await db.query(query, params);
+
     res.json(result.rows);
   } catch (error) {
     next(error);
