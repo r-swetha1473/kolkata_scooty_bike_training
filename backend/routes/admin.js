@@ -1043,40 +1043,95 @@ router.get('/audit-logs', authenticate, async (req, res, next) => {
     }
 
     const { limit = 100, offset = 0, entity_type, action_type, admin_id } = req.query;
-    
-    let query = `
-      SELECT 
-        al.*,
-        p.full_name as admin_name,
-        p.email as admin_email
-      FROM admin_audit_log al
-      LEFT JOIN profiles p ON al.admin_id = p.id
-      WHERE 1=1
-    `;
-    
+    const safeLimit = Number.parseInt(limit, 10);
+    const safeOffset = Number.parseInt(offset, 10);
+    const finalLimit = Number.isFinite(safeLimit) ? Math.min(Math.max(safeLimit, 1), 1000) : 100;
+    const finalOffset = Number.isFinite(safeOffset) ? Math.max(safeOffset, 0) : 0;
+
+    const hasAdminAuditLog = await db
+      .query(`SELECT to_regclass('public.admin_audit_log') IS NOT NULL AS exists`)
+      .then((r) => !!r.rows[0]?.exists);
+    const hasLegacyAuditLog = await db
+      .query(`SELECT to_regclass('public.audit_logs') IS NOT NULL AS exists`)
+      .then((r) => !!r.rows[0]?.exists);
+
+    if (!hasAdminAuditLog && !hasLegacyAuditLog) {
+      return res.json([]);
+    }
+
     const params = [];
     let paramIndex = 1;
-    
+    let adminFilterSql = '';
+    let legacyFilterSql = '';
+
     if (entity_type) {
       params.push(entity_type);
-      query += ` AND al.entity_type = $${paramIndex++}`;
+      const token = `$${paramIndex++}`;
+      adminFilterSql += ` AND al.entity_type = ${token}`;
+      legacyFilterSql += ` AND al.entity_type = ${token}`;
     }
-    
+
     if (action_type) {
       params.push(action_type);
-      query += ` AND al.action_type = $${paramIndex++}`;
+      const token = `$${paramIndex++}`;
+      adminFilterSql += ` AND al.action_type = ${token}`;
+      legacyFilterSql += ` AND al.action = ${token}`;
     }
-    
+
     if (admin_id) {
       params.push(admin_id);
-      query += ` AND al.admin_id = $${paramIndex++}`;
+      const token = `$${paramIndex++}`;
+      adminFilterSql += ` AND al.admin_id = ${token}`;
+      legacyFilterSql += ` AND al.user_id = ${token}`;
     }
-    
-    query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    params.push(parseInt(limit), parseInt(offset));
 
+    let query = '';
+    if (hasAdminAuditLog) {
+      query = `
+        SELECT
+          al.id,
+          al.admin_id,
+          p.full_name as admin_name,
+          p.email as admin_email,
+          al.action_type,
+          al.entity_type,
+          al.entity_id,
+          al.before_value,
+          al.after_value,
+          al.details,
+          al.created_at
+        FROM admin_audit_log al
+        LEFT JOIN profiles p ON al.admin_id = p.id
+        WHERE 1=1 ${adminFilterSql}
+        ORDER BY al.created_at DESC
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      `;
+    } else {
+      // Legacy compatibility for deployments still using audit_logs only.
+      query = `
+        SELECT
+          al.id,
+          al.user_id as admin_id,
+          p.full_name as admin_name,
+          p.email as admin_email,
+          al.action as action_type,
+          al.entity_type,
+          al.entity_id,
+          NULL::jsonb as before_value,
+          al.changes as after_value,
+          al.changes as details,
+          al.created_at
+        FROM audit_logs al
+        LEFT JOIN profiles p ON al.user_id = p.id
+        WHERE 1=1 ${legacyFilterSql}
+        ORDER BY al.created_at DESC
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      `;
+    }
+
+    params.push(finalLimit, finalOffset);
     const result = await db.query(query, params);
-    res.json(result.rows);
+    res.json(result.rows || []);
   } catch (error) {
     next(error);
   }
