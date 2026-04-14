@@ -33,11 +33,28 @@ export class AdminService {
     if (filters?.offset != null) params.set('offset', String(filters.offset));
     const qs = params.toString();
     const result = await firstValueFrom(this.http.get<any>(`/admin/bookings${qs ? `?${qs}` : ''}`));
+    const bookingsFromTop = Array.isArray(result?.bookings) ? result.bookings : null;
+    const bookingsFromData = Array.isArray(result?.data?.bookings) ? result.data.bookings : null;
+    const bookingsFromArray = Array.isArray(result) ? result : null;
+    const bookings = bookingsFromTop || bookingsFromData || bookingsFromArray || [];
+
+    const totalFromTop = typeof result?.total === 'number' ? result.total : null;
+    const totalFromData = typeof result?.data?.total === 'number' ? result.data.total : null;
+    const total = totalFromTop ?? totalFromData ?? bookings.length;
+
+    const limitFromTop = typeof result?.limit === 'number' ? result.limit : null;
+    const limitFromData = typeof result?.data?.limit === 'number' ? result.data.limit : null;
+    const resolvedLimit = limitFromTop ?? limitFromData ?? 50;
+
+    const offsetFromTop = typeof result?.offset === 'number' ? result.offset : null;
+    const offsetFromData = typeof result?.data?.offset === 'number' ? result.data.offset : null;
+    const resolvedOffset = offsetFromTop ?? offsetFromData ?? 0;
+
     return {
-      bookings: Array.isArray(result?.bookings) ? result.bookings : [],
-      total: typeof result?.total === 'number' ? result.total : 0,
-      limit: typeof result?.limit === 'number' ? result.limit : 50,
-      offset: typeof result?.offset === 'number' ? result.offset : 0
+      bookings,
+      total,
+      limit: resolvedLimit,
+      offset: resolvedOffset
     };
   }
 
