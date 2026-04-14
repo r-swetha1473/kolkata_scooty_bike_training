@@ -1170,6 +1170,26 @@ router.post('/generate', authenticate, async (req, res, next) => {
   }
 });
 
+// Generate missing slots for rolling window (admin only)
+router.post('/generate-missing', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      const error = new Error('Forbidden');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
+    }
+
+    const daysRaw = Number(req.body?.days || 7);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 && daysRaw <= 30 ? daysRaw : 7;
+    const payload = await slotGenerationService.ensureSlotsOnStartup(days);
+    res.json(payload);
+  } catch (error) {
+    if (error.status == null) error.status = 400;
+    next(error);
+  }
+});
+
 // PHASE 3: Get next available date without slots (admin helper API)
 router.get('/next-available-date', authenticate, async (req, res, next) => {
   try {

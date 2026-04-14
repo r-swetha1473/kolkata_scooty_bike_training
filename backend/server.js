@@ -21,7 +21,7 @@ const adminManagementRoutes = require('./routes/adminManagement');
 const errorHandler = require('./middleware/errorHandler');
 const cron = require('node-cron');
 const { runInactivityBlockCheck } = require('./services/inactivity.service');
-const { runNightlyAutoGeneration } = require('./services/slotGeneration.service');
+const { runNightlyAutoGeneration, ensureSlotsOnStartup } = require('./services/slotGeneration.service');
 
 const app = express();
 const events = require('./events');
@@ -217,8 +217,9 @@ if (process.env.DISABLE_AUTO_SLOT_CRON !== '1') {
   );
 }
 
-if (process.env.AUTO_SLOT_RUN_ON_START === '1') {
-  runNightlyAutoGeneration().catch((err) => {
+if (process.env.DISABLE_AUTO_SLOT_STARTUP !== '1') {
+  const startupDays = Number(process.env.AUTO_SLOT_STARTUP_DAYS || '7');
+  ensureSlotsOnStartup(Number.isFinite(startupDays) && startupDays > 0 ? startupDays : 7).catch((err) => {
     console.error('[Auto slot startup]', err.message);
   });
 }

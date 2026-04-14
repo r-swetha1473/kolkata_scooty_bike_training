@@ -407,8 +407,76 @@ async function runNightlyAutoGeneration() {
   return summary;
 }
 
+/**
+ * Startup safety net:
+ * ensures today + next N-1 days each have slots, and generates only missing dates.
+ * Uses PostgreSQL advisory lock so parallel app instances do not run this simultaneously.
+ */
+async function ensureSlotsOnStartup(daysAhead = 7) {
+  const client = await db.getClient();
+  const lockKey = 9042001;
+  let lockAcquired = false;
+
+  try {
+    const lockRes = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [lockKey]);
+    lockAcquired = !!lockRes.rows[0]?.locked;
+    if (!lockAcquired) {
+      return {
+        success: true,
+        skipped: true,
+        reason: 'startup lock already held by another instance',
+        checkedDays: daysAhead,
+        generatedDates: [],
+        existingDates: []
+      };
+    }
+
+    const today = getToday();
+    const generatedDates = [];
+    const existingDates = [];
+    const errors = [];
+
+    for (let i = 0; i < daysAhead; i++) {
+      const dateStr = addDays(today, i);
+      try {
+        const existing = await client.query(
+          `SELECT COUNT(*)::int AS count FROM slots WHERE slot_date = $1::date`,
+          [dateStr]
+        );
+        const count = existing.rows[0]?.count || 0;
+        if (count > 0) {
+          existingDates.push({ date: dateStr, count });
+          continue;
+        }
+
+        await generateSlotsForDate(dateStr, { mode: 'auto', force: false });
+        generatedDates.push(dateStr);
+      } catch (e) {
+        errors.push({ date: dateStr, message: e.message, code: e.errorCode });
+      }
+    }
+
+    const summary = {
+      success: errors.length === 0,
+      skipped: false,
+      checkedDays: daysAhead,
+      generatedDates,
+      existingDates,
+      errors
+    };
+    events.broadcast('slot.startup_ensured', summary);
+    return summary;
+  } finally {
+    if (lockAcquired) {
+      await client.query('SELECT pg_advisory_unlock($1)', [lockKey]).catch(() => {});
+    }
+    client.release();
+  }
+}
+
 module.exports = {
   generateSlotsForDate,
   runNightlyAutoGeneration,
+  ensureSlotsOnStartup,
   fetchActiveTrainerIds
 };
