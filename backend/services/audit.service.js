@@ -413,6 +413,59 @@ async function logSlotCapacityUpdate(adminId, details = {}) {
   });
 }
 
+async function logNotificationCreated(adminId, notification) {
+  await logAdminAction({
+    adminId,
+    actionType: 'NOTIFICATION_CREATED',
+    entityType: 'notification',
+    entityId: notification?.id || null,
+    beforeValue: null,
+    afterValue: {
+      type: notification?.type,
+      title: notification?.title,
+      entity_type: notification?.entity_type,
+      entity_id: notification?.entity_id
+    },
+    details: { source: 'system' }
+  });
+}
+
+async function logNotificationRead(adminId, notificationId) {
+  await logAdminAction({
+    adminId,
+    actionType: 'NOTIFICATION_READ',
+    entityType: 'notification',
+    entityId: notificationId,
+    beforeValue: null,
+    afterValue: null,
+    details: { admin_id: adminId }
+  });
+}
+
+async function logExpiredBookingDetection(adminId, details = {}) {
+  await logAdminAction({
+    adminId,
+    actionType: 'EXPIRED_BOOKING_DETECTED',
+    entityType: 'booking',
+    entityId: null,
+    beforeValue: null,
+    afterValue: null,
+    details
+  });
+}
+
+async function logBookingCompleted(adminId, bookingId, details = {}) {
+  await logAdminAction({
+    adminId,
+    actionType: 'BOOKING_COMPLETED',
+    entityType: 'booking',
+    entityId: bookingId,
+    beforeValue: null,
+    afterValue: details,
+    details: { source: details.source || 'admin' }
+  });
+}
+
 module.exports = {
   logAdminAction,
   logSlotCreate,
@@ -435,5 +488,9 @@ module.exports = {
   logBookingCreate,
   logPasswordReset,
   logPasswordChanged,
-  logSlotCapacityUpdate
+  logSlotCapacityUpdate,
+  logNotificationCreated,
+  logNotificationRead,
+  logExpiredBookingDetection,
+  logBookingCompleted
 };

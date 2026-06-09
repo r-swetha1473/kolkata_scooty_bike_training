@@ -59,7 +59,8 @@ export class AdminService {
     if (filters?.status) params.set('status', filters.status);
     if (filters?.startDate) params.set('startDate', filters.startDate);
     if (filters?.endDate) params.set('endDate', filters.endDate);
-    if (filters?.search) params.set('search', filters.search);
+    const search = filters?.search?.trim();
+    if (search) params.set('search', search);
     if (filters?.limit != null) params.set('limit', String(filters.limit));
     if (filters?.offset != null) params.set('offset', String(filters.offset));
     const qs = params.toString();

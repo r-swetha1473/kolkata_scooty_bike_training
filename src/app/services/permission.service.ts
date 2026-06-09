@@ -53,6 +53,26 @@ export class PermissionService {
     return this.can(module, 'view');
   }
 
+  /** First admin route the current user may access (for post-login redirect). */
+  getFirstAllowedAdminRoute(): string {
+    const order: { module: PermissionModule; path: string }[] = [
+      { module: 'dashboard', path: '/admin' },
+      { module: 'bookings', path: '/admin/bookings' },
+      { module: 'users', path: '/admin/users' },
+      { module: 'trainers', path: '/admin/trainers' },
+      { module: 'vehicles', path: '/admin/vehicles' },
+      { module: 'slots', path: '/admin/slots' },
+      { module: 'settings', path: '/admin/settings' },
+      { module: 'audit_logs', path: '/admin/audit-logs' }
+    ];
+    for (const item of order) {
+      if (this.canViewModule(item.module)) {
+        return item.path;
+      }
+    }
+    return '/admin/login';
+  }
+
   private getModulePermission(profile: UserProfile, module: PermissionModule): ModulePermission | undefined {
     return profile.permissions?.find((p) => p.module === module);
   }

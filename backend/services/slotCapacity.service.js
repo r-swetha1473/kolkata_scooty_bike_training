@@ -5,6 +5,7 @@
 const db = require('../db');
 const { SLOT_CAPACITY } = require('../config/app.config');
 const auditService = require('./audit.service');
+const notificationService = require('./notification.service');
 
 const SETTING_KEY = 'auto_slot_capacity_from_vehicles';
 
@@ -87,12 +88,20 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
     [capacity]
   );
 
-  if (adminId && result.rows.length > 0) {
+  if (result.rows.length > 0) {
     await auditService.logSlotCapacityUpdate(adminId, {
       auto_enabled: enabled,
       new_capacity: capacity,
       slots_updated: result.rows.length
     });
+    await notificationService.createNotification({
+      type: 'slot_capacity',
+      title: 'Slot capacity updated',
+      body: `${result.rows.length} future slot(s) set to capacity ${capacity}.`,
+      entity_type: 'slot',
+      entity_id: null,
+      dedupeHours: 1
+    }).catch(() => {});
   }
 
   return { updated: result.rows.length, capacity, auto_enabled: enabled };

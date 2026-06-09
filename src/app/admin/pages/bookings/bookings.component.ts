@@ -23,11 +23,13 @@ import { firstValueFrom } from 'rxjs';
               <path d="m21 21-4.35-4.35"></path>
             </svg>
             <input 
-              type="text" 
-              [(ngModel)]="searchTerm" 
-              (ngModelChange)="onSearchChange()"
+              type="search"
+              [ngModel]="searchTerm"
+              (ngModelChange)="onSearchChange($event)"
+              (keyup.enter)="applySearch()"
               placeholder="Search customer, trainer, phone, booking ID..." 
-              class="admin-search-input">
+              class="admin-search-input"
+              aria-label="Search bookings">
           </div>
 
           <select [(ngModel)]="statusFilter" (change)="onServerFiltersChange()" class="admin-select">
@@ -111,29 +113,49 @@ import { firstValueFrom } from 'rxjs';
               </td>
               <td>{{ formatDate(booking.created_at) }}</td>
               <td>
-                <div class="actions">
+                <div class="action-buttons">
                   <button
                     *ngIf="booking.status === 'pending'"
                     class="btn-action btn-confirm"
-                    (click)="updateStatus(booking.id, 'confirmed')">
-                    Confirm
+                    (click)="updateStatus(booking.id, 'confirmed')"
+                    title="Confirm booking"
+                    aria-label="Confirm booking">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
                   </button>
                   <button
                     *ngIf="booking.status === 'confirmed'"
                     class="btn-action btn-complete"
-                    (click)="updateStatus(booking.id, 'completed')">
-                    Complete
+                    (click)="updateStatus(booking.id, 'completed')"
+                    title="Mark completed"
+                    aria-label="Mark completed">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
                   </button>
                   <button
                     *ngIf="['pending', 'confirmed'].includes(booking.status)"
                     class="btn-action btn-cancel"
-                    (click)="updateStatus(booking.id, 'cancelled')">
-                    Cancel
+                    (click)="updateStatus(booking.id, 'cancelled')"
+                    title="Cancel booking"
+                    aria-label="Cancel booking">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="15" y1="9" x2="9" y2="15"></line>
+                      <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
                   </button>
                   <button
                     class="btn-action btn-delete"
-                    (click)="deleteBooking(booking.id)">
-                    Delete
+                    (click)="deleteBooking(booking.id)"
+                    title="Delete booking"
+                    aria-label="Delete booking">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
                   </button>
                 </div>
               </td>
@@ -264,68 +286,79 @@ import { firstValueFrom } from 'rxjs';
       color: #991B1B;
     }
 
-    .actions {
+    .action-buttons {
       display: flex;
       gap: 6px;
-      flex-wrap: wrap;
+      align-items: center;
+      flex-wrap: nowrap;
     }
 
     .btn-action {
-      padding: 5px 10px;
-      border: none;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid;
       border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      background: transparent;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
 
+    .btn-action .icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+    }
+
     .btn-confirm {
-      background: #DBEAFE;
-      color: #1E40AF;
+      border-color: #3B82F6;
+      color: #3B82F6;
     }
 
     .btn-confirm:hover {
       background: #3B82F6;
       color: white;
-      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
       transform: translateY(-1px);
     }
 
     .btn-complete {
-      background: #D1FAE5;
-      color: #065F46;
+      border-color: #10B981;
+      color: #10B981;
     }
 
     .btn-complete:hover {
       background: #10B981;
       color: white;
-      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
       transform: translateY(-1px);
     }
 
     .btn-cancel {
-      background: #FEE2E2;
-      color: #991B1B;
+      border-color: #EF4444;
+      color: #EF4444;
     }
 
     .btn-cancel:hover {
       background: #EF4444;
       color: white;
-      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
       transform: translateY(-1px);
     }
 
     .btn-delete {
-      background: #FEF3C7;
-      color: #92400E;
+      border-color: #F59E0B;
+      color: #F59E0B;
     }
 
     .btn-delete:hover {
       background: #F59E0B;
       color: white;
-      box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+      box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
       transform: translateY(-1px);
     }
 
@@ -414,12 +447,21 @@ export class AdminBookingsComponent implements OnInit {
     void this.loadBookings();
   }
 
-  onSearchChange() {
+  onSearchChange(value: string) {
+    this.searchTerm = value ?? '';
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
     this.searchDebounce = setTimeout(() => {
-      this.currentPage = 1;
-      void this.loadBookings();
-    }, 400);
+      this.applySearch();
+    }, 300);
+  }
+
+  applySearch() {
+    if (this.searchDebounce) {
+      clearTimeout(this.searchDebounce);
+      this.searchDebounce = null;
+    }
+    this.currentPage = 1;
+    void this.loadBookings();
   }
 
   goToPage(page: number) {

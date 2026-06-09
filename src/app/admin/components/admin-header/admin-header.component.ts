@@ -1,7 +1,8 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
+import { NotificationService, AdminNotification } from '../../../services/notification.service';
 
 @Component({
   selector: 'app-admin-header',
@@ -32,6 +33,43 @@ import { AuthService } from '../../../services/auth.service';
 
         <div class="header-right">
           <div class="header-actions">
+            <div class="notification-menu" *ngIf="canViewNotifications">
+              <button
+                type="button"
+                class="notification-btn"
+                (click)="toggleNotifications($event)"
+                title="Notifications"
+                aria-label="Notifications">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span class="notification-badge" *ngIf="unreadCount > 0">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+              </button>
+              <div class="notification-panel" *ngIf="showNotifications" (click)="$event.stopPropagation()">
+                <div class="notification-panel-header">
+                  <span>Notifications</span>
+                  <button type="button" class="mark-all-btn" *ngIf="unreadCount > 0" (click)="markAllRead()">Mark all read</button>
+                </div>
+                <div class="notification-loading" *ngIf="notificationsLoading">Loading…</div>
+                <div class="notification-empty" *ngIf="!notificationsLoading && notifications.length === 0">
+                  No notifications
+                </div>
+                <div class="notification-list" *ngIf="!notificationsLoading && notifications.length > 0">
+                  <button
+                    type="button"
+                    class="notification-item"
+                    *ngFor="let n of notifications"
+                    [class.unread]="!n.is_read"
+                    (click)="openNotification(n)">
+                    <div class="notification-title">{{ n.title }}</div>
+                    <div class="notification-body" *ngIf="n.body">{{ n.body }}</div>
+                    <div class="notification-time">{{ formatTime(n.created_at) }}</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <button class="action-btn" (click)="goToSite()" title="Go to main site">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -156,6 +194,138 @@ import { AuthService } from '../../../services/auth.service';
       display: flex;
       align-items: center;
       gap: 16px;
+    }
+
+    .notification-menu {
+      position: relative;
+    }
+
+    .notification-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      background: #FFFFFF;
+      color: #4B5563;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .notification-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+      color: #111827;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: #EF4444;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .notification-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: min(360px, 90vw);
+      max-height: 420px;
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      z-index: 1100;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .notification-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #E5E7EB;
+      font-weight: 600;
+      font-size: 14px;
+      color: #111827;
+    }
+
+    .mark-all-btn {
+      border: none;
+      background: none;
+      color: #0066B1;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .notification-list {
+      overflow-y: auto;
+      max-height: 340px;
+    }
+
+    .notification-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      border-bottom: 1px solid #F3F4F6;
+      background: #FFFFFF;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .notification-item:hover {
+      background: #F9FAFB;
+    }
+
+    .notification-item.unread {
+      background: #EFF6FF;
+    }
+
+    .notification-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+
+    .notification-body {
+      font-size: 12px;
+      color: #6B7280;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+
+    .notification-time {
+      font-size: 11px;
+      color: #9CA3AF;
+    }
+
+    .notification-empty,
+    .notification-loading {
+      padding: 24px 16px;
+      text-align: center;
+      color: #6B7280;
+      font-size: 13px;
     }
 
     .action-btn {
@@ -327,14 +497,93 @@ import { AuthService } from '../../../services/auth.service';
     }
   `]
 })
-export class AdminHeaderComponent {
+export class AdminHeaderComponent implements OnInit, OnDestroy {
   @Output() menuToggle = new EventEmitter<void>();
   showUserMenu = false;
+  showNotifications = false;
+  unreadCount = 0;
+  notifications: AdminNotification[] = [];
+  notificationsLoading = false;
+  canViewNotifications = false;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private closeNotificationsHandler = (event: Event) => {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.notification-menu')) {
+      this.showNotifications = false;
+    }
+  };
 
   constructor(
     public auth: AuthService,
-    private router: Router
+    private router: Router,
+    private notificationService: NotificationService
   ) {}
+
+  async ngOnInit() {
+    const profile = this.auth.getUserProfile();
+    this.canViewNotifications =
+      !!profile && ['admin', 'superadmin', 'subadmin'].includes(profile.role);
+    if (this.canViewNotifications) {
+      await this.notificationService.refreshUnreadCount();
+      this.notificationService.unreadCount$.subscribe((c) => {
+        this.unreadCount = c;
+      });
+      this.pollTimer = setInterval(() => {
+        this.notificationService.refreshUnreadCount();
+      }, 60000);
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    document.removeEventListener('click', this.closeNotificationsHandler);
+  }
+
+  async toggleNotifications(event: Event) {
+    event.stopPropagation();
+    this.showUserMenu = false;
+    this.showNotifications = !this.showNotifications;
+    if (this.showNotifications) {
+      this.notificationsLoading = true;
+      try {
+        const res = await this.notificationService.listNotifications({ limit: 25 });
+        this.notifications = res.notifications;
+      } catch {
+        this.notifications = [];
+      } finally {
+        this.notificationsLoading = false;
+      }
+      setTimeout(() => {
+        document.addEventListener('click', this.closeNotificationsHandler);
+      }, 0);
+    } else {
+      document.removeEventListener('click', this.closeNotificationsHandler);
+    }
+  }
+
+  async openNotification(n: AdminNotification) {
+    if (!n.is_read) {
+      await this.notificationService.markRead(n.id);
+      n.is_read = true;
+    }
+    this.showNotifications = false;
+    if (n.entity_type === 'booking') {
+      this.router.navigate(['/admin/bookings']);
+    } else if (n.entity_type === 'user') {
+      this.router.navigate(['/admin/users']);
+    } else {
+      this.router.navigate(['/admin']);
+    }
+  }
+
+  async markAllRead() {
+    await this.notificationService.markAllRead();
+    this.notifications = this.notifications.map((n) => ({ ...n, is_read: true }));
+  }
+
+  formatTime(dateStr: string): string {
+    return new Date(dateStr).toLocaleString();
+  }
 
   toggleUserMenu() {
     this.showUserMenu = !this.showUserMenu;

@@ -18,7 +18,8 @@ export function permissionGuard(module: PermissionModule, action: PermissionActi
       return true;
     }
 
-    router.navigate(['/admin']);
+    const fallback = permissions.getFirstAllowedAdminRoute();
+    router.navigateByUrl(fallback === '/admin/login' ? '/admin/login' : fallback);
     return false;
   };
 }
