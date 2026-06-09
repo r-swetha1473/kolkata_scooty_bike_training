@@ -153,10 +153,6 @@ import { ToastComponent } from '../../components/toast/toast.component';
       min-height: calc(100vh - 70px);
     }
 
-    .main-content {
-      flex: 1;
-    }
-
     .sidebar {
       width: 280px;
       background: #1F2937;
@@ -309,11 +305,9 @@ import { ToastComponent } from '../../components/toast/toast.component';
     }
 
     .main-content {
-      flex: 1;
+      flex: 1 0 auto;
       padding: 40px;
-      overflow-y: auto;
       overflow-x: hidden;
-      min-height: 0;
       background: #F9FAFB;
     }
 
@@ -355,8 +349,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
       .content-wrapper {
         margin-left: 0;
         margin-top: 70px;
-        height: calc(100vh - 70px);
-        min-height: auto;
+        min-height: calc(100vh - 70px);
       }
 
       .main-content {

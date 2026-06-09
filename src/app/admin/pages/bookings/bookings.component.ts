@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -433,8 +434,8 @@ export class AdminBookingsComponent implements OnInit {
         await this.loadBookings();
         return;
       }
-    } catch {
-      this.toastService.error('Failed to load bookings');
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Failed to load bookings'));
       this.bookings = [];
       this.totalRecords = 0;
     } finally {
@@ -584,9 +585,8 @@ export class AdminBookingsComponent implements OnInit {
       };
       
       this.toastService.success(statusMessages[status] || `Booking ${status} successfully`);
-    } catch (error: any) {
-      const errorMessage = error?.error?.error || error?.error?.message || error?.message || 'Failed to update booking status';
-      this.toastService.error(errorMessage);
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to update booking status'));
     }
   }
 
@@ -607,8 +607,8 @@ export class AdminBookingsComponent implements OnInit {
       await firstValueFrom(this.adminService.deleteBooking(bookingId));
       await this.loadBookings();
       this.toastService.success('Booking deleted successfully');
-    } catch (error: any) {
-      this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete booking');
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to delete booking'));
     }
   }
 }

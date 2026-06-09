@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SettingsService, SiteSettings } from '../../../services/settings.service';
 import { ToastService } from '../../../services/toast.service';
 import { ApiService } from '../../../services/api.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 
 @Component({
   selector: 'app-admin-settings',
@@ -141,6 +142,13 @@ import { ApiService } from '../../../services/api.service';
           <small class="checkbox-hint">
             When enabled, each slot's capacity equals the number of active vehicles (e.g. 3 vehicles → 3 bookings per slot).
           </small>
+          <button
+            type="button"
+            class="admin-btn admin-btn-secondary recalc-btn"
+            (click)="recalculateSlotCapacity()"
+            [disabled]="recalculating">
+            {{ recalculating ? 'Recalculating…' : 'Recalculate all future slot capacities' }}
+          </button>
         </section>
 
         <!-- Footer Settings -->
@@ -324,6 +332,11 @@ import { ApiService } from '../../../services/api.service';
       line-height: 1.5;
     }
 
+    .recalc-btn {
+      margin-top: 12px;
+      align-self: flex-start;
+    }
+
     .admin-btn-primary.success {
       background: var(--admin-success);
       border-color: var(--admin-success);
@@ -365,6 +378,7 @@ export class AdminSettingsComponent implements OnInit {
   saving = false;
   saveSuccess = false;
   hasChanges = false;
+  recalculating = false;
 
   constructor(
     private settingsService: SettingsService,
@@ -389,8 +403,8 @@ export class AdminSettingsComponent implements OnInit {
 
       this.hasChanges = false;
       this.saveSuccess = false;
-    } catch {
-      this.toastService.error('Failed to load settings');
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Failed to load settings'));
     }
   }
 
@@ -433,10 +447,32 @@ export class AdminSettingsComponent implements OnInit {
       setTimeout(() => {
         this.saveSuccess = false;
       }, 2000);
-    } catch {
-      this.toastService.error('Failed to save settings');
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Failed to save settings'));
     } finally {
       this.saving = false;
+    }
+  }
+
+  async recalculateSlotCapacity() {
+    if (this.recalculating) return;
+    this.recalculating = true;
+    try {
+      const result = await this.apiService.post<{
+        message?: string;
+        updated?: number;
+        capacity?: number;
+        active_vehicles?: number;
+      }>('/admin/slots/recalculate-capacity', {});
+      const updated = result?.updated ?? 0;
+      const capacity = result?.capacity ?? '?';
+      this.toastService.success(
+        result?.message || `Updated ${updated} slot(s) to capacity ${capacity}`
+      );
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Failed to recalculate slot capacities'));
+    } finally {
+      this.recalculating = false;
     }
   }
 }

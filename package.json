@@ -4,7 +4,7 @@
   "scripts": {
     "ng": "ng",
     "start": "npx ng serve",
-    "build": "npx ng build"
+    "build": "npx ng build --configuration production"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",

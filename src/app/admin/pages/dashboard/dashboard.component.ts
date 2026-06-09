@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { AdminService } from '../../../services/admin.service';
 import { PermissionService } from '../../../services/permission.service';
 import { ToastService } from '../../../services/toast.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -287,10 +288,10 @@ export class AdminDashboardComponent implements OnInit {
     try {
       this.stats = await this.adminService.getDashboardStats();
       this.buildStatCards();
-    } catch {
+    } catch (err) {
       this.stats = {};
       this.buildStatCards();
-      this.toastService.error('Failed to load dashboard statistics');
+      this.toastService.error(getApiErrorMessage(err, 'Failed to load dashboard statistics'));
     } finally {
       this.loading = false;
     }
@@ -328,8 +329,8 @@ export class AdminDashboardComponent implements OnInit {
     try {
       await firstValueFrom(this.adminService.updateBookingStatus(id, status));
       await this.loadStats();
-    } catch {
-      /* toast handled by caller if needed */
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Failed to update booking'));
     }
   }
 }

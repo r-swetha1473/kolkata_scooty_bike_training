@@ -1,6 +1,7 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AuthService } from '../../../services/auth.service';
 import { NotificationService, AdminNotification } from '../../../services/notification.service';
 
@@ -506,6 +507,8 @@ export class AdminHeaderComponent implements OnInit, OnDestroy {
   notificationsLoading = false;
   canViewNotifications = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private profileSub: Subscription | null = null;
+  private unreadSub: Subscription | null = null;
   private closeNotificationsHandler = (event: Event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('.notification-menu')) {
@@ -519,22 +522,33 @@ export class AdminHeaderComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService
   ) {}
 
-  async ngOnInit() {
-    const profile = this.auth.getUserProfile();
-    this.canViewNotifications =
-      !!profile && ['admin', 'superadmin', 'subadmin'].includes(profile.role);
-    if (this.canViewNotifications) {
-      await this.notificationService.refreshUnreadCount();
-      this.notificationService.unreadCount$.subscribe((c) => {
-        this.unreadCount = c;
-      });
-      this.pollTimer = setInterval(() => {
-        this.notificationService.refreshUnreadCount();
-      }, 60000);
-    }
+  ngOnInit() {
+    this.profileSub = this.auth.userProfile$.subscribe((profile) => {
+      const canView =
+        !!profile && ['admin', 'superadmin', 'subadmin'].includes(profile.role);
+      if (canView && !this.canViewNotifications) {
+        this.canViewNotifications = true;
+        void this.notificationService.refreshUnreadCount();
+        if (!this.unreadSub) {
+          this.unreadSub = this.notificationService.unreadCount$.subscribe((c) => {
+            this.unreadCount = c;
+          });
+        }
+        if (!this.pollTimer) {
+          this.pollTimer = setInterval(() => {
+            this.notificationService.refreshUnreadCount();
+          }, 60000);
+        }
+      } else if (!canView) {
+        this.canViewNotifications = false;
+        this.unreadCount = 0;
+      }
+    });
   }
 
   ngOnDestroy() {
+    this.profileSub?.unsubscribe();
+    this.unreadSub?.unsubscribe();
     if (this.pollTimer) clearInterval(this.pollTimer);
     document.removeEventListener('click', this.closeNotificationsHandler);
   }
