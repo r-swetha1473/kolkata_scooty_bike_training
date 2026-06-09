@@ -1,294 +1,328 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router, RouterModule } from '@angular/router';
 import { AdminService } from '../../../services/admin.service';
+import { PermissionService } from '../../../services/permission.service';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="dashboard">
       <h1 class="admin-page-title">Dashboard Overview</h1>
 
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats?.totalBookings || 0 }}</div>
-            <div class="stat-label">Total Bookings</div>
+      <section class="alert-section" *ngIf="stats?.expiredBookings > 0">
+        <div class="alert-header">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <h2>Bookings requiring action</h2>
+          <span class="alert-count">{{ stats.expiredBookings }} overdue</span>
+        </div>
+        <p class="alert-desc">These bookings have passed their slot time but are still pending or confirmed. Mark each as completed or cancelled.</p>
+        <div class="overdue-list" *ngIf="stats?.overdueBookings?.length">
+          <div class="overdue-item" *ngFor="let b of stats.overdueBookings">
+            <div class="overdue-info">
+              <strong>{{ b.customer_name || 'Customer' }}</strong>
+              <span>{{ b.trainer_name || 'Trainer N/A' }}</span>
+              <span class="overdue-time">{{ formatDateTime(b.end_time || b.start_time) }}</span>
+              <span class="status-pill">{{ b.status }}</span>
+            </div>
+            <div class="overdue-actions" *ngIf="perms.can('bookings', 'edit')">
+              <button class="btn-sm btn-complete" (click)="resolveBooking(b.id, 'completed')">Complete</button>
+              <button class="btn-sm btn-cancel" (click)="resolveBooking(b.id, 'cancelled')">Cancel</button>
+            </div>
           </div>
         </div>
+        <a routerLink="/admin/bookings" class="alert-link">View all bookings →</a>
+      </section>
 
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
+      <div class="stats-grid" *ngIf="!loading">
+        <div class="stat-card" *ngFor="let card of statCards" [class]="card.class || ''">
           <div class="stat-content">
-            <div class="stat-value">{{ stats?.activeSlots || 0 }}</div>
-            <div class="stat-label">Active Slots</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats?.totalTrainers || 0 }}</div>
-            <div class="stat-label">Active Trainers</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats?.todaySessions || 0 }}</div>
-            <div class="stat-label">Today's Sessions</div>
-          </div>
-        </div>
-
-        <div class="stat-card highlight">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats?.pendingBookings || 0 }}</div>
-            <div class="stat-label">Pending Bookings</div>
-          </div>
-        </div>
-
-        <div class="stat-card success">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats?.completedToday || 0 }}</div>
-            <div class="stat-label">Completed Today</div>
+            <div class="stat-value">{{ card.value }}</div>
+            <div class="stat-label">{{ card.label }}</div>
           </div>
         </div>
       </div>
 
-      <div class="quick-actions">
+      <p *ngIf="loading" class="loading-hint">Loading dashboard…</p>
+
+      <div class="quick-actions" *ngIf="!loading">
         <h2 class="section-title">Quick Actions</h2>
         <div class="actions-grid">
-          <button class="action-card" (click)="navigateTo('/admin/slots')">
-            <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
+          <button class="action-card" *ngIf="perms.canViewModule('slots')" (click)="navigateTo('/admin/slots')">
             <span class="action-label">Slots (automated)</span>
           </button>
-          <button class="action-card" (click)="navigateTo('/admin/bookings')">
-            <svg class="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
+          <button class="action-card" *ngIf="perms.canViewModule('bookings')" (click)="navigateTo('/admin/bookings')">
             <span class="action-label">Manage Bookings</span>
           </button>
-          <button class="action-card" (click)="navigateTo('/admin/trainers')">
-            <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
+          <button class="action-card" *ngIf="perms.canViewModule('trainers')" (click)="navigateTo('/admin/trainers')">
             <span class="action-label">Manage Trainers</span>
+          </button>
+          <button class="action-card" *ngIf="perms.canViewModule('vehicles')" (click)="navigateTo('/admin/vehicles')">
+            <span class="action-label">Manage Vehicles</span>
           </button>
         </div>
       </div>
     </div>
   `,
   styles: [`
-    .dashboard {
-      max-width: 1400px;
-      background: var(--background-color);
+    .dashboard { max-width: 1400px; }
+
+    .loading-hint {
+      color: var(--admin-text-secondary);
+      padding: 16px 0;
+    }
+
+    .alert-section {
+      background: #FEF3C7;
+      border: 1px solid #FCD34D;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 32px;
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      color: #92400E;
+    }
+
+    .alert-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    .alert-count {
+      background: #F59E0B;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+
+    .alert-desc {
+      margin: 0 0 16px;
+      font-size: 14px;
+      color: #78350F;
+    }
+
+    .overdue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .overdue-item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+
+    .overdue-info {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #78350F;
+    }
+
+    .overdue-time { color: #92400E; }
+
+    .status-pill {
+      background: #FDE68A;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .overdue-actions { display: flex; gap: 8px; }
+
+    .btn-sm {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-complete { background: #10B981; color: #fff; }
+    .btn-cancel { background: #EF4444; color: #fff; }
+
+    .alert-link {
+      font-size: 13px;
+      font-weight: 600;
+      color: #92400E;
+      text-decoration: none;
     }
 
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 24px;
-      margin-bottom: 56px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 48px;
     }
 
     .stat-card {
       background: #FFFFFF;
       border: 1px solid #E5E7EB;
       border-radius: 12px;
-      padding: 24px;
+      padding: 20px;
       display: flex;
       align-items: center;
-      gap: 16px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      gap: 14px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s;
     }
 
     .stat-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
       border-color: #0066B1;
     }
 
-    .stat-card.highlight {
-      background: #FFFFFF;
-      border-color: #E5E7EB;
-    }
-
-    .stat-card.success {
-      background: #FFFFFF;
-      border-color: #E5E7EB;
-    }
+    .stat-card.warn { border-color: #FCD34D; background: #FFFBEB; }
+    .stat-card.success { border-color: #A7F3D0; }
 
     .stat-icon {
       width: 24px;
       height: 24px;
-      opacity: 0.6;
       color: #6B7280;
       flex-shrink: 0;
     }
 
-    .stat-content {
-      flex: 1;
-    }
-
     .stat-value {
-      font-size: 36px;
+      font-size: 28px;
       font-weight: 700;
       color: #111827;
       line-height: 1;
     }
 
     .stat-label {
-      font-size: 14px;
+      font-size: 13px;
       color: #6B7280;
       margin-top: 4px;
     }
 
     .section-title {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 600;
-      color: var(--text-primary);
-      margin: 0 0 24px 0;
-    }
-
-    .quick-actions {
-      margin-top: 48px;
+      margin: 0 0 20px;
     }
 
     .actions-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 12px;
-      background: #F9FAFB;
-      padding: 20px;
-      border-radius: 12px;
-      border: 1px solid #E5E7EB;
     }
 
     .action-card {
       background: #FFFFFF;
       border: 1px solid #E5E7EB;
       border-radius: 8px;
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 12px;
+      padding: 16px;
       cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+      text-align: left;
+      transition: all 0.2s;
     }
 
     .action-card:hover {
       border-color: #0066B1;
-      background: #FFFFFF;
-      color: #0066B1;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 102, 177, 0.15);
-    }
-
-    .action-icon {
-      width: 20px;
-      height: 20px;
-      opacity: 0.7;
-      color: #6B7280;
-      flex-shrink: 0;
-    }
-
-    .action-card:hover .action-icon {
-      color: #0066B1;
-      opacity: 1;
-    }
-
-    .action-label {
-      font-size: 14px;
-      font-weight: 500;
-      text-align: left;
-      color: #111827;
-    }
-
-    .action-card:hover .action-label {
       color: #0066B1;
     }
+
+    .action-label { font-size: 14px; font-weight: 500; }
 
     @media (max-width: 768px) {
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .stat-value { font-size: 22px; }
+      .overdue-item { flex-direction: column; align-items: flex-start; }
+      .actions-grid { grid-template-columns: 1fr; }
+    }
 
-      .actions-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr; }
     }
   `]
 })
 export class AdminDashboardComponent implements OnInit {
   stats: any = null;
+  loading = true;
+  statCards: { label: string; value: number; class?: string }[] = [];
 
-  constructor(private adminService: AdminService) {}
+  constructor(
+    private adminService: AdminService,
+    public perms: PermissionService,
+    private router: Router
+  ) {}
 
   async ngOnInit() {
     await this.loadStats();
   }
 
   async loadStats() {
+    this.loading = true;
     try {
       this.stats = await this.adminService.getDashboardStats();
+      this.buildStatCards();
     } catch {
-      /* stats optional */
+      this.stats = {};
+      this.buildStatCards();
+    } finally {
+      this.loading = false;
     }
   }
 
+  buildStatCards() {
+    const s = this.stats || {};
+    this.statCards = [
+      { label: "Today's Bookings", value: s.todayBookings || 0 },
+      { label: 'Pending Bookings', value: s.pendingBookings || 0, class: 'warn' },
+      { label: 'Completed Bookings', value: s.completedBookings || 0, class: 'success' },
+      { label: 'Cancelled Bookings', value: s.cancelledBookings || 0 },
+      { label: 'Expired Bookings', value: s.expiredBookings || 0, class: 'warn' },
+      { label: 'Active Trainers', value: s.activeTrainers || s.totalTrainers || 0 },
+      { label: 'Active Vehicles', value: s.activeVehicles || 0 },
+      { label: 'Total Customers', value: s.totalCustomers || 0 }
+    ];
+  }
+
   navigateTo(route: string) {
-    window.location.href = route;
+    this.router.navigateByUrl(route);
+  }
+
+  formatDateTime(value: string): string {
+    if (!value) return 'N/A';
+    return new Date(value).toLocaleString();
+  }
+
+  async resolveBooking(id: string, status: string) {
+    if (!confirm(`Mark this booking as ${status}?`)) return;
+    try {
+      await firstValueFrom(this.adminService.updateBookingStatus(id, status));
+      await this.loadStats();
+    } catch {
+      /* toast handled by caller if needed */
+    }
   }
 }

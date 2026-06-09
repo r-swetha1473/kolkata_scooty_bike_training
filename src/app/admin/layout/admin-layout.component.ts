@@ -321,11 +321,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
       display: none;
     }
 
-    @media (max-width: 1024px) {
-      .content-wrapper {
-        margin-left: 0;
-      }
-
+    @media (max-width: 1024px) and (min-width: 769px) {
       .main-content {
         padding: 24px 20px;
       }

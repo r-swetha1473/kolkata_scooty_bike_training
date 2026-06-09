@@ -18,6 +18,9 @@ const {
 } = require('../validators');
 const auditService = require('../services/audit.service');
 const slotCapacityService = require('../services/slotCapacity.service');
+const notificationService = require('../services/notification.service');
+const overdueBookingService = require('../services/overdueBooking.service');
+const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
 const { getClientIp } = require('../utils/authCookie');
 const trainerDeletionService = require('../services/trainerDeletion.service');
 const router = express.Router();
@@ -89,14 +92,19 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
     const params = [];
     let idx = 1;
 
+    const searchJoins = searchRaw
+      ? ' LEFT JOIN vehicles v ON b.vehicle_id = v.id'
+      : '';
+
     if (searchRaw) {
       const q = `%${searchRaw}%`;
       conditions.push(
         `(COALESCE(u.full_name, '') ILIKE $${idx}
           OR COALESCE(u.email, '') ILIKE $${idx}
           OR COALESCE(u.phone::text, '') ILIKE $${idx}
-          OR COALESCE(b.phone, '') ILIKE $${idx}
           OR COALESCE(p.full_name, '') ILIKE $${idx}
+          OR COALESCE(v.name, '') ILIKE $${idx}
+          OR COALESCE(b.notes, '') ILIKE $${idx}
           OR b.id::text ILIKE $${idx})`
       );
       params.push(q);
@@ -130,7 +138,7 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
        LEFT JOIN slots s ON b.slot_id = s.id
        LEFT JOIN profiles u ON b.user_id = u.id
        LEFT JOIN trainers t ON b.trainer_id = t.id
-       LEFT JOIN profiles p ON t.user_id = p.id
+       LEFT JOIN profiles p ON t.user_id = p.id${searchJoins}
        WHERE ${whereSql}`,
       params
     );
@@ -151,7 +159,7 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
       LEFT JOIN slots s ON b.slot_id = s.id
       LEFT JOIN profiles u ON b.user_id = u.id
       LEFT JOIN trainers t ON b.trainer_id = t.id
-      LEFT JOIN profiles p ON t.user_id = p.id
+      LEFT JOIN profiles p ON t.user_id = p.id${searchJoins}
       WHERE ${whereSql}
       ORDER BY s.start_time DESC NULLS LAST, b.created_at DESC
       LIMIT $${limIdx} OFFSET $${offIdx}
@@ -427,11 +435,43 @@ async function getDashboardStats() {
   `);
   stats.upcomingBookings = parseInt(upcomingBookingsResult.rows[0].count) || 0;
 
+  const todayBookingsResult = await db.query(`
+    SELECT COUNT(*) as count FROM bookings b
+    JOIN slots s ON b.slot_id = s.id
+    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
+      AND b.status NOT IN ('cancelled')
+  `);
+  stats.todayBookings = parseInt(todayBookingsResult.rows[0].count) || 0;
+
+  const completedBookingsResult = await db.query(
+    `SELECT COUNT(*) as count FROM bookings WHERE status = 'completed'`
+  );
+  stats.completedBookings = parseInt(completedBookingsResult.rows[0].count) || 0;
+
+  const cancelledBookingsResult = await db.query(
+    `SELECT COUNT(*) as count FROM bookings WHERE status = 'cancelled'`
+  );
+  stats.cancelledBookings = parseInt(cancelledBookingsResult.rows[0].count) || 0;
+
+  const activeVehiclesResult = await db.query(
+    `SELECT COUNT(*) as count FROM vehicles WHERE is_active = true`
+  );
+  stats.activeVehicles = parseInt(activeVehiclesResult.rows[0].count) || 0;
+
+  const totalCustomersResult = await db.query(
+    `SELECT COUNT(*) as count FROM profiles WHERE role = 'customer'`
+  );
+  stats.totalCustomers = parseInt(totalCustomersResult.rows[0].count) || 0;
+
+  stats.expiredBookings = await overdueBookingService.countOverdueBookings();
+  stats.overdueBookings = await overdueBookingService.listOverdueBookings(8);
+
   return stats;
 }
 
 router.get('/dashboard', requirePermission('dashboard', 'view'), async (req, res, next) => {
   try {
+    await runOverdueBookingDetection().catch(() => {});
     const stats = await getDashboardStats();
     res.json(stats);
   } catch (error) {
@@ -442,8 +482,63 @@ router.get('/dashboard', requirePermission('dashboard', 'view'), async (req, res
 // Alias for dashboard
 router.get('/stats', requirePermission('dashboard', 'view'), async (req, res, next) => {
   try {
+    await runOverdueBookingDetection().catch(() => {});
     const stats = await getDashboardStats();
     res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/notifications', requirePermission('dashboard', 'view'), async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 30;
+    const offset = parseInt(req.query.offset, 10) || 0;
+    const unreadOnly = req.query.unreadOnly === 'true' || req.query.unreadOnly === '1';
+    const result = await notificationService.listNotifications(req.user.id, {
+      limit,
+      offset,
+      unreadOnly
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/notifications/unread-count', requirePermission('dashboard', 'view'), async (req, res, next) => {
+  try {
+    const count = await notificationService.getUnreadCount(req.user.id);
+    res.json({ count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/notifications/:id/read', requirePermission('dashboard', 'view'), async (req, res, next) => {
+  try {
+    await notificationService.markRead(req.user.id, req.params.id);
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/notifications/read-all', requirePermission('dashboard', 'view'), async (req, res, next) => {
+  try {
+    const marked = await notificationService.markAllRead(req.user.id);
+    res.json({ message: 'All notifications marked as read', marked });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/bookings/overdue', requirePermission('bookings', 'view'), async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const bookings = await overdueBookingService.listOverdueBookings(limit);
+    const total = await overdueBookingService.countOverdueBookings();
+    res.json({ bookings, total });
   } catch (error) {
     next(error);
   }
@@ -857,6 +952,30 @@ router.put('/bookings/:id/status', requirePermission('bookings', 'edit'), valida
     console.log(`[Admin] Booking ${id} status updated successfully to: ${updatedBooking.status}`);
 
     await auditService.logBookingStatusChange(req.user.id, id, bookingCheck.rows[0], status);
+
+    if (status === 'completed') {
+      await auditService.logBookingCompleted(req.user.id, id, {
+        source: 'admin_status_update',
+        previous_status: oldStatus
+      });
+      notificationService.createNotification({
+        type: 'booking_completed',
+        title: 'Booking marked completed',
+        body: `Booking ${id.slice(0, 8)}… was marked completed.`,
+        entity_type: 'booking',
+        entity_id: id,
+        dedupeHours: 1
+      }).catch(() => {});
+    } else if (status === 'cancelled') {
+      notificationService.createNotification({
+        type: 'booking_cancelled',
+        title: 'Booking cancelled',
+        body: `Booking ${id.slice(0, 8)}… was cancelled by admin.`,
+        entity_type: 'booking',
+        entity_id: id,
+        dedupeHours: 1
+      }).catch(() => {});
+    }
 
     res.json(updatedBooking);
   } catch (error) {

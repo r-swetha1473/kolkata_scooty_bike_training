@@ -73,7 +73,7 @@ export const routes: Routes = [
       },
       {
         path: '',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('dashboard', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/dashboard/dashboard.component').then((m) => m.AdminDashboardComponent)
@@ -81,7 +81,7 @@ export const routes: Routes = [
       },
       {
         path: 'bookings',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('bookings', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/bookings/bookings.component').then((m) => m.AdminBookingsComponent)
@@ -89,7 +89,7 @@ export const routes: Routes = [
       },
       {
         path: 'slots',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('slots', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/slots/slots.component').then((m) => m.AdminSlotsComponent)
@@ -97,7 +97,7 @@ export const routes: Routes = [
       },
       {
         path: 'trainers',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('trainers', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/trainers/trainers.component').then((m) => m.AdminTrainersComponent)
@@ -105,7 +105,7 @@ export const routes: Routes = [
       },
       {
         path: 'users',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('users', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/users/users.component').then((m) => m.AdminUsersComponent)
@@ -113,7 +113,7 @@ export const routes: Routes = [
       },
       {
         path: 'vehicles',
-        canActivate: [passwordChangeRequiredGuard],
+        canActivate: [permissionGuard('vehicles', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/vehicles/vehicles.component').then((m) => m.AdminVehiclesComponent)
@@ -129,7 +129,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings',
-        canActivate: [permissionGuard('settings', 'view'), passwordChangeRequiredGuard],
+        canActivate: [superAdminGuard, passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/settings/settings.component').then((m) => m.AdminSettingsComponent)
@@ -137,7 +137,7 @@ export const routes: Routes = [
       },
       {
         path: 'audit-logs',
-        canActivate: [permissionGuard('audit_logs', 'view'), passwordChangeRequiredGuard],
+        canActivate: [superAdminGuard, passwordChangeRequiredGuard],
         loadComponent: () =>
           loadWithRetry(() =>
             import('./admin/pages/audit-logs/audit-logs.component').then((m) => m.AdminAuditLogsComponent)

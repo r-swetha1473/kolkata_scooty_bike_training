@@ -44,7 +44,9 @@ $Migrations = @(
     "supabase/migrations/20260406000000_profile_inactive_blocked.sql",
     "supabase/migrations/20260407120000_production_schema_safety_net.sql",
     "supabase/migrations/20260609120000_phase2_rbac_subadmin.sql",
-    "supabase/migrations/20260609130000_admin_password_management.sql"
+    "supabase/migrations/20260609130000_admin_password_management.sql",
+    "supabase/migrations/20260609140000_auto_slot_capacity_setting.sql",
+    "supabase/migrations/20260609150000_admin_notifications.sql"
 )
 
 Write-Host "Applying $($Migrations.Count) migrations to Neon..." -ForegroundColor Cyan

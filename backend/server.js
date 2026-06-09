@@ -22,6 +22,7 @@ const errorHandler = require('./middleware/errorHandler');
 const cron = require('node-cron');
 const { runInactivityBlockCheck } = require('./services/inactivity.service');
 const { runNightlyAutoGeneration, ensureSlotsOnStartup } = require('./services/slotGeneration.service');
+const { runOverdueBookingDetection } = require('./services/overdueDetection.service');
 
 const app = express();
 const events = require('./events');
@@ -215,6 +216,15 @@ if (process.env.DISABLE_AUTO_SLOT_CRON !== '1') {
     },
     { timezone: autoSlotTz }
   );
+}
+
+if (process.env.DISABLE_OVERDUE_BOOKING_CRON !== '1') {
+  const overdueCron = process.env.OVERDUE_BOOKING_CRON || '*/30 * * * *';
+  cron.schedule(overdueCron, () => {
+    runOverdueBookingDetection().catch((err) => {
+      console.error('[Overdue booking cron]', err.message);
+    });
+  });
 }
 
 if (process.env.DISABLE_AUTO_SLOT_STARTUP !== '1') {

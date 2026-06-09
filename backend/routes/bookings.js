@@ -17,6 +17,7 @@ const {
 const { validateBookingEligibility, validateCancellationEligibility } = require('../services/bookingValidation.service');
 const vehicleService = require('../services/vehicle.service');
 const auditService = require('../services/audit.service');
+const notificationService = require('../services/notification.service');
 const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const {
@@ -658,6 +659,15 @@ router.post(
       console.error('[Audit] BOOKING_CREATED failed:', err.message);
     });
 
+    notificationService.createNotification({
+      type: 'new_booking',
+      title: 'New booking received',
+      body: `New booking for slot ${String(slot_id).slice(0, 8)}…`,
+      entity_type: 'booking',
+      entity_id: booking.id,
+      dedupeHours: 0
+    }).catch(() => {});
+
     // Send email notification (non-blocking)
     try {
       const [userResult, slotResult, trainerResult, vehicleResult] = await Promise.all([
@@ -1026,6 +1036,15 @@ router.put('/:id/cancel', authenticate, async (req, res, next) => {
     } else {
       await auditService.logUserBookingCancellation(req.user.id, req.params.id, booking, cancellation_reason || 'User cancellation');
     }
+
+    notificationService.createNotification({
+      type: 'booking_cancelled',
+      title: 'Booking cancelled',
+      body: `Customer cancelled booking ${String(req.params.id).slice(0, 8)}…`,
+      entity_type: 'booking',
+      entity_id: req.params.id,
+      dedupeHours: 1
+    }).catch(() => {});
 
     try {
       await client.query(

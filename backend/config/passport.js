@@ -201,6 +201,19 @@ if (googleClientId && googleClientSecret) {
         [email, name, googleId, googleId, avatarUrl, phoneNumber]
       );
       console.log(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
+      try {
+        const notificationService = require('../services/notification.service');
+        notificationService.createNotification({
+          type: 'new_customer',
+          title: 'New customer registered',
+          body: `${name || email} signed up via Google.`,
+          entity_type: 'user',
+          entity_id: result.rows[0].id,
+          dedupeHours: 0
+        }).catch(() => {});
+      } catch {
+        /* notifications optional */
+      }
       return done(null, result.rows[0]);
     } catch (error) {
       console.error('[Google Auth] Error during authentication:', error);

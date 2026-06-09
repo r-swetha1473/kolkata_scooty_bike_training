@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { PermissionService } from '../../services/permission.service';
 
 @Component({
   selector: 'app-admin-login',
@@ -239,6 +240,7 @@ export class AdminLoginComponent {
 
   constructor(
     private authService: AuthService,
+    private perms: PermissionService,
     private router: Router,
     private route: ActivatedRoute
   ) {}
@@ -260,10 +262,11 @@ export class AdminLoginComponent {
           return;
         }
         const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        const defaultRoute = this.perms.getFirstAllowedAdminRoute();
         const target =
           returnUrl && returnUrl.startsWith('/admin') && !returnUrl.includes('change-password')
             ? returnUrl
-            : '/admin';
+            : defaultRoute;
         this.router.navigateByUrl(target);
       } else {
         this.errorMessage = 'Access denied. Admin credentials required.';
