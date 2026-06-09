@@ -25,7 +25,7 @@ const ACTION_TO_COLUMN = {
 function defaultSubAdminPermissions() {
   return MODULES.map((module) => ({
     module,
-    can_view: module !== 'settings',
+    can_view: true,
     can_create: false,
     can_edit: false,
     can_delete: false

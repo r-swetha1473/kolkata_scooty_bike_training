@@ -9,10 +9,12 @@ import { getApiErrorMessage } from '../../../utils/api-error';
 
 const MODULES = ['dashboard', 'users', 'trainers', 'vehicles', 'bookings', 'slots', 'audit_logs', 'settings'];
 
+type AccountRole = 'admin' | 'subadmin';
+
 function defaultPermissions(): ModulePermission[] {
   return MODULES.map((module) => ({
     module,
-    can_view: module !== 'settings',
+    can_view: true,
     can_create: false,
     can_edit: false,
     can_delete: false
@@ -28,7 +30,7 @@ function defaultPermissions(): ModulePermission[] {
       <div class="admin-page-header">
         <h1 class="admin-page-title">Admin Accounts</h1>
         <div class="admin-page-actions">
-          <button class="admin-btn admin-btn-primary" (click)="openCreateModal()">Create Sub Admin</button>
+          <button class="admin-btn admin-btn-primary" (click)="openCreateModal()">Create Account</button>
         </div>
       </div>
 
@@ -39,6 +41,7 @@ function defaultPermissions(): ModulePermission[] {
             <tr>
               <th>Name</th>
               <th>Email</th>
+              <th>Phone</th>
               <th>Status</th>
               <th>Password</th>
               <th>Actions</th>
@@ -46,14 +49,15 @@ function defaultPermissions(): ModulePermission[] {
           </thead>
           <tbody>
             <tr *ngIf="loadingAdmins">
-              <td colspan="5" class="empty-state-cell">Loading…</td>
+              <td colspan="6" class="empty-state-cell">Loading…</td>
             </tr>
             <tr *ngIf="!loadingAdmins && admins.length === 0">
-              <td colspan="5" class="empty-state-cell">No admin accounts</td>
+              <td colspan="6" class="empty-state-cell">No admin accounts</td>
             </tr>
             <tr *ngFor="let admin of admins">
               <td>{{ admin.full_name }}</td>
               <td class="email-cell">{{ admin.email }}</td>
+              <td>{{ admin.phone || '—' }}</td>
               <td>
                 <span class="status-badge" [class.active]="admin.admin_is_active" [class.inactive]="!admin.admin_is_active">
                   {{ admin.admin_is_active ? 'Active' : 'Inactive' }}
@@ -64,9 +68,9 @@ function defaultPermissions(): ModulePermission[] {
                 <span *ngIf="!admin.must_change_password">—</span>
               </td>
               <td class="actions-cell">
-                <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openResetModal(admin)">
-                  Reset Password
-                </button>
+                <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openEditModal(admin, 'admin')">Edit</button>
+                <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openResetModal(admin)">Reset Password</button>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" (click)="openDeleteModal(admin, 'admin')">Delete</button>
               </td>
             </tr>
           </tbody>
@@ -80,6 +84,7 @@ function defaultPermissions(): ModulePermission[] {
             <tr>
               <th>Name</th>
               <th>Email</th>
+              <th>Phone</th>
               <th>Status</th>
               <th>Password</th>
               <th>Created</th>
@@ -88,14 +93,15 @@ function defaultPermissions(): ModulePermission[] {
           </thead>
           <tbody>
             <tr *ngIf="loading">
-              <td colspan="6" class="empty-state-cell">Loading…</td>
+              <td colspan="7" class="empty-state-cell">Loading…</td>
             </tr>
             <tr *ngIf="!loading && subAdmins.length === 0">
-              <td colspan="6" class="empty-state-cell">No sub admins yet</td>
+              <td colspan="7" class="empty-state-cell">No sub admins yet</td>
             </tr>
             <tr *ngFor="let sa of subAdmins">
               <td>{{ sa.full_name }}</td>
               <td class="email-cell">{{ sa.email }}</td>
+              <td>{{ sa.phone || '—' }}</td>
               <td>
                 <span class="status-badge" [class.active]="sa.admin_is_active" [class.inactive]="!sa.admin_is_active">
                   {{ sa.admin_is_active ? 'Active' : 'Inactive' }}
@@ -107,62 +113,77 @@ function defaultPermissions(): ModulePermission[] {
               </td>
               <td>{{ sa.created_at | date:'mediumDate' }}</td>
               <td class="actions-cell">
-                <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openEditModal(sa)">Edit</button>
+                <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openEditModal(sa, 'subadmin')">Edit</button>
                 <button class="admin-btn admin-btn-secondary admin-btn-sm" (click)="openResetModal(sa)">Reset Password</button>
-                <button
-                  class="admin-btn admin-btn-sm"
-                  [class.admin-btn-danger]="sa.admin_is_active"
-                  [class.admin-btn-secondary]="!sa.admin_is_active"
-                  (click)="toggleStatus(sa)">
-                  {{ sa.admin_is_active ? 'Deactivate' : 'Activate' }}
-                </button>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" (click)="openDeleteModal(sa, 'subadmin')">Delete</button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
+      <!-- Create / Edit modal -->
       <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
-        <div class="modal-content permission-modal" (click)="$event.stopPropagation()">
-          <h2>{{ editingId ? 'Edit Sub Admin' : 'Create Sub Admin' }}</h2>
+        <div class="modal-content account-modal" (click)="$event.stopPropagation()">
+          <h2>{{ editingId ? 'Edit Account' : 'Create Account' }}</h2>
 
           <div class="form-grid">
-            <label>Full Name
+            <label>Name
               <input class="admin-input" [(ngModel)]="form.full_name" required />
             </label>
             <label>Email
               <input class="admin-input" type="email" [(ngModel)]="form.email" required />
             </label>
-            <label>Phone
-              <input class="admin-input" [(ngModel)]="form.phone" placeholder="Optional" />
+            <label>Phone Number
+              <input class="admin-input" [(ngModel)]="form.phone" placeholder="10-digit mobile" maxlength="10" />
             </label>
-            <label *ngIf="!editingId">Initial Password
-              <input class="admin-input" type="password" [(ngModel)]="form.password" minlength="8" />
+            <label *ngIf="!editingId">Role
+              <select class="admin-input" [(ngModel)]="form.role" (ngModelChange)="onRoleChange()">
+                <option value="admin">Admin</option>
+                <option value="subadmin">Sub Admin</option>
+              </select>
+            </label>
+            <label *ngIf="editingId">Role
+              <input class="admin-input" [value]="form.role === 'subadmin' ? 'Sub Admin' : 'Admin'" disabled />
+            </label>
+            <label *ngIf="!editingId">Password
+              <input class="admin-input" type="password" [(ngModel)]="form.password" minlength="8" autocomplete="new-password" />
+            </label>
+            <label *ngIf="!editingId">Confirm Password
+              <input class="admin-input" type="password" [(ngModel)]="form.confirm_password" minlength="8" autocomplete="new-password" />
+            </label>
+            <label>Status
+              <select class="admin-input" [(ngModel)]="form.status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </label>
           </div>
 
-          <h3 class="matrix-title">Permission Matrix</h3>
-          <div class="permission-matrix-wrap">
-            <table class="permission-matrix">
-              <thead>
-                <tr>
-                  <th>Module</th>
-                  <th>View</th>
-                  <th>Create</th>
-                  <th>Edit</th>
-                  <th>Delete</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of form.permissions">
-                  <td class="module-name">{{ formatModule(row.module) }}</td>
-                  <td><input type="checkbox" [(ngModel)]="row.can_view" [name]="row.module + '_view'" /></td>
-                  <td><input type="checkbox" [(ngModel)]="row.can_create" [name]="row.module + '_create'" [disabled]="!row.can_view" /></td>
-                  <td><input type="checkbox" [(ngModel)]="row.can_edit" [name]="row.module + '_edit'" [disabled]="!row.can_view" /></td>
-                  <td><input type="checkbox" [(ngModel)]="row.can_delete" [name]="row.module + '_delete'" [disabled]="!row.can_view" /></td>
-                </tr>
-              </tbody>
-            </table>
+          <div *ngIf="form.role === 'subadmin'">
+            <h3 class="matrix-title">Permission Matrix</h3>
+            <div class="permission-matrix-wrap">
+              <table class="permission-matrix">
+                <thead>
+                  <tr>
+                    <th>Module</th>
+                    <th>View</th>
+                    <th>Create</th>
+                    <th>Edit</th>
+                    <th>Delete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of form.permissions">
+                    <td class="module-name">{{ formatModule(row.module) }}</td>
+                    <td><input type="checkbox" [(ngModel)]="row.can_view" [name]="row.module + '_view'" /></td>
+                    <td><input type="checkbox" [(ngModel)]="row.can_create" [name]="row.module + '_create'" [disabled]="!row.can_view" /></td>
+                    <td><input type="checkbox" [(ngModel)]="row.can_edit" [name]="row.module + '_edit'" [disabled]="!row.can_view" /></td>
+                    <td><input type="checkbox" [(ngModel)]="row.can_delete" [name]="row.module + '_delete'" [disabled]="!row.can_view" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="modal-actions">
@@ -174,21 +195,39 @@ function defaultPermissions(): ModulePermission[] {
         </div>
       </div>
 
+      <!-- Reset password modal -->
       <div class="modal-overlay" *ngIf="showResetModal" (click)="closeResetModal()">
         <div class="modal-content reset-modal" (click)="$event.stopPropagation()">
           <h2>Reset Password</h2>
           <p class="reset-target">Account: <strong>{{ resetTarget?.full_name }}</strong> ({{ resetTarget?.email }})</p>
           <p class="reset-hint">User will be required to change this password on next login.</p>
-          <label>New Password
-            <input class="admin-input" type="password" [(ngModel)]="resetPassword" minlength="8" />
+          <label>Password
+            <input class="admin-input" type="password" [(ngModel)]="resetPassword" minlength="8" autocomplete="new-password" />
           </label>
           <label>Confirm Password
-            <input class="admin-input" type="password" [(ngModel)]="resetPasswordConfirm" minlength="8" />
+            <input class="admin-input" type="password" [(ngModel)]="resetPasswordConfirm" minlength="8" autocomplete="new-password" />
           </label>
           <div class="modal-actions">
             <button class="admin-btn admin-btn-secondary" (click)="closeResetModal()">Cancel</button>
             <button class="admin-btn admin-btn-primary" [disabled]="resetting" (click)="confirmReset()">
               {{ resetting ? 'Resetting…' : 'Reset Password' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete confirmation modal -->
+      <div class="modal-overlay" *ngIf="showDeleteModal" (click)="closeDeleteModal()">
+        <div class="modal-content delete-modal" (click)="$event.stopPropagation()">
+          <h2>Delete Account</h2>
+          <p class="delete-warning">
+            Are you sure you want to delete <strong>{{ deleteTarget?.full_name }}</strong> ({{ deleteTarget?.email }})?
+          </p>
+          <p class="delete-hint">This action cannot be undone.</p>
+          <div class="modal-actions">
+            <button class="admin-btn admin-btn-secondary" (click)="closeDeleteModal()">Cancel</button>
+            <button class="admin-btn admin-btn-danger" [disabled]="deleting" (click)="confirmDelete()">
+              {{ deleting ? 'Deleting…' : 'Delete' }}
             </button>
           </div>
         </div>
@@ -209,10 +248,23 @@ function defaultPermissions(): ModulePermission[] {
     .status-badge.active { background: #D1FAE5; color: #065F46; }
     .status-badge.inactive { background: #FEE2E2; color: #991B1B; }
     .pwd-flag { font-size: 12px; color: #B45309; font-weight: 600; }
-    .permission-modal, .reset-modal { max-width: 720px; width: 95vw; }
-    .reset-modal label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: 13px; font-weight: 500; }
-    .reset-target { margin: 0 0 8px; font-size: 14px; }
-    .reset-hint { margin: 0 0 16px; font-size: 13px; color: var(--admin-text-secondary, #6B7280); }
+    .account-modal, .reset-modal, .delete-modal {
+      max-width: 720px;
+      width: min(95vw, 720px);
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    .reset-modal label, .delete-modal label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .reset-target, .delete-warning { margin: 0 0 8px; font-size: 14px; }
+    .reset-hint, .delete-hint { margin: 0 0 16px; font-size: 13px; color: var(--admin-text-secondary, #6B7280); }
+    .delete-hint { color: #B91C1C; font-weight: 600; }
     .form-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -256,14 +308,45 @@ function defaultPermissions(): ModulePermission[] {
       position: sticky;
       top: 0;
     }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(17, 24, 39, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-content {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      width: 100%;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
     @media (max-width: 768px) {
       .form-grid { grid-template-columns: 1fr; }
       .actions-cell { flex-direction: column; }
       .actions-cell .admin-btn { width: 100%; }
     }
     @media (max-width: 425px) {
-      .permission-modal, .reset-modal { width: 100vw; max-height: 95vh; overflow-y: auto; }
+      .account-modal, .reset-modal, .delete-modal {
+        width: 100%;
+        max-height: 95vh;
+      }
       .permission-matrix { min-width: 480px; }
+    }
+    @media (max-width: 320px) {
+      .modal-overlay { padding: 8px; }
+      .account-modal, .reset-modal, .delete-modal { border-radius: 8px; }
     }
   `]
 })
@@ -273,11 +356,16 @@ export class AdminSubAdminsComponent implements OnInit {
   loading = false;
   loadingAdmins = false;
   saving = false;
+  deleting = false;
   showModal = false;
   showResetModal = false;
+  showDeleteModal = false;
   resetting = false;
   editingId: string | null = null;
+  editingRole: AccountRole | null = null;
   resetTarget: SubAdmin | null = null;
+  deleteTarget: SubAdmin | null = null;
+  deleteRole: AccountRole | null = null;
   resetPassword = '';
   resetPasswordConfirm = '';
 
@@ -285,7 +373,10 @@ export class AdminSubAdminsComponent implements OnInit {
     full_name: '',
     email: '',
     phone: '',
+    role: 'subadmin' as AccountRole,
     password: '',
+    confirm_password: '',
+    status: 'active' as 'active' | 'inactive',
     permissions: defaultPermissions()
   };
 
@@ -324,26 +415,42 @@ export class AdminSubAdminsComponent implements OnInit {
     return module.replace(/_/g, ' ');
   }
 
+  onRoleChange() {
+    if (this.form.role === 'subadmin' && !this.editingId) {
+      this.form.permissions = defaultPermissions();
+    }
+  }
+
   openCreateModal() {
     this.editingId = null;
+    this.editingRole = null;
     this.form = {
       full_name: '',
       email: '',
       phone: '',
+      role: 'subadmin',
       password: '',
+      confirm_password: '',
+      status: 'active',
       permissions: defaultPermissions()
     };
     this.showModal = true;
   }
 
-  openEditModal(sa: SubAdmin) {
-    this.editingId = sa.id;
+  openEditModal(account: SubAdmin, role: AccountRole) {
+    this.editingId = account.id;
+    this.editingRole = role;
     this.form = {
-      full_name: sa.full_name,
-      email: sa.email,
-      phone: sa.phone || '',
+      full_name: account.full_name,
+      email: account.email,
+      phone: account.phone || '',
+      role,
       password: '',
-      permissions: sa.permissions?.length ? sa.permissions.map((p) => ({ ...p })) : defaultPermissions()
+      confirm_password: '',
+      status: account.admin_is_active ? 'active' : 'inactive',
+      permissions: account.permissions?.length
+        ? account.permissions.map((p) => ({ ...p }))
+        : defaultPermissions()
     };
     this.showModal = true;
   }
@@ -355,9 +462,16 @@ export class AdminSubAdminsComponent implements OnInit {
     this.showResetModal = true;
   }
 
+  openDeleteModal(account: SubAdmin, role: AccountRole) {
+    this.deleteTarget = account;
+    this.deleteRole = role;
+    this.showDeleteModal = true;
+  }
+
   closeModal() {
     this.showModal = false;
     this.editingId = null;
+    this.editingRole = null;
   }
 
   closeResetModal() {
@@ -367,44 +481,98 @@ export class AdminSubAdminsComponent implements OnInit {
     this.resetPasswordConfirm = '';
   }
 
+  closeDeleteModal() {
+    this.showDeleteModal = false;
+    this.deleteTarget = null;
+    this.deleteRole = null;
+  }
+
+  private isActive(): boolean {
+    return this.form.status === 'active';
+  }
+
   async save() {
     if (!this.form.full_name.trim() || !this.form.email.trim()) {
       this.toast.error('Name and email are required');
       return;
     }
-    if (!this.editingId && (!this.form.password || this.form.password.length < 8)) {
-      this.toast.error('Password must be at least 8 characters');
+    if (!this.editingId) {
+      if (!this.form.password || this.form.password.length < 8) {
+        this.toast.error('Password must be at least 8 characters');
+        return;
+      }
+      if (this.form.password !== this.form.confirm_password) {
+        this.toast.error('Password confirmation must match');
+        return;
+      }
+    }
+    if (this.form.phone && !/^[0-9]{10}$/.test(this.form.phone.trim())) {
+      this.toast.error('Phone number must be exactly 10 digits');
       return;
     }
 
     this.saving = true;
     try {
-      if (this.editingId) {
-        await firstValueFrom(
-          this.adminService.updateSubAdmin(this.editingId, {
-            full_name: this.form.full_name.trim(),
-            email: this.form.email.trim(),
-            phone: this.form.phone.trim() || undefined,
-            permissions: this.form.permissions
-          })
-        );
-        this.toast.success('Sub admin updated');
-      } else {
+      const phone = this.form.phone.trim() || undefined;
+      const adminIsActive = this.isActive();
+
+      if (this.editingId && this.editingRole) {
+        if (this.editingRole === 'subadmin') {
+          await firstValueFrom(
+            this.adminService.updateSubAdmin(this.editingId, {
+              full_name: this.form.full_name.trim(),
+              email: this.form.email.trim(),
+              phone,
+              admin_is_active: adminIsActive,
+              permissions: this.form.permissions
+            })
+          );
+          this.toast.success('Sub admin updated');
+          await this.load();
+        } else {
+          await firstValueFrom(
+            this.adminService.updateAdmin(this.editingId, {
+              full_name: this.form.full_name.trim(),
+              email: this.form.email.trim(),
+              phone,
+              admin_is_active: adminIsActive
+            })
+          );
+          this.toast.success('Admin updated');
+          await this.loadAdmins();
+        }
+      } else if (this.form.role === 'subadmin') {
         await firstValueFrom(
           this.adminService.createSubAdmin({
             full_name: this.form.full_name.trim(),
             email: this.form.email.trim(),
-            phone: this.form.phone.trim() || undefined,
+            phone,
             password: this.form.password,
+            confirm_password: this.form.confirm_password,
+            admin_is_active: adminIsActive,
             permissions: this.form.permissions
           })
         );
         this.toast.success('Sub admin created');
+        await this.load();
+      } else {
+        await firstValueFrom(
+          this.adminService.createAdmin({
+            full_name: this.form.full_name.trim(),
+            email: this.form.email.trim(),
+            phone,
+            password: this.form.password,
+            confirm_password: this.form.confirm_password,
+            admin_is_active: adminIsActive
+          })
+        );
+        this.toast.success('Admin created');
+        await this.loadAdmins();
       }
+
       this.closeModal();
-      await this.load();
     } catch (err) {
-      this.toast.error(getApiErrorMessage(err, 'Failed to save sub admin'));
+      this.toast.error(getApiErrorMessage(err, 'Failed to save account'));
     } finally {
       this.saving = false;
     }
@@ -434,13 +602,25 @@ export class AdminSubAdminsComponent implements OnInit {
     }
   }
 
-  async toggleStatus(sa: SubAdmin) {
+  async confirmDelete() {
+    if (!this.deleteTarget || !this.deleteRole) return;
+
+    this.deleting = true;
     try {
-      await firstValueFrom(this.adminService.updateSubAdminStatus(sa.id, !sa.admin_is_active));
-      this.toast.success(sa.admin_is_active ? 'Sub admin deactivated' : 'Sub admin activated');
-      await this.load();
+      if (this.deleteRole === 'subadmin') {
+        await firstValueFrom(this.adminService.deleteSubAdmin(this.deleteTarget.id));
+        this.toast.success('Sub admin deleted');
+        await this.load();
+      } else {
+        await firstValueFrom(this.adminService.deleteAdmin(this.deleteTarget.id));
+        this.toast.success('Admin deleted');
+        await this.loadAdmins();
+      }
+      this.closeDeleteModal();
     } catch (err) {
-      this.toast.error(getApiErrorMessage(err, 'Failed to update status'));
+      this.toast.error(getApiErrorMessage(err, 'Failed to delete account'));
+    } finally {
+      this.deleting = false;
     }
   }
 }

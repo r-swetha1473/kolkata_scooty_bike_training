@@ -27,7 +27,7 @@ import { firstValueFrom } from 'rxjs';
               [ngModel]="searchTerm"
               (ngModelChange)="onSearchChange($event)"
               (keyup.enter)="applySearch()"
-              placeholder="Search customer, trainer, phone, booking ID..." 
+              placeholder="Search customer, trainer, phone, vehicle, booking ID..." 
               class="admin-search-input"
               aria-label="Search bookings">
           </div>
@@ -506,26 +506,34 @@ export class AdminBookingsComponent implements OnInit {
     void this.loadBookings();
   }
 
+  /** Local calendar date (YYYY-MM-DD) — avoids UTC shift from toISOString(). */
+  private formatDateForFilter(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   onDatePresetChange() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     switch (this.datePreset) {
       case 'today':
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = this.formatDateForFilter(today);
         this.startDateFilter = todayStr;
         this.endDateFilter = todayStr;
         break;
       case 'last7':
         const last7 = new Date(today);
         last7.setDate(last7.getDate() - 6);
-        this.startDateFilter = last7.toISOString().split('T')[0];
-        this.endDateFilter = today.toISOString().split('T')[0];
+        this.startDateFilter = this.formatDateForFilter(last7);
+        this.endDateFilter = this.formatDateForFilter(today);
         break;
       case 'thisMonth':
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        this.startDateFilter = firstDay.toISOString().split('T')[0];
-        this.endDateFilter = today.toISOString().split('T')[0];
+        this.startDateFilter = this.formatDateForFilter(firstDay);
+        this.endDateFilter = this.formatDateForFilter(today);
         break;
       case 'all':
         this.startDateFilter = '';

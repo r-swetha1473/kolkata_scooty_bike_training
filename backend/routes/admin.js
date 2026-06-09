@@ -14,12 +14,18 @@ const {
   validateUserCreation,
   validateSettingsUpdate,
   validateAdminChangePassword,
-  validateAdminResetPassword
+  validateAdminResetPassword,
+  validateAdminAccountCreation,
+  validateSubAdminCreation,
+  validateAdminAccountUpdate,
+  validateSubAdminUpdate
 } = require('../validators');
 const auditService = require('../services/audit.service');
 const slotCapacityService = require('../services/slotCapacity.service');
 const notificationService = require('../services/notification.service');
 const overdueBookingService = require('../services/overdueBooking.service');
+const { getDashboardStats } = require('../services/dashboardStats.service');
+const { buildBookingListQuery } = require('../utils/bookingSearch');
 const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
 const { getClientIp } = require('../utils/authCookie');
 const trainerDeletionService = require('../services/trainerDeletion.service');
@@ -81,91 +87,19 @@ router.put('/change-password', validateAdminChangePassword, async (req, res, nex
 
 router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, next) => {
   try {
-    const status = req.query.status ? String(req.query.status).trim() : '';
-    const startDate = req.query.startDate ? String(req.query.startDate).trim() : '';
-    const endDate = req.query.endDate ? String(req.query.endDate).trim() : '';
-    const searchRaw = req.query.search != null ? String(req.query.search).trim() : '';
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { countSql, listSql, countParams, listParams, limit, offset } = buildBookingListQuery({
+      status: req.query.status ? String(req.query.status).trim() : '',
+      startDate: req.query.startDate ? String(req.query.startDate).trim() : '',
+      endDate: req.query.endDate ? String(req.query.endDate).trim() : '',
+      searchRaw: req.query.search != null ? String(req.query.search).trim() : '',
+      limit: req.query.limit,
+      offset: req.query.offset
+    });
 
-    const conditions = ['1=1'];
-    const params = [];
-    let idx = 1;
+    const countResult = await db.query(countSql, countParams);
+    const total = Number(countResult.rows[0]?.total) || 0;
 
-    const searchJoins = searchRaw
-      ? ' LEFT JOIN vehicles v ON b.vehicle_id = v.id'
-      : '';
-
-    if (searchRaw) {
-      const q = `%${searchRaw}%`;
-      conditions.push(
-        `(COALESCE(u.full_name, '') ILIKE $${idx}
-          OR COALESCE(u.email, '') ILIKE $${idx}
-          OR COALESCE(u.phone::text, '') ILIKE $${idx}
-          OR COALESCE(p.full_name, '') ILIKE $${idx}
-          OR COALESCE(v.name, '') ILIKE $${idx}
-          OR COALESCE(b.notes, '') ILIKE $${idx}
-          OR b.id::text ILIKE $${idx})`
-      );
-      params.push(q);
-      idx++;
-    }
-
-    if (status) {
-      conditions.push(`b.status = $${idx++}`);
-      params.push(status);
-    }
-
-    if (startDate) {
-      conditions.push(
-        `COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'Asia/Kolkata')::date) >= $${idx++}::date`
-      );
-      params.push(startDate);
-    }
-
-    if (endDate) {
-      conditions.push(
-        `COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'Asia/Kolkata')::date) <= $${idx++}::date`
-      );
-      params.push(endDate);
-    }
-
-    const whereSql = conditions.join(' AND ');
-
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total
-       FROM bookings b
-       LEFT JOIN slots s ON b.slot_id = s.id
-       LEFT JOIN profiles u ON b.user_id = u.id
-       LEFT JOIN trainers t ON b.trainer_id = t.id
-       LEFT JOIN profiles p ON t.user_id = p.id${searchJoins}
-       WHERE ${whereSql}`,
-      params
-    );
-    const total = countResult.rows[0]?.total ?? 0;
-
-    params.push(limit, offset);
-    const limIdx = idx;
-    const offIdx = idx + 1;
-
-    const result = await db.query(
-      `
-      SELECT b.*,
-             s.start_time, s.end_time, s.slot_date,
-             u.id as user_id, u.full_name as user_name, u.email as user_email,
-             t.id as trainer_table_id,
-             p.id as trainer_profile_id, p.full_name as trainer_name
-      FROM bookings b
-      LEFT JOIN slots s ON b.slot_id = s.id
-      LEFT JOIN profiles u ON b.user_id = u.id
-      LEFT JOIN trainers t ON b.trainer_id = t.id
-      LEFT JOIN profiles p ON t.user_id = p.id${searchJoins}
-      WHERE ${whereSql}
-      ORDER BY s.start_time DESC NULLS LAST, b.created_at DESC
-      LIMIT $${limIdx} OFFSET $${offIdx}
-    `,
-      params
-    );
+    const result = await db.query(listSql, listParams);
 
     const bookings = result.rows.map(row => ({
       id: row.id,
@@ -175,6 +109,7 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
       vehicle_id: row.vehicle_id,
       status: row.status,
       notes: row.notes,
+      phone: row.phone,
       created_at: row.created_at,
       updated_at: row.updated_at,
       user: {
@@ -194,7 +129,7 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
         end_time: row.end_time,
         slot_date: row.slot_date
       },
-      // Also include flat fields for backward compatibility
+      vehicle_name: row.vehicle_name,
       user_name: row.user_name,
       user_email: row.user_email,
       trainer_name: row.trainer_name
@@ -374,100 +309,6 @@ router.get('/customers/export', requirePermission('users', 'view'), async (req, 
     next(error);
   }
 });
-
-// Get comprehensive dashboard stats
-async function getDashboardStats() {
-  const stats = {};
-  
-  // Total bookings
-  const totalBookingsResult = await db.query('SELECT COUNT(*) as count FROM bookings');
-  stats.totalBookings = parseInt(totalBookingsResult.rows[0].count) || 0;
-
-  // Active slots (available slots with trainers)
-  const activeSlotsResult = await db.query(`
-    SELECT COUNT(*) as count FROM slots s
-    LEFT JOIN trainers t ON s.trainer_id = t.id
-    WHERE s.status = 'available' 
-      AND s.booked_count < s.capacity 
-      AND (t.is_active = true OR s.trainer_id IS NULL)
-      AND (s.slot_date >= CURRENT_DATE OR s.start_time::date >= CURRENT_DATE)
-  `);
-  stats.activeSlots = parseInt(activeSlotsResult.rows[0].count) || 0;
-
-  // Total active trainers
-  const activeTrainersResult = await db.query('SELECT COUNT(*) as count FROM trainers WHERE is_active = true');
-  stats.totalTrainers = parseInt(activeTrainersResult.rows[0].count) || 0;
-  stats.activeTrainers = stats.totalTrainers; // Alias for compatibility
-
-  // Today's sessions (confirmed bookings for today)
-  const todaySessionsResult = await db.query(`
-    SELECT COUNT(*) as count FROM bookings b
-    JOIN slots s ON b.slot_id = s.id
-    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
-      AND b.status = 'confirmed'
-  `);
-  stats.todaySessions = parseInt(todaySessionsResult.rows[0].count) || 0;
-
-  // Pending bookings
-  const pendingBookingsResult = await db.query(`
-    SELECT COUNT(*) as count FROM bookings 
-    WHERE status = 'pending'
-  `);
-  stats.pendingBookings = parseInt(pendingBookingsResult.rows[0].count) || 0;
-
-  // Completed today
-  const completedTodayResult = await db.query(`
-    SELECT COUNT(*) as count FROM bookings b
-    JOIN slots s ON b.slot_id = s.id
-    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
-      AND b.status = 'completed'
-  `);
-  stats.completedToday = parseInt(completedTodayResult.rows[0].count) || 0;
-
-  // Additional stats
-  const totalUsersResult = await db.query('SELECT COUNT(*) as count FROM profiles');
-  stats.totalUsers = parseInt(totalUsersResult.rows[0].count) || 0;
-
-  const upcomingBookingsResult = await db.query(`
-    SELECT COUNT(*) as count FROM bookings b
-    JOIN slots s ON b.slot_id = s.id
-    WHERE s.start_time > NOW() AND b.status = 'confirmed'
-  `);
-  stats.upcomingBookings = parseInt(upcomingBookingsResult.rows[0].count) || 0;
-
-  const todayBookingsResult = await db.query(`
-    SELECT COUNT(*) as count FROM bookings b
-    JOIN slots s ON b.slot_id = s.id
-    WHERE (s.slot_date = CURRENT_DATE OR s.start_time::date = CURRENT_DATE)
-      AND b.status NOT IN ('cancelled')
-  `);
-  stats.todayBookings = parseInt(todayBookingsResult.rows[0].count) || 0;
-
-  const completedBookingsResult = await db.query(
-    `SELECT COUNT(*) as count FROM bookings WHERE status = 'completed'`
-  );
-  stats.completedBookings = parseInt(completedBookingsResult.rows[0].count) || 0;
-
-  const cancelledBookingsResult = await db.query(
-    `SELECT COUNT(*) as count FROM bookings WHERE status = 'cancelled'`
-  );
-  stats.cancelledBookings = parseInt(cancelledBookingsResult.rows[0].count) || 0;
-
-  const activeVehiclesResult = await db.query(
-    `SELECT COUNT(*) as count FROM vehicles WHERE is_active = true`
-  );
-  stats.activeVehicles = parseInt(activeVehiclesResult.rows[0].count) || 0;
-
-  const totalCustomersResult = await db.query(
-    `SELECT COUNT(*) as count FROM profiles WHERE role = 'customer'`
-  );
-  stats.totalCustomers = parseInt(totalCustomersResult.rows[0].count) || 0;
-
-  stats.expiredBookings = await overdueBookingService.countOverdueBookings();
-  stats.overdueBookings = await overdueBookingService.listOverdueBookings(8);
-
-  return stats;
-}
 
 router.get('/dashboard', requirePermission('dashboard', 'view'), async (req, res, next) => {
   try {
@@ -1463,40 +1304,30 @@ router.get('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
   }
 });
 
-router.post('/sub-admins', requireSuperAdmin, async (req, res, next) => {
+router.post('/sub-admins', requireSuperAdmin, validateSubAdminCreation, async (req, res, next) => {
   try {
-    const { email, full_name, phone, password, permissions } = req.body;
-
-    if (!email || !full_name || !password) {
-      const error = new Error('email, full_name, and password are required');
-      error.status = 400;
-      error.errorCode = 'MISSING_REQUIRED_FIELDS';
-      return next(error);
-    }
-
-    if (password.length < 8) {
-      const error = new Error('Password must be at least 8 characters');
-      error.status = 400;
-      error.errorCode = 'WEAK_PASSWORD';
-      return next(error);
-    }
+    const { email, full_name, phone, password, permissions, admin_is_active } = req.body;
 
     const passwordHash = await bcrypt.hash(password, 10);
     const resolvedPhone = phone || `9${Date.now().toString().slice(-9)}`;
+    const isActive = admin_is_active !== false;
 
     const result = await db.query(
       `INSERT INTO profiles (email, full_name, phone, role, password_hash, admin_is_active, must_change_password)
-       VALUES ($1, $2, $3, 'subadmin', $4, true, true)
+       VALUES ($1, $2, $3, 'subadmin', $4, $5, true)
        RETURNING id, email, full_name, phone, role, admin_is_active, must_change_password, created_at`,
-      [email.trim().toLowerCase(), full_name.trim(), resolvedPhone, passwordHash]
+      [email.trim().toLowerCase(), full_name.trim(), resolvedPhone, passwordHash, isActive]
     );
 
     const created = result.rows[0];
-    created.permissions = await permissionsService.upsertPermissions(created.id, permissions);
+    created.permissions = await permissionsService.upsertPermissions(
+      created.id,
+      permissions || permissionsService.defaultSubAdminPermissions()
+    );
 
     await auditService.logAdminAction({
       adminId: req.user.id,
-      actionType: 'CREATE_SUB_ADMIN',
+      actionType: 'CREATE_SUBADMIN',
       entityType: 'sub_admin',
       entityId: created.id,
       beforeValue: null,
@@ -1516,9 +1347,9 @@ router.post('/sub-admins', requireSuperAdmin, async (req, res, next) => {
   }
 });
 
-router.put('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
+router.put('/sub-admins/:id', requireSuperAdmin, validateSubAdminUpdate, async (req, res, next) => {
   try {
-    const { full_name, email, phone, permissions } = req.body;
+    const { full_name, email, phone, permissions, admin_is_active } = req.body;
     const before = await db.query(
       `SELECT id, email, full_name, phone, role, admin_is_active FROM profiles WHERE id = $1 AND role = 'subadmin'`,
       [req.params.id]
@@ -1547,6 +1378,10 @@ router.put('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
       updates.push(`phone = $${idx++}`);
       params.push(phone);
     }
+    if (admin_is_active !== undefined) {
+      updates.push(`admin_is_active = $${idx++}`);
+      params.push(admin_is_active);
+    }
 
     let updated = before.rows[0];
     if (updates.length > 0) {
@@ -1554,7 +1389,7 @@ router.put('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
       params.push(req.params.id);
       const result = await db.query(
         `UPDATE profiles SET ${updates.join(', ')} WHERE id = $${idx}
-         RETURNING id, email, full_name, phone, role, admin_is_active, created_at, updated_at`,
+         RETURNING id, email, full_name, phone, role, admin_is_active, must_change_password, created_at, updated_at`,
         params
       );
       updated = result.rows[0];
@@ -1568,7 +1403,7 @@ router.put('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
 
     await auditService.logAdminAction({
       adminId: req.user.id,
-      actionType: 'UPDATE_SUB_ADMIN',
+      actionType: 'UPDATE_SUBADMIN',
       entityType: 'sub_admin',
       entityId: req.params.id,
       beforeValue: before.rows[0],
@@ -1634,6 +1469,52 @@ router.put('/sub-admins/:id/status', requireSuperAdmin, async (req, res, next) =
   }
 });
 
+router.delete('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (id === req.user.id) {
+      const error = new Error('Cannot delete your own account');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_OWN_ACCOUNT';
+      return next(error);
+    }
+
+    const before = await db.query(
+      `SELECT id, email, full_name, role FROM profiles WHERE id = $1 AND role = 'subadmin'`,
+      [id]
+    );
+    if (before.rows.length === 0) {
+      const error = new Error('Sub admin not found');
+      error.status = 404;
+      error.errorCode = 'SUB_ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    await db.query('DELETE FROM sub_admin_permissions WHERE profile_id = $1', [id]);
+    await db.query('DELETE FROM profiles WHERE id = $1', [id]);
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'DELETE_SUBADMIN',
+      entityType: 'sub_admin',
+      entityId: id,
+      beforeValue: before.rows[0],
+      afterValue: null,
+      details: {}
+    });
+
+    res.json({ message: 'Sub admin deleted successfully' });
+  } catch (error) {
+    if (error.code === '23503') {
+      const err = new Error('Cannot delete sub admin due to related records');
+      err.status = 400;
+      err.errorCode = 'CANNOT_DELETE_SUB_ADMIN';
+      return next(err);
+    }
+    next(error);
+  }
+});
+
 router.get('/admins', requireSuperAdmin, async (req, res, next) => {
   try {
     const result = await db.query(
@@ -1644,6 +1525,159 @@ router.get('/admins', requireSuperAdmin, async (req, res, next) => {
     );
     res.json(result.rows);
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admins', requireSuperAdmin, validateAdminAccountCreation, async (req, res, next) => {
+  try {
+    const { email, full_name, phone, password, admin_is_active } = req.body;
+    const passwordHash = await bcrypt.hash(password, 10);
+    const resolvedPhone = phone || `9${Date.now().toString().slice(-9)}`;
+    const isActive = admin_is_active !== false;
+
+    const result = await db.query(
+      `INSERT INTO profiles (email, full_name, phone, role, password_hash, admin_is_active, must_change_password)
+       VALUES ($1, $2, $3, 'admin', $4, $5, true)
+       RETURNING id, email, full_name, phone, role, admin_is_active, must_change_password, created_at`,
+      [email.trim().toLowerCase(), full_name.trim(), resolvedPhone, passwordHash, isActive]
+    );
+
+    const created = result.rows[0];
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'CREATE_ADMIN',
+      entityType: 'admin',
+      entityId: created.id,
+      beforeValue: null,
+      afterValue: created,
+      details: {}
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    if (error.code === '23505') {
+      const dup = new Error('Email or phone already exists');
+      dup.status = 409;
+      dup.errorCode = 'DUPLICATE_CONTACT';
+      return next(dup);
+    }
+    next(error);
+  }
+});
+
+router.put('/admins/:id', requireSuperAdmin, validateAdminAccountUpdate, async (req, res, next) => {
+  try {
+    const { full_name, email, phone, admin_is_active } = req.body;
+    const before = await db.query(
+      `SELECT id, email, full_name, phone, role, admin_is_active FROM profiles WHERE id = $1 AND role = 'admin'`,
+      [req.params.id]
+    );
+
+    if (before.rows.length === 0) {
+      const error = new Error('Admin not found');
+      error.status = 404;
+      error.errorCode = 'ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (full_name !== undefined) {
+      updates.push(`full_name = $${idx++}`);
+      params.push(full_name.trim());
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${idx++}`);
+      params.push(email.trim().toLowerCase());
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${idx++}`);
+      params.push(phone);
+    }
+    if (admin_is_active !== undefined) {
+      updates.push(`admin_is_active = $${idx++}`);
+      params.push(admin_is_active);
+    }
+
+    if (updates.length === 0) {
+      return res.json(before.rows[0]);
+    }
+
+    updates.push('updated_at = NOW()');
+    params.push(req.params.id);
+    const result = await db.query(
+      `UPDATE profiles SET ${updates.join(', ')} WHERE id = $${idx}
+       RETURNING id, email, full_name, phone, role, admin_is_active, must_change_password, created_at, updated_at`,
+      params
+    );
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'UPDATE_ADMIN',
+      entityType: 'admin',
+      entityId: req.params.id,
+      beforeValue: before.rows[0],
+      afterValue: result.rows[0],
+      details: {}
+    });
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') {
+      const dup = new Error('Email or phone already exists');
+      dup.status = 409;
+      dup.errorCode = 'DUPLICATE_CONTACT';
+      return next(dup);
+    }
+    next(error);
+  }
+});
+
+router.delete('/admins/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (id === req.user.id) {
+      const error = new Error('Cannot delete your own account');
+      error.status = 400;
+      error.errorCode = 'CANNOT_DELETE_OWN_ACCOUNT';
+      return next(error);
+    }
+
+    const before = await db.query(
+      `SELECT id, email, full_name, role FROM profiles WHERE id = $1 AND role = 'admin'`,
+      [id]
+    );
+    if (before.rows.length === 0) {
+      const error = new Error('Admin not found');
+      error.status = 404;
+      error.errorCode = 'ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    await db.query('DELETE FROM profiles WHERE id = $1', [id]);
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'DELETE_ADMIN',
+      entityType: 'admin',
+      entityId: id,
+      beforeValue: before.rows[0],
+      afterValue: null,
+      details: {}
+    });
+
+    res.json({ message: 'Admin deleted successfully' });
+  } catch (error) {
+    if (error.code === '23503') {
+      const err = new Error('Cannot delete admin due to related records');
+      err.status = 400;
+      err.errorCode = 'CANNOT_DELETE_ADMIN';
+      return next(err);
+    }
     next(error);
   }
 });

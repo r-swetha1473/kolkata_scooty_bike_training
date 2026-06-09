@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AdminService } from '../../../services/admin.service';
 import { PermissionService } from '../../../services/permission.service';
+import { ToastService } from '../../../services/toast.service';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -273,7 +274,8 @@ export class AdminDashboardComponent implements OnInit {
   constructor(
     private adminService: AdminService,
     public perms: PermissionService,
-    private router: Router
+    private router: Router,
+    private toastService: ToastService
   ) {}
 
   async ngOnInit() {
@@ -288,6 +290,7 @@ export class AdminDashboardComponent implements OnInit {
     } catch {
       this.stats = {};
       this.buildStatCards();
+      this.toastService.error('Failed to load dashboard statistics');
     } finally {
       this.loading = false;
     }
@@ -295,15 +298,19 @@ export class AdminDashboardComponent implements OnInit {
 
   buildStatCards() {
     const s = this.stats || {};
+    const n = (v: unknown) => {
+      const num = Number(v);
+      return Number.isFinite(num) ? num : 0;
+    };
     this.statCards = [
-      { label: "Today's Bookings", value: s.todayBookings || 0 },
-      { label: 'Pending Bookings', value: s.pendingBookings || 0, class: 'warn' },
-      { label: 'Completed Bookings', value: s.completedBookings || 0, class: 'success' },
-      { label: 'Cancelled Bookings', value: s.cancelledBookings || 0 },
-      { label: 'Expired Bookings', value: s.expiredBookings || 0, class: 'warn' },
-      { label: 'Active Trainers', value: s.activeTrainers || s.totalTrainers || 0 },
-      { label: 'Active Vehicles', value: s.activeVehicles || 0 },
-      { label: 'Total Customers', value: s.totalCustomers || 0 }
+      { label: "Today's Bookings", value: n(s.todayBookings) },
+      { label: 'Pending Bookings', value: n(s.pendingBookings), class: 'warn' },
+      { label: 'Completed Bookings', value: n(s.completedBookings), class: 'success' },
+      { label: 'Cancelled Bookings', value: n(s.cancelledBookings) },
+      { label: 'Expired Bookings', value: n(s.expiredBookings), class: 'warn' },
+      { label: 'Active Trainers', value: n(s.activeTrainers ?? s.totalTrainers) },
+      { label: 'Active Vehicles', value: n(s.activeVehicles) },
+      { label: 'Total Customers', value: n(s.totalCustomers) }
     ];
   }
 

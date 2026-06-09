@@ -33,6 +33,29 @@ export interface TrainerDeletePreview {
 
 export type TrainerDeleteStrategy = 'direct' | 'complete_all' | 'complete_past' | 'reassign';
 
+function asNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeDashboardStats(raw: Record<string, unknown> | null | undefined) {
+  const s = raw || {};
+  return {
+    ...s,
+    todayBookings: asNumber(s['todayBookings']),
+    pendingBookings: asNumber(s['pendingBookings']),
+    completedBookings: asNumber(s['completedBookings']),
+    cancelledBookings: asNumber(s['cancelledBookings']),
+    expiredBookings: asNumber(s['expiredBookings']),
+    activeTrainers: asNumber(s['activeTrainers'], asNumber(s['totalTrainers'])),
+    totalTrainers: asNumber(s['totalTrainers']),
+    activeVehicles: asNumber(s['activeVehicles']),
+    totalCustomers: asNumber(s['totalCustomers']),
+    totalBookings: asNumber(s['totalBookings']),
+    overdueBookings: Array.isArray(s['overdueBookings']) ? s['overdueBookings'] : []
+  };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -40,11 +63,13 @@ export class AdminService {
   constructor(private http: HttpService) {}
 
   async getStats(): Promise<any> {
-    return firstValueFrom(this.http.get('/admin/stats'));
+    const result = await firstValueFrom(this.http.get<Record<string, unknown>>('/admin/stats'));
+    return normalizeDashboardStats(result);
   }
 
   async getDashboardStats(): Promise<any> {
-    return firstValueFrom(this.http.get('/admin/stats'));
+    const result = await firstValueFrom(this.http.get<Record<string, unknown>>('/admin/stats'));
+    return normalizeDashboardStats(result);
   }
 
   async getAllBookings(filters?: {
@@ -70,9 +95,15 @@ export class AdminService {
     const bookingsFromArray = Array.isArray(result) ? result : null;
     const bookings = bookingsFromTop || bookingsFromData || bookingsFromArray || [];
 
-    const totalFromTop = typeof result?.total === 'number' ? result.total : null;
-    const totalFromData = typeof result?.data?.total === 'number' ? result.data.total : null;
-    const total = totalFromTop ?? totalFromData ?? bookings.length;
+    const totalFromTop = result?.total;
+    const totalFromData = result?.data?.total;
+    const parsedTop = Number(totalFromTop);
+    const parsedData = Number(totalFromData);
+    const total = Number.isFinite(parsedTop)
+      ? parsedTop
+      : Number.isFinite(parsedData)
+        ? parsedData
+        : bookings.length;
 
     const limitFromTop = typeof result?.limit === 'number' ? result.limit : null;
     const limitFromData = typeof result?.data?.limit === 'number' ? result.data.limit : null;
@@ -166,6 +197,8 @@ export class AdminService {
     full_name: string;
     phone?: string;
     password: string;
+    confirm_password: string;
+    admin_is_active?: boolean;
     permissions: ModulePermission[];
   }): Observable<SubAdmin> {
     return this.http.post<SubAdmin>('/admin/sub-admins', payload);
@@ -173,13 +206,45 @@ export class AdminService {
 
   updateSubAdmin(
     id: string,
-    payload: Partial<{ full_name: string; email: string; phone: string; permissions: ModulePermission[] }>
+    payload: Partial<{
+      full_name: string;
+      email: string;
+      phone: string;
+      admin_is_active: boolean;
+      permissions: ModulePermission[];
+    }>
   ): Observable<SubAdmin> {
     return this.http.put<SubAdmin>(`/admin/sub-admins/${id}`, payload);
   }
 
   updateSubAdminStatus(id: string, is_active: boolean): Observable<SubAdmin> {
     return this.http.put<SubAdmin>(`/admin/sub-admins/${id}/status`, { is_active });
+  }
+
+  deleteSubAdmin(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`/admin/sub-admins/${id}`);
+  }
+
+  createAdmin(payload: {
+    email: string;
+    full_name: string;
+    phone?: string;
+    password: string;
+    confirm_password: string;
+    admin_is_active?: boolean;
+  }): Observable<SubAdmin> {
+    return this.http.post<SubAdmin>('/admin/admins', payload);
+  }
+
+  updateAdmin(
+    id: string,
+    payload: Partial<{ full_name: string; email: string; phone: string; admin_is_active: boolean }>
+  ): Observable<SubAdmin> {
+    return this.http.put<SubAdmin>(`/admin/admins/${id}`, payload);
+  }
+
+  deleteAdmin(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`/admin/admins/${id}`);
   }
 
   changePassword(payload: {

@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { AdminService } from '../../../services/admin.service';
-import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../services/toast.service';
 
 @Component({
@@ -59,12 +58,11 @@ import { ToastService } from '../../../services/toast.service';
               <th>Account</th>
               <th>Role</th>
               <th>Joined</th>
-              <th *ngIf="auth.isSuperAdmin()">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngIf="filteredUsers.length === 0">
-              <td [attr.colspan]="auth.isSuperAdmin() ? 7 : 6" class="empty-state-cell">
+              <td colspan="6" class="empty-state-cell">
                 No users found
               </td>
             </tr>
@@ -89,14 +87,6 @@ import { ToastService } from '../../../services/toast.service';
               </td>
               <td><span class="role-badge">{{ user.role }}</span></td>
               <td>{{ formatDate(user.created_at) }}</td>
-              <td *ngIf="auth.isSuperAdmin()">
-                <select (change)="updateRole(user.id, $any($event.target).value)" [value]="user.role">
-                  <option value="customer">Customer</option>
-                  <option value="trainer">Trainer</option>
-                  <option value="admin">Admin</option>
-                  <option value="superadmin">Superadmin</option>
-                </select>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -237,7 +227,6 @@ export class AdminUsersComponent implements OnInit {
 
   constructor(
     private adminService: AdminService,
-    public auth: AuthService,
     private toastService: ToastService
   ) {}
 
@@ -349,17 +338,6 @@ export class AdminUsersComponent implements OnInit {
       this.toastService.success('Customer reactivated');
     } catch (error: any) {
       this.toastService.error(error?.error?.message || 'Failed to reactivate');
-    }
-  }
-
-  async updateRole(userId: string, role: string) {
-    if (!confirm(`Update user role to ${role}?`)) return;
-    try {
-      await this.adminService.updateUserRole(userId, role);
-      await this.loadUsers();
-      this.toastService.success(`User role updated to ${role} successfully`);
-    } catch (error: any) {
-      this.toastService.error(error?.error?.error || error?.error?.message || 'Failed to update user role');
     }
   }
 

@@ -368,6 +368,94 @@ const validateAdminResetPassword = [
   handleValidationErrors
 ];
 
+const accountNameRules = body('full_name')
+  .trim()
+  .notEmpty()
+  .withMessage('Name is required')
+  .isLength({ min: 2, max: 100 })
+  .withMessage('Name must be between 2 and 100 characters')
+  .escape();
+
+const accountEmailRules = body('email')
+  .trim()
+  .notEmpty()
+  .withMessage('Email is required')
+  .isEmail()
+  .withMessage('Invalid email format')
+  .normalizeEmail();
+
+const accountPhoneRules = body('phone')
+  .optional({ values: 'falsy' })
+  .trim()
+  .matches(/^[0-9]{10}$/)
+  .withMessage('Phone number must be exactly 10 digits');
+
+const passwordWithConfirmRules = [
+  body('password')
+    .trim()
+    .notEmpty()
+    .withMessage('Password is required')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+  body('confirm_password')
+    .trim()
+    .notEmpty()
+    .withMessage('Password confirmation is required')
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error('Password confirmation must match');
+      }
+      return true;
+    })
+];
+
+const validateAdminAccountCreation = [
+  accountEmailRules,
+  accountNameRules,
+  accountPhoneRules,
+  ...passwordWithConfirmRules,
+  body('admin_is_active')
+    .optional()
+    .isBoolean()
+    .withMessage('admin_is_active must be a boolean'),
+  handleValidationErrors
+];
+
+const validateSubAdminCreation = [
+  accountEmailRules,
+  accountNameRules,
+  accountPhoneRules,
+  ...passwordWithConfirmRules,
+  body('admin_is_active')
+    .optional()
+    .isBoolean()
+    .withMessage('admin_is_active must be a boolean'),
+  body('permissions')
+    .optional()
+    .isArray()
+    .withMessage('permissions must be an array'),
+  handleValidationErrors
+];
+
+const validateAdminAccountUpdate = [
+  param('id').isUUID().withMessage('Account ID must be a valid UUID'),
+  body('full_name').optional().trim().isLength({ min: 2, max: 100 }).escape(),
+  body('email').optional().trim().isEmail().normalizeEmail(),
+  body('phone').optional({ values: 'falsy' }).trim().matches(/^[0-9]{10}$/),
+  body('admin_is_active').optional().isBoolean(),
+  handleValidationErrors
+];
+
+const validateSubAdminUpdate = [
+  param('id').isUUID().withMessage('Sub admin ID must be a valid UUID'),
+  body('full_name').optional().trim().isLength({ min: 2, max: 100 }).escape(),
+  body('email').optional().trim().isEmail().normalizeEmail(),
+  body('phone').optional({ values: 'falsy' }).trim().matches(/^[0-9]{10}$/),
+  body('admin_is_active').optional().isBoolean(),
+  body('permissions').optional().isArray(),
+  handleValidationErrors
+];
+
 module.exports = {
   validateBookingStatusUpdate,
   validateTrainerCreation,
@@ -379,5 +467,9 @@ module.exports = {
   validateSettingsUpdate,
   validateSettingUpdate,
   validateAdminChangePassword,
-  validateAdminResetPassword
+  validateAdminResetPassword,
+  validateAdminAccountCreation,
+  validateSubAdminCreation,
+  validateAdminAccountUpdate,
+  validateSubAdminUpdate
 };
