@@ -188,7 +188,7 @@ export class ApiService {
   }
 
   /**
-   * Create booking: customer chooses trainer_id; server assigns vehicle. slot_id + trainer_id + phone typical.
+   * Create booking: customer chooses trainer_id and vehicle_id for the slot.
    */
   createBooking(
     slotId: string,

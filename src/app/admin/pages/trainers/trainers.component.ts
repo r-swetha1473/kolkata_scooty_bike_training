@@ -1,9 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AdminService } from '../../../services/admin.service';
+import { AdminService, TrainerDeletePreview } from '../../../services/admin.service';
 import { Trainer } from '../../../services/trainer.service';
 import { ToastService } from '../../../services/toast.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -102,8 +103,9 @@ import { firstValueFrom } from 'rxjs';
                 </button>
                 <button
                   class="btn-action btn-delete"
-                  (click)="deleteTrainer(trainer.id)"
-                  title="Delete">
+                  (click)="confirmDelete(trainer)"
+                  title="Delete"
+                  [disabled]="trainer.is_active">
                   <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -159,6 +161,139 @@ import { firstValueFrom } from 'rxjs';
         </div>
       </div>
 
+      <div class="modal" *ngIf="showDeleteModal" (click)="closeDeleteModal()">
+        <div class="modal-content delete-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>Delete Trainer</h2>
+            <button type="button" class="btn-close" (click)="closeDeleteModal()">&times;</button>
+          </div>
+          <div class="modal-form">
+            <div *ngIf="deletePreviewLoading" class="delete-loading">Loading booking summary...</div>
+
+            <ng-container *ngIf="!deletePreviewLoading && deletePreview">
+              <p *ngIf="trainerToDelete?.is_active" class="warning-text">
+                This trainer is still active. Deactivate them before deleting.
+              </p>
+
+              <ng-container *ngIf="!trainerToDelete?.is_active">
+                <p *ngIf="deleteStep === 'summary' && deletePreview.canDeleteDirectly">
+                  Are you sure you want to delete <strong>{{ deletePreview.trainerName }}</strong>?
+                  This will remove the trainer record and revert their profile role to customer.
+                </p>
+
+                <ng-container *ngIf="deleteStep === 'summary' && !deletePreview.canDeleteDirectly">
+                  <p class="warning-text">
+                    Trainer has existing bookings. Some bookings may not have been marked as completed.
+                    Please review them before deleting this trainer.
+                  </p>
+                  <p class="past-warning" *ngIf="deletePreview.pastBlockingBookings > 0">
+                    {{ getPastBookingsWarning() }}
+                  </p>
+                  <div class="booking-stats">
+                    <div class="stat-item"><span>Total</span><strong>{{ deletePreview.totalBookings }}</strong></div>
+                    <div class="stat-item"><span>Pending</span><strong>{{ deletePreview.pendingBookings }}</strong></div>
+                    <div class="stat-item"><span>Active</span><strong>{{ deletePreview.activeBookings }}</strong></div>
+                    <div class="stat-item"><span>Completed</span><strong>{{ deletePreview.completedBookings }}</strong></div>
+                    <div class="stat-item" *ngIf="deletePreview.pastBlockingBookings > 0">
+                      <span>Past (uncompleted)</span><strong>{{ deletePreview.pastBlockingBookings }}</strong>
+                    </div>
+                    <div class="stat-item" *ngIf="deletePreview.futureBlockingBookings > 0">
+                      <span>Upcoming</span><strong>{{ deletePreview.futureBlockingBookings }}</strong>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <p *ngIf="deleteStep === 'complete_past_confirm'" class="warning-text">
+                  Mark <strong>{{ deletePreview.pastBlockingBookings }}</strong> past
+                  booking{{ deletePreview.pastBlockingBookings === 1 ? '' : 's' }} as <strong>Completed</strong>?
+                  <span *ngIf="deletePreview.futureBlockingBookings > 0">
+                    Upcoming bookings will not be changed.
+                  </span>
+                  <span *ngIf="deletePreview.futureBlockingBookings === 0">
+                    The trainer will be deleted if no other bookings remain.
+                  </span>
+                </p>
+
+                <p *ngIf="deleteStep === 'complete_confirm'" class="warning-text">
+                  Are you sure all trainer sessions are completed?
+                  This will mark all non-completed bookings as <strong>Completed</strong> before deleting the trainer.
+                </p>
+
+                <div *ngIf="deleteStep === 'reassign'" class="form-group">
+                  <label>Reassign active/pending bookings to</label>
+                  <select [(ngModel)]="reassignToTrainerId" name="reassignTrainer" class="admin-select reassign-select">
+                    <option value="">Select an active trainer</option>
+                    <option *ngFor="let t of deletePreview.availableReassignTrainers" [value]="t.id">
+                      {{ t.name }}
+                    </option>
+                  </select>
+                  <p class="form-help">Booking history will be preserved. Only active and pending bookings are reassigned.</p>
+                </div>
+              </ng-container>
+            </ng-container>
+
+            <div class="form-actions" *ngIf="!deletePreviewLoading && deletePreview && !trainerToDelete?.is_active">
+              <ng-container *ngIf="deleteStep === 'summary' && deletePreview.canDeleteDirectly">
+                <button type="button" class="btn-secondary" (click)="closeDeleteModal()">Cancel</button>
+                <button type="button" class="btn-danger" (click)="deleteTrainer('direct')" [disabled]="deletingTrainer">
+                  {{ deletingTrainer ? 'Deleting...' : 'Delete' }}
+                </button>
+              </ng-container>
+
+              <ng-container *ngIf="deleteStep === 'summary' && !deletePreview.canDeleteDirectly">
+                <button type="button" class="btn-secondary" (click)="closeDeleteModal()">Cancel Delete</button>
+                <button
+                  type="button"
+                  class="btn-primary btn-past"
+                  *ngIf="deletePreview.pastBlockingBookings > 0"
+                  (click)="deleteStep = 'complete_past_confirm'">
+                  Mark Past Bookings as Completed
+                </button>
+                <button type="button" class="btn-primary" (click)="deleteStep = 'complete_confirm'">
+                  Mark All Bookings as Completed
+                </button>
+                <button
+                  type="button"
+                  class="btn-primary"
+                  (click)="deleteStep = 'reassign'"
+                  [disabled]="deletePreview.availableReassignTrainers.length === 0">
+                  Reassign Trainer
+                </button>
+              </ng-container>
+
+              <ng-container *ngIf="deleteStep === 'complete_past_confirm'">
+                <button type="button" class="btn-secondary" (click)="deleteStep = 'summary'">Back</button>
+                <button type="button" class="btn-danger" (click)="deleteTrainer('complete_past')" [disabled]="deletingTrainer">
+                  {{ deletingTrainer ? 'Processing...' : 'Mark Past & Continue' }}
+                </button>
+              </ng-container>
+
+              <ng-container *ngIf="deleteStep === 'complete_confirm'">
+                <button type="button" class="btn-secondary" (click)="deleteStep = 'summary'">Back</button>
+                <button type="button" class="btn-danger" (click)="deleteTrainer('complete_all')" [disabled]="deletingTrainer">
+                  {{ deletingTrainer ? 'Processing...' : 'Confirm & Delete' }}
+                </button>
+              </ng-container>
+
+              <ng-container *ngIf="deleteStep === 'reassign'">
+                <button type="button" class="btn-secondary" (click)="deleteStep = 'summary'">Back</button>
+                <button
+                  type="button"
+                  class="btn-danger"
+                  (click)="deleteTrainer('reassign')"
+                  [disabled]="!reassignToTrainerId || deletingTrainer">
+                  {{ deletingTrainer ? 'Processing...' : 'Reassign & Delete' }}
+                </button>
+              </ng-container>
+            </div>
+
+            <div class="form-actions" *ngIf="!deletePreviewLoading && trainerToDelete?.is_active">
+              <button type="button" class="btn-secondary" (click)="closeDeleteModal()">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="modal" *ngIf="showModal" (click)="closeModal($event)">
         <div class="modal-content" (click)="$event.stopPropagation()">
           <div class="modal-header">
@@ -204,7 +339,9 @@ import { firstValueFrom } from 'rxjs';
     </div>
   `,
   styles: [`
-    .trainers-page { max-width: 1400px; }
+    .trainers-page { max-width: 1400px; margin: 0 auto; }
+    .admin-data-table { min-width: 760px; }
+    .admin-table-container { -webkit-overflow-scrolling: touch; }
     .email-cell { font-size: 12px; color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .specialization-cell { max-width: 200px; }
     .specialization-text {
@@ -273,11 +410,124 @@ import { firstValueFrom } from 'rxjs';
       color: #EF4444;
     }
 
-    .btn-delete:hover {
+    .btn-delete:hover:not(:disabled) {
       background: #EF4444;
       color: white;
       box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
       transform: translateY(-1px);
+    }
+
+    .btn-action:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-danger {
+      padding: 10px 20px;
+      background: #EF4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .warning-text {
+      color: #92400E;
+      font-size: 13px;
+      margin-top: 12px;
+      padding: 8px;
+      background: #FEF3C7;
+      border-radius: 4px;
+    }
+
+    .past-warning {
+      color: #9a3412;
+      font-size: 14px;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #ffedd5;
+      border: 1px solid #fdba74;
+      border-radius: 6px;
+    }
+
+    .btn-past {
+      background: #ea580c;
+    }
+
+    .btn-past:hover {
+      background: #c2410c;
+    }
+
+    .delete-modal {
+      max-width: 640px;
+    }
+
+    .delete-loading {
+      padding: 24px 0;
+      text-align: center;
+      color: #6b7280;
+    }
+
+    .booking-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .stat-item span {
+      color: #6b7280;
+    }
+
+    .stat-item strong {
+      color: #111827;
+      font-size: 18px;
+    }
+
+    .reassign-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 100%;
+    }
+
+    .form-help {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .btn-primary {
+      padding: 10px 20px;
+      background: #0066B1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
@@ -296,12 +546,74 @@ import { firstValueFrom } from 'rxjs';
     .btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 2px solid #e5e7eb; border-radius: 8px; font-weight: 600; cursor: pointer; }
     .btn-secondary:hover { background: #f9fafb; }
 
+    @media (max-width: 768px) {
+      .admin-page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+
+      .admin-page-actions {
+        width: 100%;
+      }
+
+      .admin-page-actions .admin-btn {
+        width: 100%;
+      }
+
+      .admin-filters-content {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-search-group,
+      .admin-select {
+        width: 100%;
+        max-width: 100%;
+        min-width: 100%;
+      }
+
+      .modal-content {
+        width: calc(100% - 24px);
+        margin: 12px;
+      }
+
+      .form-actions {
+        flex-direction: column-reverse;
+        flex-wrap: wrap;
+      }
+
+      .form-actions button {
+        width: 100%;
+      }
+
+      .booking-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .admin-pagination {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-pagination-info {
+        justify-content: space-between;
+      }
+    }
+
   `]
 })
 export class AdminTrainersComponent implements OnInit {
   trainers: Trainer[] = [];
   filteredTrainers: Trainer[] = [];
   showModal = false;
+  showDeleteModal = false;
+  deletingTrainer = false;
+  deletePreviewLoading = false;
+  deletePreview: TrainerDeletePreview | null = null;
+  deleteStep: 'summary' | 'complete_past_confirm' | 'complete_confirm' | 'reassign' = 'summary';
+  reassignToTrainerId = '';
+  trainerToDelete: Trainer | null = null;
   editingTrainer: Trainer | null = null;
   specializationInput = '';
   searchTerm = '';
@@ -494,8 +806,8 @@ export class AdminTrainersComponent implements OnInit {
       this.showModal = false;
       await this.loadTrainers();
       this.toastService.success(this.editingTrainer ? 'Trainer updated successfully' : 'Trainer created successfully');
-    } catch (error: any) {
-      this.toastService.error(error.error?.error || error.error?.message || 'Failed to save trainer');
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to save trainer'));
     }
   }
 
@@ -504,22 +816,112 @@ export class AdminTrainersComponent implements OnInit {
       await firstValueFrom(this.adminService.updateTrainer(trainerId, { is_active: !currentStatus }));
       await this.loadTrainers();
       this.toastService.success(`Trainer ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
-    } catch (error: any) {
-      this.toastService.error(error.error?.error || error.error?.message || 'Failed to update trainer status');
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to update trainer status'));
     }
   }
 
-  async deleteTrainer(trainerId: string) {
-    if (!confirm('Are you sure you want to delete this trainer? This action cannot be undone.')) {
+  async confirmDelete(trainer: Trainer) {
+    this.trainerToDelete = trainer;
+    this.deleteStep = 'summary';
+    this.reassignToTrainerId = '';
+    this.deletePreview = null;
+    this.showDeleteModal = true;
+
+    if (trainer.is_active) {
       return;
     }
 
+    this.deletePreviewLoading = true;
     try {
-      await firstValueFrom(this.adminService.deleteTrainer(trainerId));
+      this.deletePreview = await firstValueFrom(
+        this.adminService.getTrainerDeletePreview(trainer.id)
+      );
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to load trainer booking summary'));
+      this.closeDeleteModal();
+    } finally {
+      this.deletePreviewLoading = false;
+    }
+  }
+
+  closeDeleteModal() {
+    this.showDeleteModal = false;
+    this.trainerToDelete = null;
+    this.deletePreview = null;
+    this.deleteStep = 'summary';
+    this.reassignToTrainerId = '';
+    this.deletePreviewLoading = false;
+  }
+
+  getPastBookingsWarning(): string {
+    const count = this.deletePreview?.pastBlockingBookings ?? 0;
+    if (count <= 0) {
+      return '';
+    }
+    const label = count === 1 ? 'booking' : 'bookings';
+    const verb = count === 1 ? 'is' : 'are';
+    return `${count} ${label} appear to be in the past but ${verb} not marked completed.`;
+  }
+
+  async refreshDeletePreview() {
+    if (!this.trainerToDelete) {
+      return;
+    }
+    this.deletePreviewLoading = true;
+    try {
+      this.deletePreview = await firstValueFrom(
+        this.adminService.getTrainerDeletePreview(this.trainerToDelete.id)
+      );
+      this.deleteStep = 'summary';
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to refresh booking summary'));
+    } finally {
+      this.deletePreviewLoading = false;
+    }
+  }
+
+  async deleteTrainer(strategy: 'direct' | 'complete_all' | 'complete_past' | 'reassign') {
+    if (!this.trainerToDelete || this.trainerToDelete.is_active) {
+      return;
+    }
+
+    if (strategy === 'reassign' && !this.reassignToTrainerId) {
+      this.toastService.error('Please select a trainer to reassign bookings to');
+      return;
+    }
+
+    this.deletingTrainer = true;
+    try {
+      const result = await firstValueFrom(
+        this.adminService.deleteTrainer(this.trainerToDelete.id, {
+          strategy,
+          reassignToTrainerId: strategy === 'reassign' ? this.reassignToTrainerId : undefined
+        })
+      );
+
+      if (result?.deleted === false) {
+        this.toastService.success(result.message || 'Past bookings marked as completed');
+        await this.refreshDeletePreview();
+        return;
+      }
+
+      let message = result?.message || 'Trainer deleted successfully';
+      if (strategy === 'complete_all' && result?.updatedCount > 0) {
+        message = `Marked ${result.updatedCount} booking(s) as completed and deleted trainer`;
+      } else if (strategy === 'reassign' && result?.reassignedCount > 0) {
+        message = `Reassigned ${result.reassignedCount} booking(s) and deleted trainer`;
+      }
+
+      this.closeDeleteModal();
       await this.loadTrainers();
-      this.toastService.success('Trainer deleted successfully');
-    } catch (error: any) {
-      this.toastService.error(error.error?.error || error.error?.message || 'Failed to delete trainer');
+      this.toastService.success(message);
+    } catch (error: unknown) {
+      this.toastService.error(
+        getApiErrorMessage(error, 'This trainer has existing bookings. Please complete or reassign them before deleting.')
+      );
+    } finally {
+      this.deletingTrainer = false;
     }
   }
 }

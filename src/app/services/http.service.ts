@@ -41,10 +41,11 @@ export class HttpService {
     });
   }
 
-  delete<T>(endpoint: string): Observable<T> {
+  delete<T>(endpoint: string, body?: unknown): Observable<T> {
     return this.http.delete<T>(`${this.apiUrl}${endpoint}`, {
       headers: this.getHeaders(),
-      withCredentials: true
+      withCredentials: true,
+      body
     });
   }
 }

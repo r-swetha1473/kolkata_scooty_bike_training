@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../services/api.service';
 import { ToastService } from '../../../services/toast.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 
 interface Vehicle {
   id: string;
@@ -296,10 +297,11 @@ interface Vehicle {
     }
 
     .admin-table-container {
-      background: white;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-data-table {
+      min-width: 640px;
     }
 
     .admin-data-table {
@@ -508,6 +510,55 @@ interface Vehicle {
       background: #FEF3C7;
       border-radius: 4px;
     }
+
+    @media (max-width: 768px) {
+      .admin-page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+
+      .admin-page-actions {
+        width: 100%;
+      }
+
+      .admin-page-actions .admin-btn {
+        width: 100%;
+      }
+
+      .admin-filters-content {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-search-group {
+        max-width: 100%;
+      }
+
+      .admin-select {
+        width: 100%;
+        min-width: 100%;
+      }
+
+      .modal-content {
+        width: calc(100% - 24px);
+        padding: 20px;
+        margin: 12px;
+      }
+
+      .modal-actions {
+        flex-direction: column-reverse;
+      }
+
+      .modal-actions button {
+        width: 100%;
+      }
+
+      .admin-pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
   `]
 })
 export class AdminVehiclesComponent implements OnInit {
@@ -539,10 +590,11 @@ export class AdminVehiclesComponent implements OnInit {
 
   async loadVehicles() {
     try {
-      this.vehicles = await this.api.get<Vehicle[]>('/vehicles?include_inactive=true');
+      const result = await this.api.get<Vehicle[]>('/vehicles?include_inactive=true');
+      this.vehicles = Array.isArray(result) ? result : [];
       this.filterVehicles();
-    } catch (error: any) {
-      this.toast.error(error?.error?.error || 'Failed to load vehicles');
+    } catch (error: unknown) {
+      this.toast.error(getApiErrorMessage(error, 'Failed to load vehicles'));
     }
   }
 
@@ -608,19 +660,43 @@ export class AdminVehiclesComponent implements OnInit {
     };
   }
 
+  private buildVehiclePayload(): { name: string; max_per_slot: number; is_active: boolean } {
+    const name = (this.formVehicle.name || '').trim();
+    const maxPerSlot = parseInt(String(this.formVehicle.max_per_slot ?? ''), 10);
+
+    if (!name) {
+      throw new Error('Vehicle name is required');
+    }
+    if (!Number.isFinite(maxPerSlot) || maxPerSlot < 1) {
+      throw new Error('Max per slot must be at least 1');
+    }
+
+    return {
+      name,
+      max_per_slot: maxPerSlot,
+      is_active: Boolean(this.formVehicle.is_active)
+    };
+  }
+
   async saveVehicle() {
     try {
+      const payload = this.buildVehiclePayload();
+
       if (this.editingVehicle) {
-        await this.api.put(`/vehicles/${this.editingVehicle.id}`, this.formVehicle);
+        await this.api.put(`/vehicles/${this.editingVehicle.id}`, payload);
         this.toast.success('Vehicle updated successfully');
       } else {
-        await this.api.post('/vehicles', this.formVehicle);
+        await this.api.post('/vehicles', payload);
         this.toast.success('Vehicle created successfully');
       }
       this.closeModal();
       await this.loadVehicles();
-    } catch (error: any) {
-      this.toast.error(error?.error?.error || 'Failed to save vehicle');
+    } catch (error: unknown) {
+      if (error instanceof Error && !('error' in error)) {
+        this.toast.error(error.message);
+        return;
+      }
+      this.toast.error(getApiErrorMessage(error, 'Failed to save vehicle'));
     }
   }
 
@@ -629,8 +705,8 @@ export class AdminVehiclesComponent implements OnInit {
       await this.api.put(`/vehicles/${id}`, { is_active: !currentStatus });
       this.toast.success(`Vehicle ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
       await this.loadVehicles();
-    } catch (error: any) {
-      this.toast.error(error?.error?.error || 'Failed to update vehicle status');
+    } catch (error: unknown) {
+      this.toast.error(getApiErrorMessage(error, 'Failed to update vehicle status'));
     }
   }
 
@@ -648,8 +724,8 @@ export class AdminVehiclesComponent implements OnInit {
       this.showDeleteModal = false;
       this.vehicleToDelete = null;
       await this.loadVehicles();
-    } catch (error: any) {
-      this.toast.error(error?.error?.error || 'Failed to delete vehicle');
+    } catch (error: unknown) {
+      this.toast.error(getApiErrorMessage(error, 'Failed to delete vehicle'));
     }
   }
 

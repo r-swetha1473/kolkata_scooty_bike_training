@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -239,7 +239,8 @@ export class AdminLoginComponent {
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   async onSubmit() {
@@ -253,8 +254,17 @@ export class AdminLoginComponent {
       );
 
       const profile = this.authService.getUserProfile();
-      if (profile && (profile.role === 'admin' || profile.role === 'superadmin')) {
-        this.router.navigate(['/admin']);
+      if (profile && ['admin', 'superadmin', 'subadmin'].includes(profile.role)) {
+        if (profile.must_change_password) {
+          this.router.navigate(['/admin/change-password']);
+          return;
+        }
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        const target =
+          returnUrl && returnUrl.startsWith('/admin') && !returnUrl.includes('change-password')
+            ? returnUrl
+            : '/admin';
+        this.router.navigateByUrl(target);
       } else {
         this.errorMessage = 'Access denied. Admin credentials required.';
         await this.authService.signOut();

@@ -195,6 +195,33 @@ import { ToastService } from '../../../services/toast.service';
     }
     .btn-reactivate:hover { background: #dbeafe; }
 
+    .admin-data-table { min-width: 720px; }
+
+    @media (max-width: 768px) {
+      .admin-page-header,
+      .admin-filters-content {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-page-actions .admin-btn,
+      .admin-filter-group .admin-select,
+      .admin-search-group {
+        width: 100%;
+        max-width: 100%;
+        min-width: 100%;
+      }
+
+      .admin-pagination {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-pagination-info {
+        justify-content: space-between;
+      }
+    }
+
   `]
 })
 export class AdminUsersComponent implements OnInit {

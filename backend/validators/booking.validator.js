@@ -2,7 +2,7 @@ const { body } = require('express-validator');
 const { handleValidationErrors } = require('./common');
 
 const ID_HINT =
-  'Send JSON with slot_id (UUID), optional trainer_id (active trainer for this booking), and optional phone, notes. Vehicle is assigned automatically by the server.';
+  'Send JSON with slot_id (UUID), vehicle_id (UUID), optional trainer_id (active trainer for this booking), and optional phone, notes.';
 
 /**
  * Validation for POST /api/bookings (runs after normalizeBookingCreateBody).
@@ -23,9 +23,14 @@ const validateBookingCreation = [
     .isUUID()
     .withMessage(`If trainer_id is sent it must be a valid UUID. ${ID_HINT}`),
   body('vehicle_id')
-    .optional({ values: 'falsy' })
+    .notEmpty()
+    .withMessage(`vehicle_id is required. ${ID_HINT}`)
+    .bail()
+    .isString()
+    .withMessage('vehicle_id must be a string UUID')
+    .bail()
     .isUUID()
-    .withMessage('If vehicle_id is sent it must be a UUID (ignored; server assigns the vehicle automatically).'),
+    .withMessage('vehicle_id must be a valid UUID for the selected vehicle type'),
 
   body('phone')
     .optional({ values: 'falsy' })

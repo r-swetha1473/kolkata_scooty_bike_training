@@ -1,22 +1,81 @@
 const express = require('express');
 const db = require('../db');
 const { authenticate, authorize } = require('../middleware/auth');
+const bcrypt = require('bcryptjs');
+const { requireSuperAdmin, requirePermission, loadUserPermissions } = require('../middleware/permissions');
+const permissionsService = require('../services/permissions.service');
 const {
   validateBookingStatusUpdate,
   validateTrainerCreation,
   validateTrainerUpdate,
+  validateTrainerDelete,
   validateUserUpdate,
   validateUserRoleUpdate,
   validateUserCreation,
-  validateSettingsUpdate
+  validateSettingsUpdate,
+  validateAdminChangePassword,
+  validateAdminResetPassword
 } = require('../validators');
 const auditService = require('../services/audit.service');
+const { getClientIp } = require('../utils/authCookie');
+const trainerDeletionService = require('../services/trainerDeletion.service');
 const router = express.Router();
 
 router.use(authenticate);
-router.use(authorize('admin', 'superadmin'));
+router.use(loadUserPermissions);
+router.use(authorize('admin', 'superadmin', 'subadmin'));
 
-router.get('/bookings', async (req, res, next) => {
+router.put('/change-password', validateAdminChangePassword, async (req, res, next) => {
+  try {
+    const { current_password, new_password } = req.body;
+    const ip = getClientIp(req);
+
+    const userResult = await db.query(
+      'SELECT id, email, role, password_hash FROM profiles WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.password_hash) {
+      const error = new Error('Password login is not configured for this account');
+      error.status = 400;
+      error.errorCode = 'NO_PASSWORD_SET';
+      return next(error);
+    }
+
+    const isValid = await bcrypt.compare(current_password, user.password_hash);
+    if (!isValid) {
+      const error = new Error('Current password is incorrect');
+      error.status = 401;
+      error.errorCode = 'INVALID_CURRENT_PASSWORD';
+      return next(error);
+    }
+
+    const passwordHash = await bcrypt.hash(new_password, 10);
+    await db.query(
+      `UPDATE profiles
+       SET password_hash = $1, must_change_password = false, updated_at = NOW()
+       WHERE id = $2`,
+      [passwordHash, req.user.id]
+    );
+
+    await auditService.logPasswordChanged(req.user.id, ip);
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, next) => {
   try {
     const status = req.query.status ? String(req.query.status).trim() : '';
     const startDate = req.query.startDate ? String(req.query.startDate).trim() : '';
@@ -32,7 +91,12 @@ router.get('/bookings', async (req, res, next) => {
     if (searchRaw) {
       const q = `%${searchRaw}%`;
       conditions.push(
-        `(COALESCE(u.full_name, '') ILIKE $${idx} OR COALESCE(u.email, '') ILIKE $${idx} OR COALESCE(u.phone::text, '') ILIKE $${idx} OR COALESCE(p.full_name, '') ILIKE $${idx} OR b.id::text ILIKE $${idx})`
+        `(COALESCE(u.full_name, '') ILIKE $${idx}
+          OR COALESCE(u.email, '') ILIKE $${idx}
+          OR COALESCE(u.phone::text, '') ILIKE $${idx}
+          OR COALESCE(b.phone, '') ILIKE $${idx}
+          OR COALESCE(p.full_name, '') ILIKE $${idx}
+          OR b.id::text ILIKE $${idx})`
       );
       params.push(q);
       idx++;
@@ -63,6 +127,9 @@ router.get('/bookings', async (req, res, next) => {
       `SELECT COUNT(*)::int AS total
        FROM bookings b
        LEFT JOIN slots s ON b.slot_id = s.id
+       LEFT JOIN profiles u ON b.user_id = u.id
+       LEFT JOIN trainers t ON b.trainer_id = t.id
+       LEFT JOIN profiles p ON t.user_id = p.id
        WHERE ${whereSql}`,
       params
     );
@@ -130,7 +197,7 @@ router.get('/bookings', async (req, res, next) => {
   }
 });
 
-router.get('/users', async (req, res, next) => {
+router.get('/users', requirePermission('users', 'view'), async (req, res, next) => {
   try {
     const { role, search } = req.query;
     
@@ -189,7 +256,7 @@ router.get('/users', async (req, res, next) => {
 });
 
 // Get customers only (with booking stats)
-router.get('/customers', async (req, res, next) => {
+router.get('/customers', requirePermission('users', 'view'), async (req, res, next) => {
   try {
     const { search } = req.query;
     
@@ -239,7 +306,7 @@ router.get('/customers', async (req, res, next) => {
 });
 
 // Export customers to CSV
-router.get('/customers/export', async (req, res, next) => {
+router.get('/customers/export', requirePermission('users', 'view'), async (req, res, next) => {
   try {
     const { format = 'csv' } = req.query;
     
@@ -362,7 +429,7 @@ async function getDashboardStats() {
   return stats;
 }
 
-router.get('/dashboard', async (req, res, next) => {
+router.get('/dashboard', requirePermission('dashboard', 'view'), async (req, res, next) => {
   try {
     const stats = await getDashboardStats();
     res.json(stats);
@@ -372,7 +439,7 @@ router.get('/dashboard', async (req, res, next) => {
 });
 
 // Alias for dashboard
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', requirePermission('dashboard', 'view'), async (req, res, next) => {
   try {
     const stats = await getDashboardStats();
     res.json(stats);
@@ -382,7 +449,7 @@ router.get('/stats', async (req, res, next) => {
 });
 
 // Get all trainers with their profile information
-router.get('/trainers', async (req, res, next) => {
+router.get('/trainers', requirePermission('trainers', 'view'), async (req, res, next) => {
   try {
     const result = await db.query(`
       SELECT t.*,
@@ -421,7 +488,7 @@ router.get('/trainers', async (req, res, next) => {
 });
 
 // Create trainer
-router.post('/trainers', validateTrainerCreation, async (req, res, next) => {
+router.post('/trainers', requirePermission('trainers', 'create'), validateTrainerCreation, async (req, res, next) => {
   try {
     const { email, full_name, phone, bio, experience_years, specialization, rating } = req.body;
 
@@ -457,8 +524,16 @@ router.post('/trainers', validateTrainerCreation, async (req, res, next) => {
 
       await client.query('COMMIT');
 
+      const created = trainerResult.rows[0];
+      await auditService.logTrainerCreate(req.user.id, {
+        id: created.id,
+        user_id: created.user_id,
+        bio: created.bio,
+        is_active: created.is_active
+      });
+
       res.status(201).json({
-        ...trainerResult.rows[0],
+        ...created,
         profile: profileResult.rows[0]
       });
     } catch (error) {
@@ -479,7 +554,7 @@ router.post('/trainers', validateTrainerCreation, async (req, res, next) => {
 });
 
 // Update trainer
-router.put('/trainers/:id', validateTrainerUpdate, async (req, res, next) => {
+router.put('/trainers/:id', requirePermission('trainers', 'edit'), validateTrainerUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { is_active, bio, experience_years, specialization, full_name, phone, rating } = req.body;
@@ -515,6 +590,19 @@ router.put('/trainers/:id', validateTrainerUpdate, async (req, res, next) => {
       error.errorCode = 'NO_FIELDS_TO_UPDATE';
       return next(error);
     }
+
+    const beforeResult = await db.query(
+      `SELECT t.id, t.bio, t.experience_years, t.specialization, t.rating, t.is_active, p.full_name, p.phone
+       FROM trainers t JOIN profiles p ON t.user_id = p.id WHERE t.id = $1`,
+      [id]
+    );
+    if (beforeResult.rows.length === 0) {
+      const error = new Error('Trainer not found');
+      error.status = 404;
+      error.errorCode = 'TRAINER_NOT_FOUND';
+      return next(error);
+    }
+    const beforeData = beforeResult.rows[0];
 
     const client = await db.pool.connect();
     try {
@@ -564,6 +652,18 @@ router.put('/trainers/:id', validateTrainerUpdate, async (req, res, next) => {
       await client.query('COMMIT');
 
       const row = result.rows[0];
+      const afterData = {
+        id: row.id,
+        bio: row.bio,
+        experience_years: row.experience_years,
+        specialization: row.specialization,
+        rating: parseFloat(row.rating),
+        is_active: row.is_active,
+        full_name: row.full_name,
+        phone: row.phone
+      };
+      await auditService.logTrainerUpdate(req.user.id, id, beforeData, afterData);
+
       res.json({
         id: row.id,
         user_id: row.user_id,
@@ -595,39 +695,36 @@ router.put('/trainers/:id', validateTrainerUpdate, async (req, res, next) => {
   }
 });
 
-// Delete trainer
-router.delete('/trainers/:id', async (req, res, next) => {
+// Trainer delete preview (booking summary)
+router.get('/trainers/:id/delete-preview', requirePermission('trainers', 'delete'), async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const preview = await trainerDeletionService.getTrainerDeletePreview(req.params.id);
+    res.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
 
-    const bookingsCheck = await db.query(
-      'SELECT COUNT(*) as count FROM bookings WHERE trainer_id = $1',
-      [id]
-    );
+// Delete trainer with optional strategy (direct | complete_all | reassign)
+router.delete('/trainers/:id', requirePermission('trainers', 'delete'), validateTrainerDelete, async (req, res, next) => {
+  try {
+    const strategy = req.body?.strategy || 'direct';
+    const reassignToTrainerId = req.body?.reassignToTrainerId;
 
-    if (parseInt(bookingsCheck.rows[0].count) > 0) {
-      const error = new Error('Cannot delete trainer with existing bookings. Please cancel or complete all bookings for this trainer first');
-      error.status = 400;
-      error.errorCode = 'CANNOT_DELETE_TRAINER';
-      return next(error);
-    }
+    const result = await trainerDeletionService.deleteTrainerWithStrategy({
+      trainerId: req.params.id,
+      adminId: req.user.id,
+      strategy,
+      reassignToTrainerId
+    });
 
-    const result = await db.query('DELETE FROM trainers WHERE id = $1 RETURNING *', [id]);
-
-    if (result.rows.length === 0) {
-      const error = new Error('Trainer not found');
-      error.status = 404;
-      error.errorCode = 'TRAINER_NOT_FOUND';
-      return next(error);
-    }
-
-    res.json({ message: 'Trainer deleted successfully' });
+    res.json(result);
   } catch (error) {
     if (error.code === '23503') {
-      const error = new Error('Cannot delete trainer. This trainer has related data that must be removed first');
-      error.status = 400;
-      error.errorCode = 'CANNOT_DELETE_TRAINER';
-      return next(error);
+      const fkError = new Error('Cannot delete trainer. This trainer has related data that must be removed first');
+      fkError.status = 400;
+      fkError.errorCode = 'CANNOT_DELETE_TRAINER';
+      return next(fkError);
     }
     next(error);
   }
@@ -644,7 +741,7 @@ router.use('/slots', (req, res) => {
 });
 
 // Get settings
-router.get('/settings', async (req, res, next) => {
+router.get('/settings', requirePermission('settings', 'view'), async (req, res, next) => {
   try {
     const result = await db.query('SELECT * FROM settings ORDER BY key');
     
@@ -666,10 +763,14 @@ router.get('/settings', async (req, res, next) => {
 });
 
 // Update settings
-router.put('/settings', validateSettingsUpdate, async (req, res, next) => {
+router.put('/settings', requirePermission('settings', 'edit'), validateSettingsUpdate, async (req, res, next) => {
   try {
     const settings = req.body;
     const userId = req.user.id;
+
+    const beforeRows = await db.query('SELECT key, value FROM settings');
+    const beforeSettings = {};
+    beforeRows.rows.forEach((r) => { beforeSettings[r.key] = r.value; });
 
     for (const [key, data] of Object.entries(settings)) {
       const { value } = data;
@@ -685,6 +786,12 @@ router.put('/settings', validateSettingsUpdate, async (req, res, next) => {
       `, [key, JSON.stringify(value), data.description || '', userId]);
     }
 
+    const afterSettings = { ...beforeSettings };
+    for (const [key, data] of Object.entries(settings)) {
+      afterSettings[key] = data.value;
+    }
+    await auditService.logSettingsUpdate(userId, beforeSettings, afterSettings);
+
     res.json({ message: 'Settings updated successfully' });
   } catch (error) {
     next(error);
@@ -692,7 +799,7 @@ router.put('/settings', validateSettingsUpdate, async (req, res, next) => {
 });
 
 // Update booking status
-router.put('/bookings/:id/status', validateBookingStatusUpdate, async (req, res, next) => {
+router.put('/bookings/:id/status', requirePermission('bookings', 'edit'), validateBookingStatusUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -743,6 +850,8 @@ router.put('/bookings/:id/status', validateBookingStatusUpdate, async (req, res,
     const updatedBooking = result.rows[0];
     console.log(`[Admin] Booking ${id} status updated successfully to: ${updatedBooking.status}`);
 
+    await auditService.logBookingStatusChange(req.user.id, id, bookingCheck.rows[0], status);
+
     res.json(updatedBooking);
   } catch (error) {
     console.error(`[Admin] Error updating booking status:`, error);
@@ -751,7 +860,7 @@ router.put('/bookings/:id/status', validateBookingStatusUpdate, async (req, res,
 });
 
 // Delete booking
-router.delete('/bookings/:id', async (req, res, next) => {
+router.delete('/bookings/:id', requirePermission('bookings', 'delete'), async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -763,6 +872,8 @@ router.delete('/bookings/:id', async (req, res, next) => {
       error.errorCode = 'BOOKING_NOT_FOUND';
       return next(error);
     }
+
+    await auditService.logBookingDelete(req.user.id, result.rows[0]);
 
     res.status(200).json({ message: 'Booking deleted successfully' });
   } catch (error) {
@@ -824,8 +935,58 @@ router.post('/users', validateUserCreation, async (req, res, next) => {
   }
 });
 
+// Super admin password reset for admin/subadmin accounts
+router.put('/users/:id/reset-password', requireSuperAdmin, validateAdminResetPassword, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    const targetResult = await db.query(
+      'SELECT id, email, role FROM profiles WHERE id = $1',
+      [id]
+    );
+
+    if (targetResult.rows.length === 0) {
+      const error = new Error('User not found');
+      error.status = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      return next(error);
+    }
+
+    const target = targetResult.rows[0];
+
+    if (target.role === 'superadmin') {
+      const error = new Error('Cannot reset super admin passwords');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
+    }
+
+    if (!['admin', 'subadmin'].includes(target.role)) {
+      const error = new Error('Password reset is only allowed for admin and sub admin accounts');
+      error.status = 403;
+      error.errorCode = 'FORBIDDEN';
+      return next(error);
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await db.query(
+      `UPDATE profiles
+       SET password_hash = $1, must_change_password = true, updated_at = NOW()
+       WHERE id = $2`,
+      [passwordHash, id]
+    );
+
+    await auditService.logPasswordReset(req.user.id, id, { target_role: target.role });
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Update user (admin can edit customer details)
-router.put('/users/:id', validateUserUpdate, async (req, res, next) => {
+router.put('/users/:id', requirePermission('users', 'edit'), validateUserUpdate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { full_name, phone, email, total_bookings, weekly_booking_count, inactive_blocked } = req.body;
@@ -1033,15 +1194,8 @@ router.delete('/users/:id', async (req, res, next) => {
 });
 
 // Get admin audit logs (admin only)
-router.get('/audit-logs', authenticate, async (req, res, next) => {
+router.get('/audit-logs', requirePermission('audit_logs', 'view'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { limit = 100, offset = 0, entity_type, action_type, admin_id } = req.query;
     const safeLimit = Number.parseInt(limit, 10);
     const safeOffset = Number.parseInt(offset, 10);
@@ -1132,6 +1286,238 @@ router.get('/audit-logs', authenticate, async (req, res, next) => {
     params.push(finalLimit, finalOffset);
     const result = await db.query(query, params);
     res.json(result.rows || []);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// --- Sub Admin Management (superadmin only) ---
+
+router.get('/sub-admins', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, email, full_name, phone, role, admin_is_active, must_change_password, created_at, updated_at
+       FROM profiles
+       WHERE role = 'subadmin'
+       ORDER BY created_at DESC`
+    );
+
+    const subAdmins = await Promise.all(
+      result.rows.map(async (row) => ({
+        ...row,
+        permissions: await permissionsService.getPermissionsList(row.id)
+      }))
+    );
+
+    res.json(subAdmins);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, email, full_name, phone, role, admin_is_active, created_at, updated_at
+       FROM profiles WHERE id = $1 AND role = 'subadmin'`,
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      const error = new Error('Sub admin not found');
+      error.status = 404;
+      error.errorCode = 'SUB_ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    const subAdmin = result.rows[0];
+    subAdmin.permissions = await permissionsService.getPermissionsList(subAdmin.id);
+    res.json(subAdmin);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sub-admins', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { email, full_name, phone, password, permissions } = req.body;
+
+    if (!email || !full_name || !password) {
+      const error = new Error('email, full_name, and password are required');
+      error.status = 400;
+      error.errorCode = 'MISSING_REQUIRED_FIELDS';
+      return next(error);
+    }
+
+    if (password.length < 8) {
+      const error = new Error('Password must be at least 8 characters');
+      error.status = 400;
+      error.errorCode = 'WEAK_PASSWORD';
+      return next(error);
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const resolvedPhone = phone || `9${Date.now().toString().slice(-9)}`;
+
+    const result = await db.query(
+      `INSERT INTO profiles (email, full_name, phone, role, password_hash, admin_is_active, must_change_password)
+       VALUES ($1, $2, $3, 'subadmin', $4, true, true)
+       RETURNING id, email, full_name, phone, role, admin_is_active, must_change_password, created_at`,
+      [email.trim().toLowerCase(), full_name.trim(), resolvedPhone, passwordHash]
+    );
+
+    const created = result.rows[0];
+    created.permissions = await permissionsService.upsertPermissions(created.id, permissions);
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'CREATE_SUB_ADMIN',
+      entityType: 'sub_admin',
+      entityId: created.id,
+      beforeValue: null,
+      afterValue: { id: created.id, email: created.email, full_name: created.full_name },
+      details: { permissions: created.permissions }
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    if (error.code === '23505') {
+      const dup = new Error('Email or phone already exists');
+      dup.status = 409;
+      dup.errorCode = 'DUPLICATE_CONTACT';
+      return next(dup);
+    }
+    next(error);
+  }
+});
+
+router.put('/sub-admins/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { full_name, email, phone, permissions } = req.body;
+    const before = await db.query(
+      `SELECT id, email, full_name, phone, role, admin_is_active FROM profiles WHERE id = $1 AND role = 'subadmin'`,
+      [req.params.id]
+    );
+
+    if (before.rows.length === 0) {
+      const error = new Error('Sub admin not found');
+      error.status = 404;
+      error.errorCode = 'SUB_ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (full_name !== undefined) {
+      updates.push(`full_name = $${idx++}`);
+      params.push(full_name.trim());
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${idx++}`);
+      params.push(email.trim().toLowerCase());
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${idx++}`);
+      params.push(phone);
+    }
+
+    let updated = before.rows[0];
+    if (updates.length > 0) {
+      updates.push('updated_at = NOW()');
+      params.push(req.params.id);
+      const result = await db.query(
+        `UPDATE profiles SET ${updates.join(', ')} WHERE id = $${idx}
+         RETURNING id, email, full_name, phone, role, admin_is_active, created_at, updated_at`,
+        params
+      );
+      updated = result.rows[0];
+    }
+
+    if (permissions !== undefined) {
+      updated.permissions = await permissionsService.upsertPermissions(req.params.id, permissions);
+    } else {
+      updated.permissions = await permissionsService.getPermissionsList(req.params.id);
+    }
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: 'UPDATE_SUB_ADMIN',
+      entityType: 'sub_admin',
+      entityId: req.params.id,
+      beforeValue: before.rows[0],
+      afterValue: updated,
+      details: { permissions: updated.permissions }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    if (error.code === '23505') {
+      const dup = new Error('Email or phone already exists');
+      dup.status = 409;
+      dup.errorCode = 'DUPLICATE_CONTACT';
+      return next(dup);
+    }
+    next(error);
+  }
+});
+
+router.put('/sub-admins/:id/status', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { is_active } = req.body;
+    if (typeof is_active !== 'boolean') {
+      const error = new Error('is_active boolean is required');
+      error.status = 400;
+      error.errorCode = 'INVALID_STATUS';
+      return next(error);
+    }
+
+    const before = await db.query(
+      `SELECT id, email, admin_is_active FROM profiles WHERE id = $1 AND role = 'subadmin'`,
+      [req.params.id]
+    );
+    if (before.rows.length === 0) {
+      const error = new Error('Sub admin not found');
+      error.status = 404;
+      error.errorCode = 'SUB_ADMIN_NOT_FOUND';
+      return next(error);
+    }
+
+    const result = await db.query(
+      `UPDATE profiles SET admin_is_active = $1, updated_at = NOW()
+       WHERE id = $2 AND role = 'subadmin'
+       RETURNING id, email, full_name, phone, role, admin_is_active, created_at, updated_at`,
+      [is_active, req.params.id]
+    );
+
+    await auditService.logAdminAction({
+      adminId: req.user.id,
+      actionType: is_active ? 'ACTIVATE_SUB_ADMIN' : 'DEACTIVATE_SUB_ADMIN',
+      entityType: 'sub_admin',
+      entityId: req.params.id,
+      beforeValue: before.rows[0],
+      afterValue: result.rows[0],
+      details: {}
+    });
+
+    const row = result.rows[0];
+    row.permissions = await permissionsService.getPermissionsList(row.id);
+    res.json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/admins', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, email, full_name, phone, role, admin_is_active, must_change_password, created_at, updated_at
+       FROM profiles
+       WHERE role = 'admin'
+       ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
   } catch (error) {
     next(error);
   }

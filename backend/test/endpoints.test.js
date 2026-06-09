@@ -370,6 +370,33 @@ async function runTests() {
     body: { email: 'trainer@test.com', full_name: 'Test Trainer', bio: 'Test bio' },
     description: 'Create trainer'
   });
+  await testEndpoint('GET', '/api/admin/trainers/123e4567-e89b-12d3-a456-426614174000/delete-preview', {
+    auth: 'admin',
+    description: 'Trainer delete preview (booking summary)'
+  });
+  await testEndpoint('DELETE', '/api/admin/trainers/123e4567-e89b-12d3-a456-426614174000', {
+    auth: 'admin',
+    body: { strategy: 'direct' },
+    description: 'Delete trainer (direct strategy)'
+  });
+  await testEndpoint('DELETE', '/api/admin/trainers/123e4567-e89b-12d3-a456-426614174000', {
+    auth: 'admin',
+    body: { strategy: 'complete_all' },
+    description: 'Delete trainer (complete_all strategy)'
+  });
+  await testEndpoint('DELETE', '/api/admin/trainers/123e4567-e89b-12d3-a456-426614174000', {
+    auth: 'admin',
+    body: { strategy: 'complete_past' },
+    description: 'Delete trainer (complete_past strategy)'
+  });
+  await testEndpoint('DELETE', '/api/admin/trainers/123e4567-e89b-12d3-a456-426614174000', {
+    auth: 'admin',
+    body: {
+      strategy: 'reassign',
+      reassignToTrainerId: '223e4567-e89b-12d3-a456-426614174001'
+    },
+    description: 'Delete trainer (reassign strategy)'
+  });
   await testEndpoint('GET', '/api/admin/slots', {
     auth: 'admin',
     expectedStatus: 410,
@@ -387,6 +414,35 @@ async function runTests() {
   await testEndpoint('GET', '/api/admin/audit-logs', {
     auth: 'admin',
     description: 'Get audit logs'
+  });
+  await testEndpoint('PUT', '/api/admin/change-password', {
+    auth: 'admin',
+    body: {
+      current_password: 'wrong-old-pass',
+      new_password: 'newpass123',
+      confirm_password: 'newpass123'
+    },
+    description: 'Change own password (invalid current)'
+  });
+  await testEndpoint('PUT', '/api/admin/users/123e4567-e89b-12d3-a456-426614174000/reset-password', {
+    auth: 'admin',
+    expectedStatus: 403,
+    body: { password: 'resetpass123' },
+    description: 'Reset password as regular admin (should fail)'
+  });
+  await testEndpoint('PUT', '/api/admin/users/123e4567-e89b-12d3-a456-426614174000/reset-password', {
+    auth: 'superadmin',
+    body: { password: 'resetpass123' },
+    description: 'Reset password as superadmin'
+  });
+  await testEndpoint('GET', '/api/admin/admins', {
+    auth: 'superadmin',
+    description: 'List admin accounts'
+  });
+  await testEndpoint('GET', '/api/admin/admins', {
+    auth: 'admin',
+    expectedStatus: 403,
+    description: 'List admin accounts as regular admin (should fail)'
   });
 
   // Admin Management Routes

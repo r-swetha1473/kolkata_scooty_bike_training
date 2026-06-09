@@ -6,11 +6,14 @@ const {
   validateBookingStatusUpdate,
   validateTrainerCreation,
   validateTrainerUpdate,
+  validateTrainerDelete,
   validateUserUpdate,
   validateUserRoleUpdate,
   validateUserCreation,
   validateSettingsUpdate,
-  validateSettingUpdate
+  validateSettingUpdate,
+  validateAdminChangePassword,
+  validateAdminResetPassword
 } = require('./admin.validator');
 const {
   validateAdminCreation,
@@ -35,11 +38,14 @@ module.exports = {
   validateBookingStatusUpdate,
   validateTrainerCreation,
   validateTrainerUpdate,
+  validateTrainerDelete,
   validateUserUpdate,
   validateUserRoleUpdate,
   validateUserCreation,
   validateSettingsUpdate,
   validateSettingUpdate,
+  validateAdminChangePassword,
+  validateAdminResetPassword,
   
   // Admin management validators
   validateAdminCreation,

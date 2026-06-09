@@ -6,17 +6,45 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const { validateLogin } = require('../validators');
+const auditService = require('../services/audit.service');
+const permissionsService = require('../services/permissions.service');
+const { setAuthCookie, clearAuthCookie, getClientIp } = require('../utils/authCookie');
 const router = express.Router();
 
-// Rate limiter for login endpoint (5 attempts per 15 minutes)
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: 'Too many login attempts. Try again later.'
 });
 
+const ADMIN_ROLES = ['admin', 'superadmin', 'subadmin'];
+
+function signToken(user) {
+  return jwt.sign(
+    { userId: user.id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+async function buildAuthUserResponse(user) {
+  const { password_hash, ...userWithoutPassword } = user;
+  const payload = {
+    ...userWithoutPassword,
+    must_change_password: user.must_change_password === true
+  };
+
+  if (user.role === 'subadmin') {
+    payload.permissions = await permissionsService.getPermissionsList(user.id);
+  }
+
+  return payload;
+}
+
 // Admin email/password login
 router.post('/login', loginLimiter, validateLogin, async (req, res, next) => {
+  const ip = getClientIp(req);
+
   try {
     const { email, password } = req.body;
 
@@ -27,23 +55,17 @@ router.post('/login', loginLimiter, validateLogin, async (req, res, next) => {
       return next(error);
     }
 
-    // Check if JWT_SECRET is configured
     if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET is not set in environment variables');
       const error = new Error('Server configuration error. JWT_SECRET is missing.');
       error.status = 500;
       error.errorCode = 'SERVER_CONFIG_ERROR';
       return next(error);
     }
 
-    // Find user by email
-    const result = await db.query(
-      'SELECT * FROM profiles WHERE email = $1',
-      [email]
-    );
+    const result = await db.query('SELECT * FROM profiles WHERE email = $1', [email]);
 
     if (result.rows.length === 0) {
-      console.log(`Login attempt failed: User not found for email: ${email}`);
+      await auditService.logAuthEvent(null, 'LOGIN_FAILED', { email, reason: 'user_not_found' }, ip);
       const error = new Error('Invalid email or password');
       error.status = 401;
       error.errorCode = 'INVALID_CREDENTIALS';
@@ -52,104 +74,97 @@ router.post('/login', loginLimiter, validateLogin, async (req, res, next) => {
 
     const user = result.rows[0];
 
-    // Check if user has password_hash (admin/superadmin)
     if (!user.password_hash) {
-      console.log(`Login attempt failed: No password_hash for user: ${email}`);
+      await auditService.logAuthEvent(user.id, 'LOGIN_FAILED', { email, reason: 'no_password' }, ip);
       const error = new Error('Invalid email or password');
       error.status = 401;
       error.errorCode = 'INVALID_CREDENTIALS';
       return next(error);
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
-      console.log(`Login attempt failed: Invalid password for user: ${email}`);
+      await auditService.logAuthEvent(user.id, 'LOGIN_FAILED', { email, reason: 'invalid_password' }, ip);
       const error = new Error('Invalid email or password');
       error.status = 401;
       error.errorCode = 'INVALID_CREDENTIALS';
       return next(error);
     }
 
-    // Check if user is admin or superadmin
-    if (user.role !== 'admin' && user.role !== 'superadmin') {
-      console.log(`Login attempt failed: Insufficient role for user: ${email}, role: ${user.role}`);
+    if (!ADMIN_ROLES.includes(user.role)) {
+      await auditService.logAuthEvent(user.id, 'LOGIN_FAILED', { email, reason: 'insufficient_role', role: user.role }, ip);
       const error = new Error('Access denied. Admin credentials required.');
       error.status = 403;
       error.errorCode = 'ACCESS_DENIED';
       return next(error);
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    if (user.admin_is_active === false) {
+      await auditService.logAuthEvent(user.id, 'LOGIN_FAILED', { email, reason: 'account_inactive' }, ip);
+      const error = new Error('Account is deactivated. Contact super admin.');
+      error.status = 403;
+      error.errorCode = 'ADMIN_ACCOUNT_INACTIVE';
+      return next(error);
+    }
 
-    // Return token and user (without password_hash)
-    const { password_hash, ...userWithoutPassword } = user;
+    const token = signToken(user);
+    setAuthCookie(res, token);
 
-    console.log(`Login successful for user: ${email}, role: ${user.role}`);
-    res.json({
-      token,
-      user: userWithoutPassword
-    });
+    const userResponse = await buildAuthUserResponse(user);
+    await auditService.logAuthEvent(user.id, 'LOGIN_SUCCESS', { email, role: user.role }, ip);
+
+    res.json({ token, user: userResponse });
   } catch (error) {
     console.error('Login error:', error);
     next(error);
   }
 });
 
-router.get('/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
+const isGoogleOAuthEnabled = () =>
+  !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+router.get('/google', (req, res, next) => {
+  if (!isGoogleOAuthEnabled()) {
+    const error = new Error('Google OAuth is not configured on this server');
+    error.status = 503;
+    error.errorCode = 'OAUTH_NOT_CONFIGURED';
+    return next(error);
+  }
+  return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
 
 router.get('/google/callback',
+  (req, res, next) => {
+    if (!isGoogleOAuthEnabled()) {
+      const error = new Error('Google OAuth is not configured on this server');
+      error.status = 503;
+      error.errorCode = 'OAUTH_NOT_CONFIGURED';
+      return next(error);
+    }
+    return next();
+  },
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
       const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
 
-      // Ensure user data is stored (passport should have done this, but verify)
       if (!req.user || !req.user.id) {
         return res.redirect(`${frontendUrl}/booking?error=auth_failed`);
       }
 
-      // Fetch fresh user data from database to ensure we have latest
-      console.log(`[Google OAuth Callback] Fetching user data for ID: ${req.user.id}`);
       const userResult = await db.query('SELECT * FROM profiles WHERE id = $1', [req.user.id]);
       if (userResult.rows.length === 0) {
-        console.error(`[Google OAuth Callback] User not found in database: ${req.user.id}`);
         return res.redirect(`${frontendUrl}/booking?error=user_not_found`);
       }
 
       const user = userResult.rows[0];
-      console.log(`[Google OAuth Callback] User found: ${user.email}, ID: ${user.id}, Role: ${user.role}`);
-      console.log('[Google OAuth Callback] req.user exists:', !!req.user);
+      const token = signToken(user);
+      setAuthCookie(res, token);
 
-      // Generate JWT token
-      const token = jwt.sign(
-        { userId: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      await auditService.logAuthEvent(user.id, 'LOGIN_SUCCESS', { method: 'google_oauth', email: user.email }, getClientIp(req));
 
-      // Store token in httpOnly cookie
-      res.cookie('auth_token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        // Vercel frontend and Render backend are cross-site, so cookie must be None in production.
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-      
-      // Fallback for browsers/environments where third-party cookies are blocked:
-      // include JWT in query once so Angular can store it and continue with Authorization header.
-      const redirectUrl = `${frontendUrl}/profile?token=${encodeURIComponent(token)}`;
-      console.log('Redirecting to:', redirectUrl);
-      res.redirect(redirectUrl);
+      res.redirect(`${frontendUrl}/profile?oauth=success`);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
@@ -158,22 +173,22 @@ router.get('/google/callback',
   }
 );
 
-router.post('/logout', (req, res) => {
+router.post('/logout', authenticate, async (req, res) => {
+  const ip = getClientIp(req);
+  await auditService.logAuthEvent(req.user.id, 'LOGOUT', { email: req.user.email }, ip);
+  clearAuthCookie(res);
   req.logout(() => {
-    // Clear the auth_token cookie
-    res.clearCookie('auth_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    });
     res.json({ message: 'Logged out successfully' });
   });
 });
 
-router.get('/me', authenticate, (req, res) => {
-  // Remove password_hash from response
-  const { password_hash, ...userWithoutPassword } = req.user;
-  res.json(userWithoutPassword);
+router.get('/me', authenticate, async (req, res, next) => {
+  try {
+    const userResponse = await buildAuthUserResponse(req.user);
+    res.json(userResponse);
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

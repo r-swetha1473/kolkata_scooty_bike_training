@@ -7,6 +7,12 @@ import { ApiService, Trainer } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
 import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
+import {
+  getVehicleCategoryOptions,
+  getTotalAvailableSeats,
+  slotHasVehicleAvailability,
+  VehicleCategoryOption
+} from '../../utils/vehicle.utils';
 import { firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 
@@ -21,6 +27,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   slots: Slot[] = [];
   selectedDate: string = '';
   selectedSlot: Slot | null = null;
+  showVehicleModal = false;
   showBookingModal = false;
   showConfirmation = false;
   showLoginPrompt = false;
@@ -35,6 +42,9 @@ export class BookingComponent implements OnInit, OnDestroy {
   trainersForSlot: Trainer[] = [];
   trainersLoadError = '';
   trainersLoading = false;
+
+  vehicleOptions: VehicleCategoryOption[] = [];
+  selectedVehicleId = '';
 
   bookingForm = {
     phone: '',
@@ -188,7 +198,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async selectSlot(slot: Slot) {
-    if (this.isSlotDisabled(slot) || this.isSlotFull(slot) || this.isSlotBooked(slot)) {
+    if (this.isSlotDisabled(slot) || this.isSlotFull(slot)) {
       return;
     }
 
@@ -197,7 +207,27 @@ export class BookingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Load user profile to pre-populate phone number if available
+    this.selectedSlot = slot;
+    this.vehicleOptions = getVehicleCategoryOptions(slot.vehicle_capacities);
+    this.selectedVehicleId = '';
+    this.showVehicleModal = true;
+  }
+
+  closeVehicleModal() {
+    this.showVehicleModal = false;
+    this.selectedSlot = null;
+    this.vehicleOptions = [];
+    this.selectedVehicleId = '';
+  }
+
+  async selectVehicle(option: VehicleCategoryOption) {
+    if (!option.available || !option.vehicle_id || !this.selectedSlot) {
+      return;
+    }
+
+    this.selectedVehicleId = option.vehicle_id;
+    this.showVehicleModal = false;
+
     try {
       const user = await this.apiService.get<any>('/auth/me');
       if (user?.phone && !String(user.phone).startsWith('GOOGLE_')) {
@@ -207,7 +237,6 @@ export class BookingComponent implements OnInit, OnDestroy {
       /* phone stays empty */
     }
 
-    this.selectedSlot = slot;
     this.showBookingModal = true;
     this.captchaVerified = false;
     this.trainersForSlot = [];
@@ -217,7 +246,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     try {
       this.trainersForSlot = await firstValueFrom(
-        this.apiService.getAvailableTrainersForSlot(slot.id)
+        this.apiService.getAvailableTrainersForSlot(this.selectedSlot.id)
       );
       if (this.trainersForSlot.length === 1) {
         this.bookingForm.trainerId = this.trainersForSlot[0].id;
@@ -226,6 +255,16 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.trainersLoadError = 'Could not load trainers. Please try again.';
     } finally {
       this.trainersLoading = false;
+    }
+  }
+
+  backToVehicleSelection() {
+    this.showBookingModal = false;
+    this.captchaVerified = false;
+    this.resetForm();
+    if (this.selectedSlot) {
+      this.vehicleOptions = getVehicleCategoryOptions(this.selectedSlot.vehicle_capacities);
+      this.showVehicleModal = true;
     }
   }
 
@@ -239,7 +278,10 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   closeBookingModal() {
     this.showBookingModal = false;
+    this.showVehicleModal = false;
     this.selectedSlot = null;
+    this.selectedVehicleId = '';
+    this.vehicleOptions = [];
     this.captchaVerified = false;
     this.resetForm();
   }
@@ -252,7 +294,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     if (this.bookingInFlight || this.loading) {
       return;
     }
-    if (!this.selectedSlot || !this.captchaVerified) return;
+    if (!this.selectedSlot || !this.captchaVerified || !this.selectedVehicleId) return;
 
     if (!this.bookingForm.trainerId) {
       this.errorMessage = 'Please select a trainer.';
@@ -274,13 +316,12 @@ export class BookingComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const vehicleId = this.getBookableVehicleId(this.selectedSlot);
       await firstValueFrom(
         this.apiService.createBooking(this.selectedSlot.id, {
           phone: this.bookingForm.phone.trim(),
           notes: (this.bookingForm.notes || '').trim(),
           trainer_id: this.bookingForm.trainerId.trim(),
-          vehicle_id: vehicleId || undefined
+          vehicle_id: this.selectedVehicleId
         })
       );
 
@@ -314,6 +355,10 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.errorMessage =
           body?.message ||
           'That trainer was just taken for this slot. Choose another trainer and try again.';
+      } else if (code === 'VEHICLE_CAPACITY_FULL') {
+        this.errorMessage =
+          body?.message ||
+          'That vehicle type was just fully booked. Go back and choose another vehicle or slot.';
       } else {
         const fromValidation =
           Array.isArray(body?.errors) && body.errors.length
@@ -357,15 +402,28 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   isSlotAvailable(slot: Slot): boolean {
-    return slot.status === 'available' && slot.booked_count < slot.capacity;
+    if (this.isSlotDisabled(slot) || this.isSlotFull(slot)) {
+      return false;
+    }
+    return slotHasVehicleAvailability(slot);
   }
 
-  isSlotBooked(slot: Slot): boolean {
-    return slot.booked_count > 0 && slot.booked_count < slot.capacity;
+  isSlotPartiallyBooked(slot: Slot): boolean {
+    if (this.isSlotDisabled(slot) || this.isSlotFull(slot)) {
+      return false;
+    }
+    const booked = Number(slot.booked_count) || 0;
+    return booked > 0 && slotHasVehicleAvailability(slot);
   }
 
   isSlotFull(slot: Slot): boolean {
-    return slot.booked_count >= slot.capacity || slot.status === 'full';
+    if (slot.status === 'full') {
+      return true;
+    }
+    if (this.isSlotDisabled(slot)) {
+      return false;
+    }
+    return !slotHasVehicleAvailability(slot);
   }
 
   isSlotDisabled(slot: Slot): boolean {
@@ -408,15 +466,16 @@ export class BookingComponent implements OnInit, OnDestroy {
     return selected.getTime() <= today.getTime();
   }
 
-  private getBookableVehicleId(slot: Slot | null): string {
-    if (!slot || !Array.isArray(slot.vehicle_capacities)) {
+  getRemainingSeats(slot: Slot): number {
+    return getTotalAvailableSeats(slot);
+  }
+
+  getSelectedVehicleLabel(): string {
+    if (!this.selectedVehicleId || !this.selectedSlot) {
       return '';
     }
-    const match = slot.vehicle_capacities.find((v) => {
-      const cap = Number(v?.capacity || 0);
-      const booked = Number(v?.booked || 0);
-      return !!v?.vehicle_id && cap > booked;
-    });
-    return match?.vehicle_id || '';
+    const options = getVehicleCategoryOptions(this.selectedSlot.vehicle_capacities);
+    const match = options.find((o) => o.vehicle_id === this.selectedVehicleId);
+    return match?.label || '';
   }
 }

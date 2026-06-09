@@ -279,6 +279,10 @@
   background: var(--status-success);
 }
 
+.dot.partial {
+  background: #f59e0b;
+}
+
 .dot.booked {
   background: #94a3b8;
 }
@@ -336,6 +340,22 @@
   border-color: var(--status-success);
 }
 
+.slot-card.partial {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  cursor: pointer;
+}
+
+.slot-card.partial::before {
+  background: #f59e0b;
+}
+
+.slot-card.partial:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: #d97706;
+}
+
 .slot-card.booked {
   background: var(--bg-light);
   border-color: var(--border-light);
@@ -385,6 +405,7 @@
 }
 
 .slot-card.available .slot-status-text { color: var(--status-success-text); }
+.slot-card.partial .slot-status-text { color: #b45309; }
 .slot-card.booked .slot-status-text { color: var(--text-secondary); }
 .slot-card.full .slot-status-text { color: var(--status-error-text); }
 .slot-card.disabled .slot-status-text { color: var(--text-muted); }
@@ -766,6 +787,77 @@
 /* ============================================
    RESPONSIVE DESIGN
    ============================================ */
+
+.selected-vehicle {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary-blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.vehicle-modal {
+  max-width: 480px;
+}
+
+.vehicle-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.vehicle-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 20px;
+  border: 2px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-white);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.vehicle-option.available:hover {
+  border-color: var(--primary-blue);
+  background: #f0f7ff;
+  transform: translateY(-1px);
+}
+
+.vehicle-option.unavailable {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--bg-light);
+}
+
+.vehicle-option-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.vehicle-option-seats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--status-success-text);
+}
+
+.vehicle-option-seats.full-label {
+  color: var(--status-error-text);
+}
 
 @media (max-width: 768px) {
   .page-hero {

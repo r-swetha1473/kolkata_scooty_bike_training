@@ -21,6 +21,7 @@ const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const {
   assignTrainerAndVehicleForSlot,
+  assignTrainerForSlot,
   assignVehicleForSlot
 } = require('../services/bookingAssignment.service');
 const router = express.Router();
@@ -184,10 +185,7 @@ router.post(
       }
     }
 
-    let { slot_id, phone, notes, trainer_id: clientTrainerId } = req.body;
-    // Vehicle is always chosen server-side (capacity-aware). Trainer may be chosen by the customer.
-    delete req.body.vehicle_id;
-    delete req.body.vehicleId;
+    let { slot_id, phone, notes, trainer_id: clientTrainerId, vehicle_id: clientVehicleId } = req.body;
 
     if (!slot_id) {
       const error = new Error('slot_id is required');
@@ -292,6 +290,37 @@ router.post(
     let trainer_id;
     let vehicle_id;
 
+    const chosenVehicleId =
+      clientVehicleId && uuidPattern.test(String(clientVehicleId).trim())
+        ? String(clientVehicleId).trim()
+        : null;
+
+    if (chosenVehicleId) {
+      const vehicleRow = await client.query(
+        `SELECT id FROM vehicles WHERE id = $1 AND is_active = true`,
+        [chosenVehicleId]
+      );
+      if (vehicleRow.rows.length === 0) {
+        const err = new Error('Selected vehicle is not available.');
+        err.status = 400;
+        err.errorCode = 'VEHICLE_INACTIVE';
+        throw err;
+      }
+      const earlyVehicleCheck = await vehicleService.checkVehicleAvailability(
+        slot_id,
+        chosenVehicleId
+      );
+      if (!earlyVehicleCheck.available) {
+        const err = new Error(
+          'This vehicle type is fully booked for the selected time slot. Please choose another vehicle or slot.'
+        );
+        err.status = 409;
+        err.errorCode = 'VEHICLE_CAPACITY_FULL';
+        throw err;
+      }
+      vehicle_id = chosenVehicleId;
+    }
+
     if (chosenTrainerId) {
       const trainerRow = await client.query(
         `SELECT id FROM trainers WHERE id = $1 AND is_active = true`,
@@ -318,39 +347,59 @@ router.post(
         throw err;
       }
       trainer_id = chosenTrainerId;
-      const v = await assignVehicleForSlot(client, slot_id);
-      if (!v.ok) {
-        const assignMessages = {
-          NO_VEHICLE_CAPACITY:
-            'This time slot is full for all training vehicles. Please choose another slot.'
-        };
-        const err = new Error(
-          assignMessages[v.code] || 'Unable to assign a vehicle for this slot.'
-        );
-        err.status = 409;
-        err.errorCode = v.code || 'ASSIGNMENT_FAILED';
-        throw err;
+      if (!vehicle_id) {
+        const v = await assignVehicleForSlot(client, slot_id);
+        if (!v.ok) {
+          const assignMessages = {
+            NO_VEHICLE_CAPACITY:
+              'This time slot is full for all training vehicles. Please choose another slot.'
+          };
+          const err = new Error(
+            assignMessages[v.code] || 'Unable to assign a vehicle for this slot.'
+          );
+          err.status = 409;
+          err.errorCode = v.code || 'ASSIGNMENT_FAILED';
+          throw err;
+        }
+        vehicle_id = v.vehicleId;
       }
-      vehicle_id = v.vehicleId;
     } else {
-      const assignResult = await assignTrainerAndVehicleForSlot(client, slot_id);
-      if (!assignResult.ok) {
-        const assignMessages = {
-          SLOT_NOT_FOUND: 'Slot not found',
-          NO_TRAINER_AVAILABLE:
-            'No trainer is available for this slot. Try another time or contact support.',
-          NO_VEHICLE_CAPACITY:
-            'This time slot is full for all training vehicles. Please choose another slot.'
-        };
-        const err = new Error(
-          assignMessages[assignResult.code] || 'Unable to assign trainer or vehicle for this slot.'
-        );
-        err.status = assignResult.code === 'SLOT_NOT_FOUND' ? 404 : 409;
-        err.errorCode = assignResult.code || 'ASSIGNMENT_FAILED';
-        throw err;
+      if (vehicle_id) {
+        const t = await assignTrainerForSlot(client, slot_id);
+        if (!t.ok) {
+          const assignMessages = {
+            SLOT_NOT_FOUND: 'Slot not found',
+            NO_TRAINER_AVAILABLE:
+              'No trainer is available for this slot. Try another time or contact support.'
+          };
+          const err = new Error(
+            assignMessages[t.code] || 'Unable to assign trainer for this slot.'
+          );
+          err.status = t.code === 'SLOT_NOT_FOUND' ? 404 : 409;
+          err.errorCode = t.code || 'ASSIGNMENT_FAILED';
+          throw err;
+        }
+        trainer_id = t.trainerId;
+      } else {
+        const assignResult = await assignTrainerAndVehicleForSlot(client, slot_id);
+        if (!assignResult.ok) {
+          const assignMessages = {
+            SLOT_NOT_FOUND: 'Slot not found',
+            NO_TRAINER_AVAILABLE:
+              'No trainer is available for this slot. Try another time or contact support.',
+            NO_VEHICLE_CAPACITY:
+              'This time slot is full for all training vehicles. Please choose another slot.'
+          };
+          const err = new Error(
+            assignMessages[assignResult.code] || 'Unable to assign trainer or vehicle for this slot.'
+          );
+          err.status = assignResult.code === 'SLOT_NOT_FOUND' ? 404 : 409;
+          err.errorCode = assignResult.code || 'ASSIGNMENT_FAILED';
+          throw err;
+        }
+        trainer_id = assignResult.trainerId;
+        vehicle_id = assignResult.vehicleId;
       }
-      trainer_id = assignResult.trainerId;
-      vehicle_id = assignResult.vehicleId;
     }
 
     const slotCheck = await client.query(
@@ -604,6 +653,10 @@ router.post(
     }
 
     await client.query('COMMIT');
+
+    auditService.logBookingCreate(req.user.id, booking).catch((err) => {
+      console.error('[Audit] BOOKING_CREATED failed:', err.message);
+    });
 
     // Send email notification (non-blocking)
     try {

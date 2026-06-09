@@ -143,6 +143,27 @@ const validateTrainerUpdate = [
 ];
 
 /**
+ * Validation rules for trainer delete with strategy
+ */
+const validateTrainerDelete = [
+  param('id')
+    .isUUID()
+    .withMessage('Trainer ID must be a valid UUID'),
+
+  body('strategy')
+    .optional()
+    .isIn(['direct', 'complete_all', 'complete_past', 'reassign'])
+    .withMessage('strategy must be one of: direct, complete_all, complete_past, reassign'),
+
+  body('reassignToTrainerId')
+    .optional()
+    .isUUID()
+    .withMessage('reassignToTrainerId must be a valid UUID'),
+
+  handleValidationErrors
+];
+
+/**
  * Validation rules for user update
  */
 const validateUserUpdate = [
@@ -291,13 +312,72 @@ const validateSettingUpdate = [
   handleValidationErrors
 ];
 
+/**
+ * Admin self-service password change
+ */
+const validateAdminChangePassword = [
+  body('current_password')
+    .trim()
+    .notEmpty()
+    .withMessage('Current password is required'),
+
+  body('new_password')
+    .trim()
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters'),
+
+  body('confirm_password')
+    .trim()
+    .notEmpty()
+    .withMessage('Password confirmation is required')
+    .custom((value, { req }) => {
+      if (value !== req.body.new_password) {
+        throw new Error('Password confirmation must match');
+      }
+      return true;
+    }),
+
+  body('new_password')
+    .custom((value, { req }) => {
+      if (value === req.body.current_password) {
+        throw new Error('New password must be different from current password');
+      }
+      return true;
+    }),
+
+  handleValidationErrors
+];
+
+/**
+ * Super admin password reset for admin/subadmin accounts
+ */
+const validateAdminResetPassword = [
+  param('id')
+    .isUUID()
+    .withMessage('User ID must be a valid UUID'),
+
+  body('password')
+    .trim()
+    .notEmpty()
+    .withMessage('Password is required')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+
+  handleValidationErrors
+];
+
 module.exports = {
   validateBookingStatusUpdate,
   validateTrainerCreation,
   validateTrainerUpdate,
+  validateTrainerDelete,
   validateUserUpdate,
   validateUserRoleUpdate,
   validateUserCreation,
   validateSettingsUpdate,
-  validateSettingUpdate
+  validateSettingUpdate,
+  validateAdminChangePassword,
+  validateAdminResetPassword
 };

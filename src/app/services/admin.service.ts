@@ -1,6 +1,37 @@
 import { Injectable } from '@angular/core';
 import { HttpService } from './http.service';
 import { Observable, firstValueFrom } from 'rxjs';
+import { ModulePermission } from './auth.service';
+
+export interface SubAdmin {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string;
+  role: 'subadmin' | 'admin';
+  admin_is_active: boolean;
+  must_change_password?: boolean;
+  created_at: string;
+  updated_at?: string;
+  permissions?: ModulePermission[];
+}
+
+export interface TrainerDeletePreview {
+  trainerId: string;
+  trainerName: string;
+  isActive: boolean;
+  totalBookings: number;
+  pendingBookings: number;
+  activeBookings: number;
+  completedBookings: number;
+  blockingBookings: number;
+  pastBlockingBookings: number;
+  futureBlockingBookings: number;
+  canDeleteDirectly: boolean;
+  availableReassignTrainers: { id: string; name: string }[];
+}
+
+export type TrainerDeleteStrategy = 'direct' | 'complete_all' | 'complete_past' | 'reassign';
 
 @Injectable({
   providedIn: 'root'
@@ -88,8 +119,21 @@ export class AdminService {
     return this.http.put(`/admin/trainers/${trainerId}`, trainerData);
   }
 
-  deleteTrainer(trainerId: string): Observable<any> {
-    return this.http.delete(`/admin/trainers/${trainerId}`);
+  getTrainerDeletePreview(trainerId: string): Observable<TrainerDeletePreview> {
+    return this.http.get<TrainerDeletePreview>(`/admin/trainers/${trainerId}/delete-preview`);
+  }
+
+  deleteTrainer(
+    trainerId: string,
+    options?: { strategy?: TrainerDeleteStrategy; reassignToTrainerId?: string }
+  ): Observable<any> {
+    const body = options?.strategy
+      ? {
+          strategy: options.strategy,
+          ...(options.reassignToTrainerId ? { reassignToTrainerId: options.reassignToTrainerId } : {})
+        }
+      : undefined;
+    return this.http.delete(`/admin/trainers/${trainerId}`, body);
   }
 
   updateBookingStatus(bookingId: string, status: string): Observable<any> {
@@ -110,5 +154,46 @@ export class AdminService {
 
   updateUser(userId: string, body: Record<string, unknown>): Observable<any> {
     return this.http.put(`/admin/users/${userId}`, body);
+  }
+
+  getSubAdmins(): Observable<SubAdmin[]> {
+    return this.http.get<SubAdmin[]>('/admin/sub-admins');
+  }
+
+  createSubAdmin(payload: {
+    email: string;
+    full_name: string;
+    phone?: string;
+    password: string;
+    permissions: ModulePermission[];
+  }): Observable<SubAdmin> {
+    return this.http.post<SubAdmin>('/admin/sub-admins', payload);
+  }
+
+  updateSubAdmin(
+    id: string,
+    payload: Partial<{ full_name: string; email: string; phone: string; permissions: ModulePermission[] }>
+  ): Observable<SubAdmin> {
+    return this.http.put<SubAdmin>(`/admin/sub-admins/${id}`, payload);
+  }
+
+  updateSubAdminStatus(id: string, is_active: boolean): Observable<SubAdmin> {
+    return this.http.put<SubAdmin>(`/admin/sub-admins/${id}/status`, { is_active });
+  }
+
+  changePassword(payload: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>('/admin/change-password', payload);
+  }
+
+  resetUserPassword(userId: string, password: string): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`/admin/users/${userId}/reset-password`, { password });
+  }
+
+  getAdmins(): Observable<SubAdmin[]> {
+    return this.http.get<SubAdmin[]>('/admin/admins');
   }
 }
