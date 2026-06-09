@@ -7,6 +7,7 @@ const db = require('../db');
 const config = require('../app.config');
 const { SLOT_CAPACITY, SLOT_VISIBILITY_HOURS } = require('../config/app.config');
 const vehicleService = require('./vehicle.service');
+const slotCapacityService = require('./slotCapacity.service');
 const events = require('../events');
 const { normalizeDate, addDays, getDayOfWeek, getToday } = require('../utils/dateUtils');
 
@@ -17,7 +18,7 @@ async function fetchActiveTrainerIds(client) {
   return r.rows.map((row) => row.id);
 }
 
-function buildSlotTemplatesForDate(dateString, trainerIds) {
+function buildSlotTemplatesForDate(dateString, trainerIds, slotCapacity = SLOT_CAPACITY.DEFAULT) {
   const dayOfWeek = getDayOfWeek(dateString);
   const [year, month, day] = dateString.split('-').map(Number);
   const slots = [];
@@ -47,7 +48,7 @@ function buildSlotTemplatesForDate(dateString, trainerIds) {
       trainer_id,
       start_time: slotStart.toISOString(),
       end_time: slotEnd.toISOString(),
-      capacity: SLOT_CAPACITY.DEFAULT,
+      capacity: slotCapacity,
       booked_count: 0,
       status: config.slot.defaultStatus,
       slot_date: dateString,
@@ -221,7 +222,8 @@ async function generateSlotsForDate(dateString, options = {}) {
     }
 
     const trainerIds = await fetchActiveTrainerIds(client);
-    const { slots, dayName } = buildSlotTemplatesForDate(dateNorm, trainerIds);
+    const slotCapacity = await slotCapacityService.resolveSlotCapacity(client);
+    const { slots, dayName } = buildSlotTemplatesForDate(dateNorm, trainerIds, slotCapacity);
 
     let insertedCount = 0;
     let updatedCount = 0;
@@ -244,10 +246,11 @@ async function generateSlotsForDate(dateString, options = {}) {
             `
             UPDATE slots
             SET is_visible = $1,
+                capacity = CASE WHEN booked_count <= $3 THEN $3 ELSE capacity END,
                 updated_at = NOW()
             WHERE id = $2
             `,
-            [slot.is_visible, existing.rows[0].id]
+            [slot.is_visible, existing.rows[0].id, slot.capacity]
           );
 
           try {
@@ -349,11 +352,11 @@ async function generateSlotsForDate(dateString, options = {}) {
       `
       UPDATE slots s
       SET capacity = $1,
-      updated_at = NOW()
+          updated_at = NOW()
       WHERE slot_date = $2::date
-        AND booked_count <= $3
+        AND booked_count <= $1
       `,
-      [SLOT_CAPACITY.DEFAULT, dateNorm, SLOT_CAPACITY.MAX]
+      [slotCapacity, dateNorm]
     );
 
     await client.query('COMMIT');

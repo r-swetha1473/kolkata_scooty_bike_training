@@ -401,6 +401,18 @@ async function logPasswordChanged(userId, ipAddress = null) {
   });
 }
 
+async function logSlotCapacityUpdate(adminId, details = {}) {
+  await logAdminAction({
+    adminId,
+    actionType: 'AUTO_SLOT_CAPACITY_UPDATED',
+    entityType: 'slot',
+    entityId: null,
+    beforeValue: null,
+    afterValue: null,
+    details
+  });
+}
+
 module.exports = {
   logAdminAction,
   logSlotCreate,
@@ -422,5 +434,6 @@ module.exports = {
   logAuthEvent,
   logBookingCreate,
   logPasswordReset,
-  logPasswordChanged
+  logPasswordChanged,
+  logSlotCapacityUpdate
 };

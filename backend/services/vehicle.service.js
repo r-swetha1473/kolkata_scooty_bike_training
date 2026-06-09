@@ -16,6 +16,13 @@ async function getActiveVehicles() {
   return result.rows;
 }
 
+async function getActiveVehicleCount() {
+  const result = await db.query(
+    'SELECT COUNT(*)::int AS count FROM vehicles WHERE is_active = true'
+  );
+  return parseInt(result.rows[0]?.count || 0, 10);
+}
+
 /**
  * Get vehicle by ID
  * @param {string} vehicleId - Vehicle UUID
@@ -107,6 +114,7 @@ async function checkVehicleAvailability(slotId, vehicleId) {
 
 module.exports = {
   getActiveVehicles,
+  getActiveVehicleCount,
   getVehicleById,
   getVehicleCapacity,
   getVehicleBookedCount,

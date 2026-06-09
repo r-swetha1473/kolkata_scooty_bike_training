@@ -746,6 +746,165 @@ router.post(
   }
 });
 
+router.get('/slot/:slotId/status', authenticate, async (req, res, next) => {
+  try {
+    const { slotId } = req.params;
+
+    const slotResult = await db.query(
+      `SELECT id, capacity, booked_count, status FROM slots WHERE id = $1`,
+      [slotId]
+    );
+    if (slotResult.rows.length === 0) {
+      const error = new Error('Slot not found');
+      error.status = 404;
+      error.errorCode = 'SLOT_NOT_FOUND';
+      return next(error);
+    }
+    const slot = slotResult.rows[0];
+
+    const myBookingResult = await db.query(
+      `SELECT b.id, b.slot_id, b.trainer_id, b.vehicle_id, b.status, b.notes,
+              t.id AS trainer_id,
+              p.full_name AS trainer_name,
+              v.name AS vehicle_name
+       FROM bookings b
+       JOIN trainers t ON b.trainer_id = t.id
+       JOIN profiles p ON t.user_id = p.id
+       LEFT JOIN vehicles v ON b.vehicle_id = v.id
+       WHERE b.slot_id = $1
+         AND b.user_id = $2
+         AND b.status NOT IN ('cancelled')
+       LIMIT 1`,
+      [slotId, req.user.id]
+    );
+
+    const ownedByMe = myBookingResult.rows.length > 0;
+    const booking = ownedByMe ? myBookingResult.rows[0] : null;
+
+    const slotFull =
+      slot.status === 'full' ||
+      parseInt(slot.booked_count, 10) >= parseInt(slot.capacity, 10);
+
+    let ownedByOther = false;
+    if (!ownedByMe && slotFull) {
+      ownedByOther = true;
+    } else if (!ownedByMe) {
+      const allVehiclesFull = await vehicleService.getActiveVehicles();
+      let anyAvailable = false;
+      for (const vehicle of allVehiclesFull) {
+        const avail = await vehicleService.checkVehicleAvailability(slotId, vehicle.id);
+        if (avail.available) {
+          anyAvailable = true;
+          break;
+        }
+      }
+      if (!anyAvailable && parseInt(slot.booked_count, 10) > 0) {
+        ownedByOther = true;
+      }
+    }
+
+    res.json({
+      ownedByMe,
+      ownedByOther,
+      slotFull,
+      booking
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/:id/update', authenticate, async (req, res, next) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const { trainer_id, vehicle_id } = req.body;
+    if (!trainer_id || !vehicle_id) {
+      const error = new Error('trainer_id and vehicle_id are required');
+      error.status = 400;
+      error.errorCode = 'MISSING_FIELDS';
+      throw error;
+    }
+
+    const bookingResult = await client.query(
+      `SELECT b.* FROM bookings b
+       WHERE b.id = $1 AND b.user_id = $2 AND b.status NOT IN ('cancelled')
+       FOR UPDATE`,
+      [req.params.id, req.user.id]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      const error = new Error('Booking not found or cannot be updated');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      throw error;
+    }
+
+    const booking = bookingResult.rows[0];
+    const slotId = booking.slot_id;
+
+    const trainerCheck = await client.query(
+      `SELECT t.id FROM trainers t
+       WHERE t.id = $1 AND t.is_active = true
+         AND NOT EXISTS (
+           SELECT 1 FROM bookings b
+           WHERE b.slot_id = $2
+             AND b.trainer_id = t.id
+             AND b.status NOT IN ('cancelled')
+             AND b.id <> $3
+         )`,
+      [trainer_id, slotId, booking.id]
+    );
+
+    if (trainerCheck.rows.length === 0) {
+      const error = new Error('That trainer is not available for this slot');
+      error.status = 409;
+      error.errorCode = 'TRAINER_SLOT_TAKEN';
+      throw error;
+    }
+
+    if (booking.vehicle_id !== vehicle_id) {
+      const vehicleAvail = await vehicleService.checkVehicleAvailability(slotId, vehicle_id);
+      if (!vehicleAvail.available) {
+        const error = new Error('That vehicle is fully booked for this slot');
+        error.status = 409;
+        error.errorCode = 'VEHICLE_CAPACITY_FULL';
+        throw error;
+      }
+    }
+
+    const vehicleCheck = await client.query(
+      'SELECT id FROM vehicles WHERE id = $1 AND is_active = true',
+      [vehicle_id]
+    );
+    if (vehicleCheck.rows.length === 0) {
+      const error = new Error('Vehicle not found or inactive');
+      error.status = 400;
+      error.errorCode = 'INVALID_VEHICLE';
+      throw error;
+    }
+
+    const updateResult = await client.query(
+      `UPDATE bookings
+       SET trainer_id = $1, vehicle_id = $2, updated_at = NOW()
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [trainer_id, vehicle_id, req.params.id, req.user.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json(updateResult.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/my-bookings', authenticate, async (req, res, next) => {
   try {
     const result = await db.query(`

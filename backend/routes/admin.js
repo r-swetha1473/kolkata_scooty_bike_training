@@ -17,6 +17,7 @@ const {
   validateAdminResetPassword
 } = require('../validators');
 const auditService = require('../services/audit.service');
+const slotCapacityService = require('../services/slotCapacity.service');
 const { getClientIp } = require('../utils/authCookie');
 const trainerDeletionService = require('../services/trainerDeletion.service');
 const router = express.Router();
@@ -791,6 +792,11 @@ router.put('/settings', requirePermission('settings', 'edit'), validateSettingsU
       afterSettings[key] = data.value;
     }
     await auditService.logSettingsUpdate(userId, beforeSettings, afterSettings);
+
+    const capacitySettingChanged = Object.prototype.hasOwnProperty.call(settings, 'auto_slot_capacity_from_vehicles');
+    if (capacitySettingChanged) {
+      await slotCapacityService.recalculateFutureSlotCapacities(userId);
+    }
 
     res.json({ message: 'Settings updated successfully' });
   } catch (error) {

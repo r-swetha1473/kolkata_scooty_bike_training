@@ -14,12 +14,12 @@ import {
   VehicleCategoryOption
 } from '../../utils/vehicle.utils';
 import { firstValueFrom } from 'rxjs';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule, CaptchaComponent, RouterLink],
+  imports: [CommonModule, FormsModule, CaptchaComponent],
   templateUrl: './booking.component.html',
   styleUrls: ['./booking.component.css']
 })
@@ -31,9 +31,22 @@ export class BookingComponent implements OnInit, OnDestroy {
   showBookingModal = false;
   showConfirmation = false;
   showLoginPrompt = false;
-  showActiveBookingPopup = false;
+  showOwnBookingPopup = false;
+  showSlotTakenPopup = false;
+  showUpdateBookingModal = false;
+  existingBooking: {
+    id: string;
+    trainer_id: string;
+    vehicle_id: string;
+    trainer_name?: string;
+    vehicle_name?: string;
+  } | null = null;
+  updateForm = { trainerId: '', vehicleId: '' };
+  updateInFlight = false;
   captchaVerified = false;
   loading = false;
+  /** True only on initial load / user actions — not background refresh. */
+  showLoadingSpinner = false;
   /** Prevents double-submit before Angular disables the button. */
   private bookingInFlight = false;
   errorMessage = '';
@@ -55,7 +68,8 @@ export class BookingComponent implements OnInit, OnDestroy {
   constructor(
     private slotService: SlotService,
     public authService: AuthService,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private router: Router
   ) {}
 
   // Normalize date string to YYYY-MM-DD format
@@ -102,7 +116,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     const today = new Date();
     this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
-    await this.loadSlots();
+    await this.loadSlots(false);
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
   }
@@ -116,7 +130,10 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
-  async loadSlots() {
+  async loadSlots(silent = true) {
+    if (!silent) {
+      this.showLoadingSpinner = true;
+    }
     this.loading = true;
     this.errorMessage = '';
     try {
@@ -159,6 +176,9 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.slots = [];
     } finally {
       this.loading = false;
+      if (!silent) {
+        this.showLoadingSpinner = false;
+      }
     }
   }
 
@@ -176,7 +196,7 @@ export class BookingComponent implements OnInit, OnDestroy {
           // If the change affects the currently selected date, reload
           const affectedDate = data.slot_date || extractDateFromDateTime(data.start_time) || payload.date;
           if (!affectedDate || affectedDate === this.selectedDate) {
-            await this.loadSlots();
+            await this.loadSlots(true);
           }
         } catch (_) {}
       };
@@ -187,27 +207,52 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   startAutoRefresh() {
     this.refreshInterval = setInterval(() => {
-      this.loadSlots();
-    }, 10000);
+      this.loadSlots(true);
+    }, 90000);
   }
 
   async onDateChange() {
-    // Normalize date when it changes
     this.selectedDate = this.normalizeDate(this.selectedDate);
-    await this.loadSlots();
+    await this.loadSlots(false);
   }
 
   async selectSlot(slot: Slot) {
-    if (this.isSlotDisabled(slot) || this.isSlotFull(slot)) {
+    if (this.isSlotDisabled(slot)) {
       return;
     }
 
     if (!this.authService.isAuthenticated()) {
+      if (this.isSlotFull(slot)) {
+        return;
+      }
       this.showLoginPrompt = true;
       return;
     }
 
     this.selectedSlot = slot;
+
+    try {
+      const status = await this.apiService.getSlotBookingStatus(slot.id);
+      if (status.ownedByMe && status.booking) {
+        this.existingBooking = status.booking;
+        this.showOwnBookingPopup = true;
+        return;
+      }
+      if (status.ownedByOther || (this.isSlotFull(slot) && !status.ownedByMe)) {
+        this.showSlotTakenPopup = true;
+        return;
+      }
+    } catch {
+      if (this.isSlotFull(slot)) {
+        this.showSlotTakenPopup = true;
+        return;
+      }
+    }
+
+    if (this.isSlotFull(slot)) {
+      this.showSlotTakenPopup = true;
+      return;
+    }
     this.vehicleOptions = getVehicleCategoryOptions(slot.vehicle_capacities);
     this.selectedVehicleId = '';
     this.showVehicleModal = true;
@@ -332,7 +377,7 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.showConfirmation = false;
       }, 4000);
 
-      await this.loadSlots();
+      await this.loadSlots(false);
     } catch (error: any) {
       const status = error?.status;
       const body = error?.error;
@@ -349,7 +394,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       }
 
       if (code === 'ACTIVE_BOOKING_EXISTS') {
-        this.showActiveBookingPopup = true;
+        this.showOwnBookingPopup = true;
         this.errorMessage = '';
       } else if (code === 'TRAINER_SLOT_TAKEN') {
         this.errorMessage =
@@ -377,8 +422,96 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
-  closeActiveBookingPopup(): void {
-    this.showActiveBookingPopup = false;
+  closeOwnBookingPopup(): void {
+    this.showOwnBookingPopup = false;
+    this.existingBooking = null;
+  }
+
+  closeSlotTakenPopup(): void {
+    this.showSlotTakenPopup = false;
+    this.selectedSlot = null;
+  }
+
+  viewExistingBooking(): void {
+    this.closeOwnBookingPopup();
+    this.router.navigate(['/my-bookings']);
+  }
+
+  async openUpdateBooking(): Promise<void> {
+    if (!this.existingBooking || !this.selectedSlot) {
+      return;
+    }
+
+    this.showOwnBookingPopup = false;
+    this.updateForm = {
+      trainerId: this.existingBooking.trainer_id,
+      vehicleId: this.existingBooking.vehicle_id
+    };
+    this.vehicleOptions = getVehicleCategoryOptions(this.selectedSlot.vehicle_capacities);
+    this.trainersForSlot = [];
+    this.trainersLoadError = '';
+    this.trainersLoading = true;
+    this.errorMessage = '';
+    this.showUpdateBookingModal = true;
+
+    try {
+      this.trainersForSlot = await firstValueFrom(
+        this.apiService.getAvailableTrainersForSlot(this.selectedSlot.id)
+      );
+    } catch {
+      this.trainersLoadError = 'Could not load trainers. Please try again.';
+    } finally {
+      this.trainersLoading = false;
+    }
+  }
+
+  closeUpdateBookingModal(): void {
+    this.showUpdateBookingModal = false;
+    this.updateInFlight = false;
+    this.errorMessage = '';
+    this.existingBooking = null;
+    this.selectedSlot = null;
+  }
+
+  async confirmUpdateBooking(): Promise<void> {
+    if (this.updateInFlight || !this.existingBooking) {
+      return;
+    }
+    if (!this.updateForm.trainerId || !this.updateForm.vehicleId) {
+      this.errorMessage = 'Please select a trainer and vehicle.';
+      return;
+    }
+
+    this.updateInFlight = true;
+    this.errorMessage = '';
+
+    try {
+      await firstValueFrom(
+        this.apiService.updateBooking(
+          this.existingBooking.id,
+          this.updateForm.trainerId,
+          this.updateForm.vehicleId
+        )
+      );
+      this.closeUpdateBookingModal();
+      this.showConfirmation = true;
+      setTimeout(() => {
+        this.showConfirmation = false;
+      }, 4000);
+      await this.loadSlots(false);
+    } catch (error: any) {
+      const body = error?.error;
+      const code = body?.errorCode;
+      if (code === 'TRAINER_SLOT_TAKEN') {
+        this.errorMessage = body?.message || 'That trainer is not available for this slot.';
+      } else if (code === 'VEHICLE_CAPACITY_FULL') {
+        this.errorMessage = body?.message || 'That vehicle is fully booked for this slot.';
+      } else {
+        this.errorMessage = body?.message || body?.error || 'Failed to update booking.';
+      }
+    } finally {
+      this.updateInFlight = false;
+    }
   }
 
   resetForm() {
