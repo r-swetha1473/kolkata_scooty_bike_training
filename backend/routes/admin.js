@@ -374,6 +374,18 @@ router.put('/notifications/read-all', requirePermission('dashboard', 'view'), as
   }
 });
 
+router.post('/slots/recalculate-capacity', requirePermission('slots', 'edit'), async (req, res, next) => {
+  try {
+    const result = await slotCapacityService.recalculateFutureSlotCapacities(req.user.id);
+    res.json({
+      message: 'Slot capacities recalculated for all slots from today onward',
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/bookings/overdue', requirePermission('bookings', 'view'), async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 20;
@@ -1261,6 +1273,14 @@ router.get('/audit-logs', requirePermission('audit_logs', 'view'), async (req, r
 
 router.get('/sub-admins', requireSuperAdmin, async (req, res, next) => {
   try {
+    if (process.env.LOG_SUB_ADMINS_ROUTE === '1' || process.env.NODE_ENV === 'production') {
+      console.log('[sub-admins] GET /api/admin/sub-admins reached', {
+        userId: req.user?.id,
+        role: req.user?.role,
+        at: new Date().toISOString()
+      });
+    }
+
     const result = await db.query(
       `SELECT id, email, full_name, phone, role, admin_is_active, must_change_password, created_at, updated_at
        FROM profiles

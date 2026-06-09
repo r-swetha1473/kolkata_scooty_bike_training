@@ -197,7 +197,8 @@ async function checkApis(token) {
     { name: 'Notifications unread count', method: 'GET', path: '/admin/notifications/unread-count', expectKeys: ['count'] },
     { name: 'Audit Logs', method: 'GET', path: '/admin/audit-logs?limit=5', expectKeys: [] },
     { name: 'Sub Admins', method: 'GET', path: '/admin/sub-admins', expectKeys: [] },
-    { name: 'Admin Settings', method: 'GET', path: '/admin/settings', expectKeys: [] }
+    { name: 'Admin Settings', method: 'GET', path: '/admin/settings', expectKeys: [] },
+    { name: 'Recalculate slot capacity', method: 'POST', path: '/admin/slots/recalculate-capacity', expectKeys: ['updated', 'capacity'] }
   ];
 
   for (const ep of endpoints) {
@@ -312,6 +313,39 @@ function checkRbacStatic() {
   }
 }
 
+async function checkSlotCapacity() {
+  console.log('\n=== Slot Capacity ===');
+  if (!HAS_DB) {
+    warn('database', 'Slot capacity alignment', 'DATABASE_URL not set');
+    return;
+  }
+
+  try {
+    const db = require('../db');
+    const slotCapacityService = require('../services/slotCapacity.service');
+    const vehicleCount = await slotCapacityService.getActiveVehicleCount();
+    const enabled = await slotCapacityService.isAutoCapacityEnabled();
+    const expected = enabled ? Math.max(1, vehicleCount) : require('../config/app.config').SLOT_CAPACITY.DEFAULT;
+
+    const mismatch = await db.query(
+      `SELECT COUNT(*)::int AS count FROM slots
+       WHERE COALESCE(slot_date, (start_time AT TIME ZONE 'Asia/Kolkata')::date)
+         >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+         AND capacity <> $1`,
+      [expected]
+    );
+    const count = Number(mismatch.rows[0]?.count) || 0;
+    if (count === 0) {
+      pass('database', 'Slot capacity vs vehicles', `expected=${expected}, vehicles=${vehicleCount}`);
+    } else {
+      fail('database', 'Slot capacity vs vehicles', `${count} slot(s) still at wrong capacity (expected ${expected})`);
+    }
+    await db.pool.end();
+  } catch (e) {
+    fail('database', 'Slot capacity check', e.message);
+  }
+}
+
 async function checkOverdueLogic() {
   console.log('\n=== Overdue Booking Detection ===');
   try {
@@ -347,6 +381,12 @@ async function main() {
     await checkOverdueLogic();
   } catch (e) {
     fail('database', 'Overdue check', e.message);
+  }
+
+  try {
+    await checkSlotCapacity();
+  } catch (e) {
+    fail('database', 'Slot capacity check', e.message);
   }
 
   let token = await loginAdmin();

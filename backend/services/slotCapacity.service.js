@@ -8,6 +8,8 @@ const auditService = require('./audit.service');
 const notificationService = require('./notification.service');
 
 const SETTING_KEY = 'auto_slot_capacity_from_vehicles';
+const KOLKATA_TODAY = `(NOW() AT TIME ZONE 'Asia/Kolkata')::date`;
+const SLOT_DAY = `COALESCE(slot_date, (start_time AT TIME ZONE 'Asia/Kolkata')::date)`;
 
 function parseSettingBool(value) {
   if (value === true || value === 'true') return true;
@@ -63,12 +65,27 @@ async function resolveSlotCapacity(client = null) {
   return Math.max(1, count);
 }
 
+async function syncSlotVehicleCapacities(slotIds, client = null) {
+  for (const slotId of slotIds) {
+    try {
+      await query(client, 'SELECT ensure_slot_vehicle_capacities($1)', [slotId]);
+    } catch (e) {
+      const msg = String(e.message || '');
+      if (!msg.includes('does not exist') && !msg.includes('ensure_slot_vehicle_capacities')) {
+        console.warn('[slotCapacity] ensure_slot_vehicle_capacities:', msg);
+      }
+    }
+  }
+}
+
 /**
- * Updates capacity on future slots where booked_count allows it.
+ * Updates capacity on all slots from today (Asia/Kolkata) onward.
+ * Includes today's in-progress slots (uses slot day, not start_time > NOW()).
  */
 async function recalculateFutureSlotCapacities(adminId = null, client = null) {
   const enabled = await isAutoCapacityEnabled(client);
-  const capacity = enabled ? Math.max(1, await getActiveVehicleCount(client)) : SLOT_CAPACITY.DEFAULT;
+  const vehicleCount = await getActiveVehicleCount(client);
+  const capacity = enabled ? Math.max(1, vehicleCount) : SLOT_CAPACITY.DEFAULT;
 
   const result = await query(
     client,
@@ -77,34 +94,44 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
     SET capacity = $1,
         updated_at = NOW(),
         status = CASE
+          WHEN status IN ('cancelled', 'completed', 'disabled') THEN status
           WHEN booked_count >= $1 THEN 'full'
-          WHEN booked_count = 0 THEN status
-          ELSE CASE WHEN status = 'full' THEN 'available' ELSE status END
+          ELSE 'available'
         END
-    WHERE start_time > NOW()
-      AND booked_count <= $1
+    WHERE ${SLOT_DAY} >= ${KOLKATA_TODAY}
     RETURNING id
     `,
     [capacity]
   );
 
+  const slotIds = result.rows.map((r) => r.id);
+  if (slotIds.length > 0) {
+    await syncSlotVehicleCapacities(slotIds, client);
+  }
+
   if (result.rows.length > 0) {
     await auditService.logSlotCapacityUpdate(adminId, {
       auto_enabled: enabled,
       new_capacity: capacity,
+      active_vehicles: vehicleCount,
       slots_updated: result.rows.length
     });
     await notificationService.createNotification({
       type: 'slot_capacity',
       title: 'Slot capacity updated',
-      body: `${result.rows.length} future slot(s) set to capacity ${capacity}.`,
+      body: `${result.rows.length} slot(s) from today onward set to capacity ${capacity} (${vehicleCount} active vehicle(s)).`,
       entity_type: 'slot',
       entity_id: null,
       dedupeHours: 1
     }).catch(() => {});
   }
 
-  return { updated: result.rows.length, capacity, auto_enabled: enabled };
+  return {
+    updated: result.rows.length,
+    capacity,
+    active_vehicles: vehicleCount,
+    auto_enabled: enabled
+  };
 }
 
 module.exports = {
@@ -112,5 +139,6 @@ module.exports = {
   isAutoCapacityEnabled,
   getActiveVehicleCount,
   resolveSlotCapacity,
-  recalculateFutureSlotCapacities
+  recalculateFutureSlotCapacities,
+  syncSlotVehicleCapacities
 };

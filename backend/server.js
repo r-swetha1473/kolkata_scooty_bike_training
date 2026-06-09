@@ -19,6 +19,7 @@ const vehiclesRoutes = require('./routes/vehicles');
 const recognitionRoutes = require('./routes/recognition');
 const adminManagementRoutes = require('./routes/adminManagement');
 const errorHandler = require('./middleware/errorHandler');
+const { getBuildInfo } = require('./utils/buildInfo');
 const cron = require('node-cron');
 const { runInactivityBlockCheck } = require('./services/inactivity.service');
 const { runNightlyAutoGeneration, ensureSlotsOnStartup } = require('./services/slotGeneration.service');
@@ -156,7 +157,23 @@ app.use('/api/ratings', strictLimiter, ratingsRoutes);
 app.use('/api/recognition', strictLimiter, recognitionRoutes);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: getBuildInfo()
+  });
+});
+
+/** Public deploy metadata — compare commit to GitHub main when debugging 404s */
+app.get('/api/version', (req, res) => {
+  res.json({
+    ok: true,
+    timestamp: new Date().toISOString(),
+    ...getBuildInfo(),
+    routes: {
+      subAdmins: 'GET /api/admin/sub-admins'
+    }
+  });
 });
 
 // Server-Sent Events endpoint for real-time updates
@@ -178,6 +195,17 @@ app.get('/api/events', (req, res) => {
     clearInterval(keepAlive);
     events.removeClient(res);
     try { res.end(); } catch (_) {}
+  });
+});
+
+/** JSON 404 for unknown API paths (avoids HTML "Cannot GET" confusing Angular) */
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'API route not found',
+    errorCode: 'ROUTE_NOT_FOUND',
+    path: req.originalUrl,
+    method: req.method
   });
 });
 
@@ -231,6 +259,17 @@ if (process.env.DISABLE_AUTO_SLOT_STARTUP !== '1') {
   const startupDays = Number(process.env.AUTO_SLOT_STARTUP_DAYS || '7');
   ensureSlotsOnStartup(Number.isFinite(startupDays) && startupDays > 0 ? startupDays : 7).catch((err) => {
     console.error('[Auto slot startup]', err.message);
+  });
+}
+
+if (process.env.DISABLE_SLOT_CAPACITY_STARTUP !== '1') {
+  const slotCapacityService = require('./services/slotCapacity.service');
+  slotCapacityService.recalculateFutureSlotCapacities(null).then((result) => {
+    if (result?.updated > 0) {
+      console.log(`[Slot capacity startup] Updated ${result.updated} slot(s) to capacity ${result.capacity}`);
+    }
+  }).catch((err) => {
+    console.error('[Slot capacity startup]', err.message);
   });
 }
 

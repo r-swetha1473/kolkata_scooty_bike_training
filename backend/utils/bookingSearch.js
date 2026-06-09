@@ -25,7 +25,7 @@ function buildBookingListQuery({ status, startDate, endDate, searchRaw, limit, o
       `COALESCE(u.full_name, '') ILIKE $${idx}`,
       `COALESCE(u.email, '') ILIKE $${idx}`,
       `COALESCE(u.phone::text, '') ILIKE $${idx}`,
-      `COALESCE(b.phone, '') ILIKE $${idx}`,
+      `COALESCE(b.phone::text, '') ILIKE $${idx}`,
       `COALESCE(p.full_name, '') ILIKE $${idx}`,
       `COALESCE(v.name, '') ILIKE $${idx}`,
       `COALESCE(b.notes, '') ILIKE $${idx}`,
@@ -34,9 +34,22 @@ function buildBookingListQuery({ status, startDate, endDate, searchRaw, limit, o
     params.push(q);
     idx++;
 
-    if (digits.length >= 4) {
-      parts.push(`regexp_replace(COALESCE(u.phone, ''), '\\D', '', 'g') LIKE $${idx}`);
-      parts.push(`regexp_replace(COALESCE(b.phone, ''), '\\D', '', 'g') LIKE $${idx + 1}`);
+    const nameTokens = term.split(/\s+/).filter((t) => t.length >= 2);
+    if (nameTokens.length > 1) {
+      const userParts = [];
+      const trainerParts = [];
+      for (const token of nameTokens) {
+        userParts.push(`COALESCE(u.full_name, '') ILIKE $${idx}`);
+        trainerParts.push(`COALESCE(p.full_name, '') ILIKE $${idx}`);
+        params.push(`%${token}%`);
+        idx++;
+      }
+      parts.push(`((${userParts.join(' AND ')}) OR (${trainerParts.join(' AND ')}))`);
+    }
+
+    if (digits.length >= 3) {
+      parts.push(`regexp_replace(COALESCE(u.phone::text, ''), '\\D', '', 'g') LIKE $${idx}`);
+      parts.push(`regexp_replace(COALESCE(b.phone::text, ''), '\\D', '', 'g') LIKE $${idx + 1}`);
       params.push(`%${digits}%`);
       params.push(`%${digits}%`);
       idx += 2;

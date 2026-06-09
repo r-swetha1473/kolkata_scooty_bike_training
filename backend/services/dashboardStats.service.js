@@ -15,8 +15,27 @@ function toCount(rows, field = 'count') {
   return Number.isFinite(n) ? n : 0;
 }
 
+const DEFAULT_STATS = {
+  totalBookings: 0,
+  activeSlots: 0,
+  totalTrainers: 0,
+  activeTrainers: 0,
+  todaySessions: 0,
+  pendingBookings: 0,
+  completedToday: 0,
+  totalUsers: 0,
+  upcomingBookings: 0,
+  todayBookings: 0,
+  completedBookings: 0,
+  cancelledBookings: 0,
+  activeVehicles: 0,
+  totalCustomers: 0,
+  expiredBookings: 0,
+  overdueBookings: []
+};
+
 async function getDashboardStats() {
-  const stats = {};
+  const stats = { ...DEFAULT_STATS };
 
   const totalBookingsResult = await db.query('SELECT COUNT(*)::int AS count FROM bookings');
   stats.totalBookings = toCount(totalBookingsResult.rows);
@@ -96,14 +115,18 @@ async function getDashboardStats() {
   );
   stats.totalCustomers = toCount(totalCustomersResult.rows);
 
-  stats.expiredBookings = await overdueBookingService.countOverdueBookings();
-  stats.overdueBookings = await overdueBookingService.listOverdueBookings(8);
+  stats.expiredBookings = toCount(
+    [{ count: await overdueBookingService.countOverdueBookings() }]
+  );
+  const overdueList = await overdueBookingService.listOverdueBookings(8);
+  stats.overdueBookings = Array.isArray(overdueList) ? overdueList : [];
 
   return stats;
 }
 
 module.exports = {
   getDashboardStats,
+  DEFAULT_STATS,
   KOLKATA_TODAY,
   SLOT_DAY,
   toCount
