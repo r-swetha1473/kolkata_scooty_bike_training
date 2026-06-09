@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { loadUserPermissions, requirePermission } = require('../middleware/permissions');
 const { adminAccess } = require('../middleware/adminAccess');
 const auditService = require('../services/audit.service');
+const slotCapacityService = require('../services/slotCapacity.service');
 const router = express.Router();
 
 const requireInactiveListAuth = (req, res, next) => {
@@ -91,8 +92,8 @@ router.post('/', ...adminAccess('vehicles', 'create'), async (req, res, next) =>
 
     const created = result.rows[0];
     
-    // Log audit trail
     await auditService.logVehicleCreate(req.user.id, created);
+    await slotCapacityService.recalculateFutureSlotCapacities(req.user.id);
 
     res.status(201).json(created);
   } catch (error) {
@@ -182,8 +183,8 @@ router.put('/:id', ...adminAccess('vehicles', 'edit'), async (req, res, next) =>
 
     const updated = result.rows[0];
     
-    // Log audit trail
     await auditService.logVehicleUpdate(req.user.id, req.params.id, beforeData, updated);
+    await slotCapacityService.recalculateFutureSlotCapacities(req.user.id);
 
     res.json(updated);
   } catch (error) {
@@ -239,8 +240,8 @@ router.delete('/:id', ...adminAccess('vehicles', 'delete'), async (req, res, nex
       return next(error);
     }
 
-    // Log audit trail
     await auditService.logVehicleDelete(req.user.id, vehicleData);
+    await slotCapacityService.recalculateFutureSlotCapacities(req.user.id);
 
     res.json({ message: 'Vehicle deleted successfully' });
   } catch (error) {

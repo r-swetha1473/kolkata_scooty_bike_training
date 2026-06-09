@@ -122,8 +122,11 @@ import { filter } from 'rxjs/operators';
     }
 
     main {
-      flex: 1;
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
       padding-top: 80px;
+      min-height: 0;
     }
 
     main.no-padding-top {
@@ -368,10 +371,11 @@ import { filter } from 'rxjs/operators';
     }
 
     .footer {
+      flex-shrink: 0;
       background: #1F2937;
       color: #FFFFFF;
       padding: 60px 0 30px;
-      margin-top: 80px;
+      margin-top: auto;
     }
 
     .footer-content {

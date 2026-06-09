@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService, SiteSettings } from '../../../services/settings.service';
 import { ToastService } from '../../../services/toast.service';
+import { ApiService } from '../../../services/api.service';
 
 @Component({
   selector: 'app-admin-settings',
@@ -124,6 +125,22 @@ import { ToastService } from '../../../services/toast.service';
             </div>
             <div class="form-group"></div>
           </div>
+        </section>
+
+        <!-- Slot Capacity -->
+        <section class="settings-section">
+          <h2 class="section-title">Slot Capacity</h2>
+          <label class="checkbox-row">
+            <input
+              type="checkbox"
+              [(ngModel)]="autoSlotCapacityFromVehicles"
+              (ngModelChange)="onSlotCapacityChange()"
+            />
+            <span>Auto calculate slot capacity from active vehicles</span>
+          </label>
+          <small class="checkbox-hint">
+            When enabled, each slot's capacity equals the number of active vehicles (e.g. 3 vehicles → 3 bookings per slot).
+          </small>
         </section>
 
         <!-- Footer Settings -->
@@ -290,6 +307,23 @@ import { ToastService } from '../../../services/toast.service';
       margin-top: 2px;
     }
 
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--admin-text);
+      cursor: pointer;
+    }
+
+    .checkbox-hint {
+      display: block;
+      font-size: 12px;
+      color: var(--admin-text-secondary);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
     .admin-btn-primary.success {
       background: var(--admin-success);
       border-color: var(--admin-success);
@@ -326,13 +360,16 @@ export class AdminSettingsComponent implements OnInit {
     about_text: ''
   };
   originalSettings: SiteSettings = { ...this.settings };
+  autoSlotCapacityFromVehicles = true;
+  originalAutoSlotCapacityFromVehicles = true;
   saving = false;
   saveSuccess = false;
   hasChanges = false;
 
   constructor(
     private settingsService: SettingsService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private apiService: ApiService
   ) {}
 
   async ngOnInit() {
@@ -344,6 +381,12 @@ export class AdminSettingsComponent implements OnInit {
       await this.settingsService.loadSettings();
       this.settings = { ...this.settingsService.getSettings() };
       this.originalSettings = { ...this.settings };
+
+      const adminSettings = await this.apiService.get<Record<string, { value: unknown }>>('/admin/settings');
+      const raw = adminSettings?.auto_slot_capacity_from_vehicles?.value;
+      this.autoSlotCapacityFromVehicles = raw === true || raw === 'true' || (typeof raw === 'string' && raw.includes('true')) || raw == null;
+      this.originalAutoSlotCapacityFromVehicles = this.autoSlotCapacityFromVehicles;
+
       this.hasChanges = false;
       this.saveSuccess = false;
     } catch {
@@ -352,7 +395,17 @@ export class AdminSettingsComponent implements OnInit {
   }
 
   onChange() {
-    this.hasChanges = JSON.stringify(this.settings) !== JSON.stringify(this.originalSettings);
+    this.updateHasChanges();
+  }
+
+  onSlotCapacityChange() {
+    this.updateHasChanges();
+  }
+
+  private updateHasChanges() {
+    this.hasChanges =
+      JSON.stringify(this.settings) !== JSON.stringify(this.originalSettings) ||
+      this.autoSlotCapacityFromVehicles !== this.originalAutoSlotCapacityFromVehicles;
     this.saveSuccess = false;
   }
 
@@ -364,7 +417,14 @@ export class AdminSettingsComponent implements OnInit {
 
     try {
       await this.settingsService.updateSettings(this.settings);
+      await this.apiService.put('/admin/settings', {
+        auto_slot_capacity_from_vehicles: {
+          value: this.autoSlotCapacityFromVehicles,
+          description: 'Auto calculate slot capacity from active vehicles'
+        }
+      });
       this.originalSettings = { ...this.settings };
+      this.originalAutoSlotCapacityFromVehicles = this.autoSlotCapacityFromVehicles;
       this.hasChanges = false;
       this.saveSuccess = true;
       this.toastService.success('Settings saved successfully');

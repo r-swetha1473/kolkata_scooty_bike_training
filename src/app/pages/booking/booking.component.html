@@ -72,15 +72,15 @@
           </div>
         </div>
 
-        <div *ngIf="loading" class="loading-spinner">
+        <div *ngIf="showLoadingSpinner" class="loading-spinner">
           Loading slots...
         </div>
 
-        <div *ngIf="!loading && slots.length === 0" class="no-slots">
+        <div *ngIf="!showLoadingSpinner && slots.length === 0" class="no-slots">
           <p>No slots available for this date. Please select another date.</p>
         </div>
 
-        <div *ngIf="!loading && slots.length > 0" class="slots-grid">
+        <div *ngIf="!showLoadingSpinner && slots.length > 0" class="slots-grid">
           <div
             *ngFor="let slot of slots"
             class="slot-card"
@@ -303,14 +303,67 @@
     </div>
   </div>
 
-  <div class="modal-overlay" *ngIf="showActiveBookingPopup" (click)="closeActiveBookingPopup()">
+  <div class="modal-overlay" *ngIf="showOwnBookingPopup" (click)="closeOwnBookingPopup()">
     <div class="modal-content" (click)="$event.stopPropagation()">
-      <button type="button" class="close-btn" (click)="closeActiveBookingPopup()" aria-label="Close">×</button>
-      <h2>Active booking</h2>
-      <p class="modal-subtitle">
-        You already have a booking. Cancel it to book another.
+      <button type="button" class="close-btn" (click)="closeOwnBookingPopup()" aria-label="Close">×</button>
+      <h2>Already booked</h2>
+      <p class="modal-subtitle">You have already booked this slot.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-confirm" (click)="viewExistingBooking()">View Booking</button>
+        <button type="button" class="btn btn-secondary" (click)="openUpdateBooking()">Update Booking</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showSlotTakenPopup" (click)="closeSlotTakenPopup()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <button type="button" class="close-btn" (click)="closeSlotTakenPopup()" aria-label="Close">×</button>
+      <h2>Slot unavailable</h2>
+      <p class="modal-subtitle">This slot is already booked.</p>
+      <button type="button" class="btn btn-confirm" (click)="closeSlotTakenPopup()">OK</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showUpdateBookingModal" (click)="closeUpdateBookingModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeUpdateBookingModal()">×</button>
+      <h2>Update Booking</h2>
+      <p class="modal-subtitle" *ngIf="selectedSlot">
+        {{ formatTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}
       </p>
-      <a routerLink="/my-bookings" class="btn btn-confirm" (click)="closeActiveBookingPopup()">Go to My Bookings</a>
+
+      <p *ngIf="trainersLoading" class="form-hint">Loading trainers…</p>
+
+      <div class="form-group" *ngIf="!trainersLoading && trainersForSlot.length > 0">
+        <label for="update-trainer">Trainer *</label>
+        <select id="update-trainer" name="update-trainer" [(ngModel)]="updateForm.trainerId" required>
+          <option value="" disabled>Choose a trainer</option>
+          <option *ngFor="let t of trainersForSlot" [value]="t.id">
+            {{ t.profile?.full_name || 'Trainer' }}
+          </option>
+        </select>
+      </div>
+
+      <div class="form-group" *ngIf="vehicleOptions.length > 0">
+        <label for="update-vehicle">Vehicle *</label>
+        <select id="update-vehicle" name="update-vehicle" [(ngModel)]="updateForm.vehicleId" required>
+          <option value="" disabled>Choose a vehicle</option>
+          <option *ngFor="let v of vehicleOptions" [value]="v.vehicle_id" [disabled]="v.available === 0 && v.vehicle_id !== existingBooking?.vehicle_id">
+            {{ v.label }}{{ v.available === 0 ? ' (full)' : '' }}
+          </option>
+        </select>
+      </div>
+
+      <div class="error-message" *ngIf="trainersLoadError">{{ trainersLoadError }}</div>
+      <div class="error-message" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+      <button
+        type="button"
+        class="btn btn-confirm"
+        (click)="confirmUpdateBooking()"
+        [disabled]="updateInFlight || trainersLoading || !updateForm.trainerId || !updateForm.vehicleId">
+        {{ updateInFlight ? 'Saving…' : 'Save Changes' }}
+      </button>
     </div>
   </div>
 

@@ -23,6 +23,11 @@ body {
 
 html {
   scroll-behavior: smooth;
+  height: 100%;
+}
+
+html, body {
+  min-height: 100%;
 }
 
 img {

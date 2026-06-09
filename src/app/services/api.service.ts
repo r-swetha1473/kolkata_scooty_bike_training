@@ -227,6 +227,29 @@ export class ApiService {
     return this.http.get<any[]>(`${this.apiUrl}/vehicles`);
   }
 
+  getSlotBookingStatus(slotId: string): Promise<{
+    ownedByMe: boolean;
+    ownedByOther: boolean;
+    slotFull: boolean;
+    booking?: {
+      id: string;
+      trainer_id: string;
+      vehicle_id: string;
+      trainer_name?: string;
+      vehicle_name?: string;
+    };
+  }> {
+    return this.get(`/bookings/slot/${slotId}/status`);
+  }
+
+  updateBooking(bookingId: string, trainerId: string, vehicleId: string): Observable<Booking> {
+    return this.http.put<Booking>(
+      `${this.apiUrl}/bookings/${bookingId}/update`,
+      { trainer_id: trainerId, vehicle_id: vehicleId },
+      { headers: this.getAuthHeaders(), withCredentials: true }
+    );
+  }
+
   getMyBookings(): Observable<Booking[]> {
     return this.http.get<Booking[]>(`${this.apiUrl}/bookings/my-bookings`, {
       headers: this.getAuthHeaders(),
