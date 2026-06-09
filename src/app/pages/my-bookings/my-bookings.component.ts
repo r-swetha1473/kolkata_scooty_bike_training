@@ -404,6 +404,20 @@ export interface BookingRow {
         justify-content: flex-end;
         margin-top: 12px;
       }
+
+      @media (max-width: 768px) {
+        .modal-content {
+          width: calc(100% - 24px);
+          margin: 12px;
+          padding: 16px;
+        }
+        .modal-actions {
+          flex-direction: column-reverse;
+        }
+        .modal-actions button {
+          width: 100%;
+        }
+      }
       .btn-secondary {
         padding: 8px 16px;
         border: 1px solid var(--border-primary);

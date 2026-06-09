@@ -3,7 +3,7 @@
     <div class="container">
       <div class="hero-content">
         <h1 class="hero-title">Book Your Training Slot</h1>
-        <p class="hero-subtitle">Choose your preferred date and time, then pick an available trainer. The training vehicle is assigned automatically when you confirm.</p>
+        <p class="hero-subtitle">Choose your preferred date and time, then select a vehicle type and trainer to complete your booking.</p>
       </div>
     </div>
   </section>
@@ -22,8 +22,13 @@
             <div class="step-label">Choose Slot</div>
           </div>
           <div class="step-line"></div>
-          <div class="step" [class.active]="showBookingModal">
+          <div class="step" [class.active]="showVehicleModal">
             <div class="step-number">3</div>
+            <div class="step-label">Choose Vehicle</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" [class.active]="showBookingModal">
+            <div class="step-number">4</div>
             <div class="step-label">Confirm</div>
           </div>
         </div>
@@ -61,7 +66,7 @@
           <h2 class="page-title">Available Time Slots</h2>
           <div class="legend">
             <span class="legend-item"><span class="dot available"></span> Available</span>
-            <span class="legend-item"><span class="dot booked"></span> Booked</span>
+            <span class="legend-item"><span class="dot partial"></span> Partially Booked</span>
             <span class="legend-item"><span class="dot full"></span> Full</span>
             <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
           </div>
@@ -79,14 +84,14 @@
           <div
             *ngFor="let slot of slots"
             class="slot-card"
-            [class.available]="isSlotAvailable(slot)"
-            [class.booked]="isSlotBooked(slot)"
+            [class.available]="isSlotAvailable(slot) && !isSlotPartiallyBooked(slot)"
+            [class.partial]="isSlotPartiallyBooked(slot)"
             [class.full]="isSlotFull(slot)"
             [class.disabled]="isSlotDisabled(slot)"
             (click)="selectSlot(slot)">
             <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
             <div class="slot-status-text">
-              {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotBooked(slot) ? 'BOOKED' : 'AVAILABLE')) }}
+              {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotPartiallyBooked(slot) ? 'PARTIAL' : 'AVAILABLE')) }}
             </div>
             <div class="slot-trainer slot-trainer-hint" *ngIf="slot.trainer?.profile?.full_name">
               <svg class="trainer-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -98,7 +103,7 @@
             <div class="slot-trainer slot-trainer-hint" *ngIf="!slot.trainer?.profile?.full_name">
               Trainer assigned when you book
             </div>
-            <div class="slot-capacity">{{ slot.booked_count }}/{{ slot.capacity }}</div>
+            <div class="slot-capacity">{{ getRemainingSeats(slot) }} seat{{ getRemainingSeats(slot) === 1 ? '' : 's' }} left</div>
           </div>
         </div>
       </div>
@@ -178,12 +183,44 @@
     </div>
   </section>
 
+  <div class="modal-overlay" *ngIf="showVehicleModal" (click)="closeVehicleModal()">
+    <div class="modal-content vehicle-modal" (click)="$event.stopPropagation()">
+      <button class="close-btn" (click)="closeVehicleModal()">×</button>
+      <h2>Choose Vehicle Type</h2>
+      <p class="modal-subtitle" *ngIf="selectedSlot">
+        {{ formatTime(selectedSlot.start_time) }} – {{ formatTime(selectedSlot.end_time) }}
+      </p>
+      <p class="form-hint">Select the vehicle you want to train on. Each option shows remaining availability for this slot.</p>
+
+      <div class="vehicle-options">
+        <button
+          type="button"
+          *ngFor="let option of vehicleOptions"
+          class="vehicle-option"
+          [class.available]="option.available > 0"
+          [class.unavailable]="option.available === 0"
+          [disabled]="option.available === 0"
+          (click)="selectVehicle(option)">
+          <span class="vehicle-option-label">{{ option.label }}</span>
+          <span class="vehicle-option-seats" *ngIf="option.available > 0">
+            {{ option.available }} seat{{ option.available === 1 ? '' : 's' }} available
+          </span>
+          <span class="vehicle-option-seats full-label" *ngIf="option.available === 0">Fully booked</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" *ngIf="showBookingModal" (click)="closeBookingModal()">
     <div class="modal-content" (click)="$event.stopPropagation()">
       <button class="close-btn" (click)="closeBookingModal()">×</button>
       <h2>Confirm Booking</h2>
       <p class="modal-subtitle" *ngIf="selectedSlot">
         {{ formatTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}
+      </p>
+      <p class="selected-vehicle" *ngIf="getSelectedVehicleLabel()">
+        Vehicle: <strong>{{ getSelectedVehicleLabel() }}</strong>
+        <button type="button" class="link-btn" (click)="backToVehicleSelection()">Change</button>
       </p>
 
       <form (ngSubmit)="confirmBooking()">

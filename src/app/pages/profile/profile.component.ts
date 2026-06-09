@@ -5,7 +5,6 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { AuthService, UserProfile } from '../../services/auth.service';
 import { HttpService } from '../../services/http.service';
 import { firstValueFrom } from 'rxjs';
-import { setAuthToken } from '../../utils/auth-token.storage';
 
 @Component({
   selector: 'app-profile',
@@ -256,9 +255,8 @@ export class ProfileComponent implements OnInit {
   async ngOnInit() {
     this.loading = true;
     try {
-      const oauthToken = this.route.snapshot.queryParamMap.get('token');
-      if (oauthToken) {
-        setAuthToken(oauthToken);
+      if (this.route.snapshot.queryParamMap.get('oauth') === 'success') {
+        this.authService.reloadUserProfile();
       }
       this.showInactiveBanner =
         this.route.snapshot.queryParamMap.get('inactive') === '1';

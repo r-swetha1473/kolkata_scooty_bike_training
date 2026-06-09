@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { PermissionService } from '../../services/permission.service';
 import { AdminHeaderComponent } from '../components/admin-header/admin-header.component';
 import { AdminFooterComponent } from '../components/admin-footer/admin-footer.component';
 import { ToastComponent } from '../../components/toast/toast.component';
@@ -11,10 +12,17 @@ import { ToastComponent } from '../../components/toast/toast.component';
   standalone: true,
   imports: [CommonModule, RouterModule, AdminHeaderComponent, AdminFooterComponent, ToastComponent],
   template: `
-    <div class="admin-layout">
-      <app-admin-header></app-admin-header>
+    <div class="admin-layout" [class.sidebar-open]="sidebarOpen">
+      <app-admin-header (menuToggle)="toggleSidebar()"></app-admin-header>
+
+      <div
+        class="sidebar-overlay"
+        *ngIf="sidebarOpen"
+        (click)="closeSidebar()"
+        aria-hidden="true">
+      </div>
       
-      <aside class="sidebar">
+      <aside class="sidebar" [class.open]="sidebarOpen">
         <div class="sidebar-header">
           <h2>Admin Panel</h2>
           <div class="user-info" *ngIf="auth.userProfile$ | async as profile">
@@ -27,7 +35,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
         </div>
 
         <nav class="sidebar-nav">
-          <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
+          <a *ngIf="perms.canViewModule('dashboard')" routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7"></rect>
               <rect x="14" y="3" width="7" height="7"></rect>
@@ -36,7 +44,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
             </svg>
             <span class="nav-label">Dashboard</span>
           </a>
-          <a routerLink="/admin/bookings" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('bookings')" routerLink="/admin/bookings" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -45,14 +53,14 @@ import { ToastComponent } from '../../components/toast/toast.component';
             </svg>
             <span class="nav-label">Bookings</span>
           </a>
-          <a routerLink="/admin/slots" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('slots')" routerLink="/admin/slots" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
               <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
             <span class="nav-label">Slots (auto)</span>
           </a>
-          <a routerLink="/admin/trainers" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('trainers')" routerLink="/admin/trainers" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
@@ -61,7 +69,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
             </svg>
             <span class="nav-label">Trainers</span>
           </a>
-          <a routerLink="/admin/users" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('users')" routerLink="/admin/users" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
@@ -70,21 +78,30 @@ import { ToastComponent } from '../../components/toast/toast.component';
             </svg>
             <span class="nav-label">Users</span>
           </a>
-          <a routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('vehicles')" routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path>
               <polygon points="12 15 17 21 7 21 12 15"></polygon>
             </svg>
             <span class="nav-label">Vehicles</span>
           </a>
-          <a routerLink="/admin/settings" routerLinkActive="active" class="nav-item">
+          <a *ngIf="auth.isSuperAdmin()" routerLink="/admin/sub-admins" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <line x1="19" y1="8" x2="19" y2="14"></line>
+              <line x1="22" y1="11" x2="16" y2="11"></line>
+            </svg>
+            <span class="nav-label">Sub Admins</span>
+          </a>
+          <a *ngIf="perms.canViewModule('settings')" routerLink="/admin/settings" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
             </svg>
             <span class="nav-label">Settings</span>
           </a>
-          <a routerLink="/admin/audit-logs" routerLinkActive="active" class="nav-item">
+          <a *ngIf="perms.canViewModule('audit_logs')" routerLink="/admin/audit-logs" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -97,6 +114,13 @@ import { ToastComponent } from '../../components/toast/toast.component';
         </nav>
 
         <div class="sidebar-footer">
+          <a routerLink="/admin/change-password" class="nav-item profile-link" (click)="closeSidebar()">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span class="nav-label">Change Password</span>
+          </a>
           <button class="btn-secondary" (click)="goToSite()">Back to Site</button>
           <button class="btn-danger" (click)="logout()">Logout</button>
         </div>
@@ -240,6 +264,11 @@ import { ToastComponent } from '../../components/toast/toast.component';
       gap: 8px;
     }
 
+    .profile-link {
+      margin-bottom: 4px;
+      text-decoration: none;
+    }
+
     .btn-secondary {
       padding: 10px 16px;
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -285,17 +314,49 @@ import { ToastComponent } from '../../components/toast/toast.component';
       background: #F9FAFB;
     }
 
+    .sidebar-overlay {
+      display: none;
+    }
+
+    @media (max-width: 1024px) {
+      .content-wrapper {
+        margin-left: 0;
+      }
+
+      .main-content {
+        padding: 24px 20px;
+      }
+    }
+
     @media (max-width: 768px) {
+      .sidebar-overlay {
+        display: block;
+        position: fixed;
+        inset: 70px 0 0 0;
+        background: rgba(17, 24, 39, 0.45);
+        z-index: 150;
+      }
+
       .sidebar {
-        width: 100%;
-        position: relative;
-        height: auto;
-        top: 0;
+        width: min(280px, 85vw);
+        position: fixed;
+        height: calc(100vh - 70px);
+        top: 70px;
+        left: 0;
+        z-index: 200;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
       }
 
       .content-wrapper {
         margin-left: 0;
-        margin-top: 0;
+        margin-top: 70px;
+        height: calc(100vh - 70px);
         min-height: auto;
       }
 
@@ -303,13 +364,58 @@ import { ToastComponent } from '../../components/toast/toast.component';
         padding: 16px;
       }
     }
+
+    @media (max-width: 425px) {
+      .sidebar {
+        width: min(260px, 90vw);
+      }
+
+      .sidebar-header {
+        padding: 16px;
+      }
+
+      .sidebar-header h2 {
+        font-size: 17px;
+      }
+
+      .nav-label {
+        font-size: 13px;
+      }
+
+      .main-content {
+        padding: 12px;
+      }
+    }
+
+    @media (max-width: 320px) {
+      .sidebar-footer .btn-secondary,
+      .sidebar-footer .btn-danger {
+        font-size: 13px;
+        padding: 10px 12px;
+      }
+
+      .main-content {
+        padding: 8px;
+      }
+    }
   `]
 })
 export class AdminLayoutComponent {
+  sidebarOpen = false;
+
   constructor(
     public auth: AuthService,
+    public perms: PermissionService,
     private router: Router
   ) {}
+
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar() {
+    this.sidebarOpen = false;
+  }
 
   goToSite() {
     this.router.navigate(['/']);

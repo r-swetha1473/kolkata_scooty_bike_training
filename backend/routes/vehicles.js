@@ -1,11 +1,26 @@
 const express = require('express');
 const db = require('../db');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
+const { loadUserPermissions, requirePermission } = require('../middleware/permissions');
+const { adminAccess } = require('../middleware/adminAccess');
 const auditService = require('../services/audit.service');
 const router = express.Router();
 
+const requireInactiveListAuth = (req, res, next) => {
+  if (req.query.include_inactive !== 'true') {
+    return next();
+  }
+  return authenticate(req, res, () =>
+    loadUserPermissions(req, res, () =>
+      authorize('admin', 'superadmin', 'subadmin')(req, res, () =>
+        requirePermission('vehicles', 'view')(req, res, next)
+      )
+    )
+  );
+};
+
 // Get all vehicles (active only for public, all for admin)
-router.get('/', async (req, res, next) => {
+router.get('/', requireInactiveListAuth, async (req, res, next) => {
   try {
     const { include_inactive } = req.query;
     const includeAll = include_inactive === 'true';
@@ -48,16 +63,10 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // Create vehicle (admin only)
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', ...adminAccess('vehicles', 'create'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { name, max_per_slot, is_active } = req.body;
+    const parsedMaxPerSlot = parseInt(max_per_slot, 10);
 
     if (!name || !name.trim()) {
       const error = new Error('Vehicle name is required');
@@ -66,7 +75,7 @@ router.post('/', authenticate, async (req, res, next) => {
       return next(error);
     }
 
-    if (!max_per_slot || max_per_slot < 1) {
+    if (!Number.isFinite(parsedMaxPerSlot) || parsedMaxPerSlot < 1) {
       const error = new Error('max_per_slot must be at least 1');
       error.status = 400;
       error.errorCode = 'INVALID_MAX_PER_SLOT';
@@ -77,7 +86,7 @@ router.post('/', authenticate, async (req, res, next) => {
       `INSERT INTO vehicles (name, max_per_slot, is_active)
        VALUES ($1, $2, $3)
        RETURNING id, name, max_per_slot, is_active, created_at, updated_at`,
-      [name.trim(), max_per_slot, is_active !== undefined ? is_active : true]
+      [name.trim(), parsedMaxPerSlot, is_active !== undefined ? Boolean(is_active) : true]
     );
 
     const created = result.rows[0];
@@ -98,15 +107,8 @@ router.post('/', authenticate, async (req, res, next) => {
 });
 
 // Update vehicle (admin only)
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', ...adminAccess('vehicles', 'edit'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { name, max_per_slot, is_active } = req.body;
     const updates = [];
     const params = [];
@@ -124,19 +126,20 @@ router.put('/:id', authenticate, async (req, res, next) => {
     }
 
     if (max_per_slot !== undefined) {
-      if (max_per_slot < 1) {
+      const parsedMaxPerSlot = parseInt(max_per_slot, 10);
+      if (!Number.isFinite(parsedMaxPerSlot) || parsedMaxPerSlot < 1) {
         const error = new Error('max_per_slot must be at least 1');
         error.status = 400;
         error.errorCode = 'INVALID_MAX_PER_SLOT';
         return next(error);
       }
       updates.push(`max_per_slot = $${paramIndex++}`);
-      params.push(max_per_slot);
+      params.push(parsedMaxPerSlot);
     }
 
     if (is_active !== undefined) {
       updates.push(`is_active = $${paramIndex++}`);
-      params.push(is_active);
+      params.push(Boolean(is_active));
     }
 
     if (updates.length === 0) {
@@ -195,15 +198,8 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete vehicle (admin only)
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', ...adminAccess('vehicles', 'delete'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get vehicle data before deletion for audit
     const vehicleResult = await db.query(
       'SELECT id, name, max_per_slot, is_active FROM vehicles WHERE id = $1',

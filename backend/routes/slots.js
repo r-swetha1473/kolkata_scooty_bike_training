@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { authenticate } = require('../middleware/auth');
+const { adminAccess } = require('../middleware/adminAccess');
 const { validateSlotCreation, validateSlotUpdate } = require('../validators');
 const config = require('../app.config');
 const { SLOT_CAPACITY, CANCELLATION_WINDOW_HOURS, SLOT_VISIBILITY_HOURS } = require('../config/app.config');
@@ -381,17 +381,10 @@ router.get('/available', async (req, res, next) => {
 });
 
 // PHASE 4: Update vehicle capacity for a slot (admin only)
-router.put('/:id/vehicle-capacity', authenticate, async (req, res, next) => {
+router.put('/:id/vehicle-capacity', ...adminAccess('slots', 'edit'), async (req, res, next) => {
   const client = await db.getClient();
   
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     await client.query('BEGIN');
 
     const { id } = req.params;
@@ -565,15 +558,8 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // Create slot (admin only)
-router.post('/', authenticate, validateSlotCreation, async (req, res, next) => {
+router.post('/', ...adminAccess('slots', 'create'), validateSlotCreation, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { trainer_id, start_time, end_time, capacity, status, slot_date, is_auto_generated, vehicle_capacities } = req.body;
 
     // Enforce capacity must match config (no defaults, no other values)
@@ -702,15 +688,8 @@ router.post('/', authenticate, validateSlotCreation, async (req, res, next) => {
 });
 
 // Update slot trainer (admin only)
-router.put('/:id/trainer', authenticate, async (req, res, next) => {
+router.put('/:id/trainer', ...adminAccess('slots', 'edit'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get current slot data for audit
     const beforeResult = await db.query('SELECT * FROM slots WHERE id = $1', [req.params.id]);
     if (beforeResult.rows.length === 0) {
@@ -764,15 +743,8 @@ router.put('/:id/trainer', authenticate, async (req, res, next) => {
 });
 
 // Toggle slot status (admin only)
-router.put('/:id/status', authenticate, async (req, res, next) => {
+router.put('/:id/status', ...adminAccess('slots', 'edit'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get current slot data for audit
     const beforeResult = await db.query('SELECT * FROM slots WHERE id = $1', [req.params.id]);
     if (beforeResult.rows.length === 0) {
@@ -818,15 +790,8 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
 });
 
 // Toggle slot enable/disable (admin only)
-router.put('/:id/toggle', authenticate, async (req, res, next) => {
+router.put('/:id/toggle', ...adminAccess('slots', 'edit'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get current slot data for audit
     const beforeResult = await db.query('SELECT * FROM slots WHERE id = $1', [req.params.id]);
     if (beforeResult.rows.length === 0) {
@@ -867,15 +832,8 @@ router.put('/:id/toggle', authenticate, async (req, res, next) => {
 });
 
 // Update slot (admin only)
-router.put('/:id', authenticate, validateSlotUpdate, async (req, res, next) => {
+router.put('/:id', ...adminAccess('slots', 'edit'), validateSlotUpdate, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get current slot data for audit
     const beforeResult = await db.query('SELECT * FROM slots WHERE id = $1', [req.params.id]);
     if (beforeResult.rows.length === 0) {
@@ -1086,15 +1044,8 @@ router.put('/:id', authenticate, validateSlotUpdate, async (req, res, next) => {
 });
 
 // Delete slot (admin only)
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', ...adminAccess('slots', 'delete'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Get slot data before deletion for audit
     const beforeResult = await db.query('SELECT * FROM slots WHERE id = $1', [req.params.id]);
     if (beforeResult.rows.length === 0) {
@@ -1125,15 +1076,8 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete slots by date (admin only)
-router.delete('/date/:date', authenticate, async (req, res, next) => {
+router.delete('/date/:date', ...adminAccess('slots', 'delete'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { date } = req.params;
     await db.query(`
       DELETE FROM slots 
@@ -1148,14 +1092,8 @@ router.delete('/date/:date', authenticate, async (req, res, next) => {
 });
 
 // Generate daily slots (admin only)
-router.post('/generate', authenticate, async (req, res, next) => {
+router.post('/generate', ...adminAccess('slots', 'create'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
     const { date, force } = req.body;
     const dateString = normalizeDate(date || getToday());
     const payload = await slotGenerationService.generateSlotsForDate(dateString, {
@@ -1171,15 +1109,8 @@ router.post('/generate', authenticate, async (req, res, next) => {
 });
 
 // Generate missing slots for rolling window (admin only)
-router.post('/generate-missing', authenticate, async (req, res, next) => {
+router.post('/generate-missing', ...adminAccess('slots', 'create'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const daysRaw = Number(req.body?.days || 7);
     const days = Number.isFinite(daysRaw) && daysRaw > 0 && daysRaw <= 30 ? daysRaw : 7;
     const payload = await slotGenerationService.ensureSlotsOnStartup(days);
@@ -1191,15 +1122,8 @@ router.post('/generate-missing', authenticate, async (req, res, next) => {
 });
 
 // PHASE 3: Get next available date without slots (admin helper API)
-router.get('/next-available-date', authenticate, async (req, res, next) => {
+router.get('/next-available-date', ...adminAccess('slots', 'view'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     const { start_date } = req.query;
     const startDate = normalizeDate(start_date || getToday());
     
@@ -1240,14 +1164,8 @@ router.get('/next-available-date', authenticate, async (req, res, next) => {
 });
 
 // Legacy alias — same as POST /generate
-router.post('/generate-daily', authenticate, async (req, res, next) => {
+router.post('/generate-daily', ...adminAccess('slots', 'create'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
     const { date, force } = req.body;
     const dateString = normalizeDate(date || getToday());
     const payload = await slotGenerationService.generateSlotsForDate(dateString, {
@@ -1263,15 +1181,8 @@ router.post('/generate-daily', authenticate, async (req, res, next) => {
 });
 
 // Update slot visibility for all slots (admin only, can be called periodically)
-router.post('/update-visibility', authenticate, async (req, res, next) => {
+router.post('/update-visibility', ...adminAccess('slots', 'edit'), async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      const error = new Error('Forbidden');
-      error.status = 403;
-      error.errorCode = 'FORBIDDEN';
-      return next(error);
-    }
-
     // Check if update_all_slots_visibility function exists
     const hasFunction = await db.query(`
       SELECT EXISTS (

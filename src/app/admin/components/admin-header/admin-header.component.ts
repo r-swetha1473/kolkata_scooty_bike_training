@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
@@ -11,6 +11,17 @@ import { AuthService } from '../../../services/auth.service';
     <header class="admin-header">
       <div class="header-container">
         <div class="header-left">
+          <button
+            type="button"
+            class="menu-toggle"
+            (click)="menuToggle.emit()"
+            aria-label="Toggle navigation menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
           <div class="logo">
             <div class="logo-text">
               <h1>Kolkata Scotty</h1>
@@ -91,6 +102,27 @@ import { AuthService } from '../../../services/auth.service';
     .header-left {
       display: flex;
       align-items: center;
+      gap: 12px;
+    }
+
+    .menu-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      background: #FFFFFF;
+      color: #374151;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .menu-toggle:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
     }
 
     .logo {
@@ -269,6 +301,10 @@ import { AuthService } from '../../../services/auth.service';
     }
 
     @media (max-width: 768px) {
+      .menu-toggle {
+        display: inline-flex;
+      }
+
       .header-container {
         padding: 0 16px;
       }
@@ -292,6 +328,7 @@ import { AuthService } from '../../../services/auth.service';
   `]
 })
 export class AdminHeaderComponent {
+  @Output() menuToggle = new EventEmitter<void>();
   showUserMenu = false;
 
   constructor(

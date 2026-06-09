@@ -31,9 +31,13 @@ function resolvePhoneForGoogleLink(existingPhone, normFromGoogle, googleId) {
   return `GOOGLE_${googleId}`;
 }
 
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+if (googleClientId && googleClientSecret) {
+  passport.use(new GoogleStrategy({
+    clientID: googleClientId,
+    clientSecret: googleClientSecret,
     callbackURL: process.env.GOOGLE_CALLBACK_URL
   },
   async (accessToken, refreshToken, profile, done) => {
@@ -203,7 +207,10 @@ passport.use(new GoogleStrategy({
       return done(error, null);
     }
   }
-));
+  ));
+} else {
+  console.warn('Google OAuth disabled: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable customer Google sign-in.');
+}
 
 passport.serializeUser((user, done) => {
   done(null, user.id);

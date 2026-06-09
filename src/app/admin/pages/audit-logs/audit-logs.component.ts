@@ -302,10 +302,7 @@ interface AuditLog {
     }
 
     .admin-table-container {
-      background: white;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      -webkit-overflow-scrolling: touch;
     }
 
     .admin-data-table {
@@ -604,6 +601,37 @@ interface AuditLog {
 
     .btn-secondary:hover {
       background: var(--admin-bg-hover);
+    }
+
+    .admin-data-table {
+      min-width: 900px;
+    }
+
+    @media (max-width: 768px) {
+      .admin-page-header,
+      .admin-filters-content {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-page-actions .admin-btn,
+      .admin-filter-group .admin-select,
+      .admin-search-group {
+        width: 100%;
+        max-width: 100%;
+        min-width: 100%;
+      }
+
+      .modal-content {
+        width: calc(100% - 24px);
+        padding: 20px;
+        margin: 12px;
+      }
+
+      .admin-pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
     }
   `]
 })
