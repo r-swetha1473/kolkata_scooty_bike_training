@@ -37,6 +37,47 @@ BEGIN
   END IF;
 END $$;
 
+-- profiles: stats columns used by GET /api/admin/users
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'total_bookings'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN total_bookings INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'last_booking_date'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN last_booking_date DATE;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'weekly_booking_count'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN weekly_booking_count INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'weekly_reset_date'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN weekly_reset_date DATE;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'inactive_blocked'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN inactive_blocked BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'provider_id'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN provider_id TEXT;
+  END IF;
+END $$;
+
 -- student_entitlements core columns
 DO $$
 BEGIN

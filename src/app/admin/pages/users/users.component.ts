@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
+import { getApiErrorMessage } from '../../../utils/api-error';
 
 @Component({
   selector: 'app-admin-users',
@@ -23,21 +24,24 @@ import { ToastService } from '../../../services/toast.service';
               <path d="m21 21-4.35-4.35"></path>
             </svg>
             <input 
-              type="text" 
-              [(ngModel)]="searchTerm" 
-              (input)="filterUsers()"
+              type="search"
+              [ngModel]="searchTerm"
+              (ngModelChange)="onSearchChange($event)"
+              (keyup.enter)="applyFilters()"
               placeholder="Search users..." 
-              class="admin-search-input">
+              class="admin-search-input"
+              aria-label="Search users">
           </div>
-          <select [(ngModel)]="roleFilter" (change)="filterUsers()" class="admin-select">
+          <select [(ngModel)]="roleFilter" (change)="applyFilters()" class="admin-select">
             <option value="">All Roles</option>
             <option value="customer">Customer</option>
             <option value="trainer">Trainer</option>
             <option value="admin">Admin</option>
             <option value="superadmin">Superadmin</option>
+            <option value="subadmin">Sub Admin</option>
           </select>
           <div class="admin-filter-spacer"></div>
-          <button class="admin-btn admin-btn-secondary" (click)="exportUsers()" title="Export to CSV">
+          <button class="admin-btn admin-btn-secondary" (click)="exportUsers()" [disabled]="loadingList || filteredUsers.length === 0" title="Export to CSV">
             <svg class="admin-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
@@ -49,7 +53,8 @@ import { ToastService } from '../../../services/toast.service';
       </div>
 
       <div class="admin-table-container">
-        <table class="admin-data-table">
+        <p *ngIf="loadingList" class="loading-hint">Loading users…</p>
+        <table class="admin-data-table" *ngIf="!loadingList">
           <thead>
             <tr>
               <th>Name</th>
@@ -63,7 +68,7 @@ import { ToastService } from '../../../services/toast.service';
           <tbody>
             <tr *ngIf="filteredUsers.length === 0">
               <td colspan="6" class="empty-state-cell">
-                No users found
+                {{ loadError ? 'Unable to load users' : 'No users found' }}
               </td>
             </tr>
             <tr *ngFor="let user of getPaginatedUsers()">
@@ -78,7 +83,7 @@ import { ToastService } from '../../../services/toast.service';
                 <span *ngIf="user.inactive_blocked" class="status-blocked">Inactive (blocked)</span>
                 <span *ngIf="!user.inactive_blocked" class="status-active">Active</span>
                 <button
-                  *ngIf="user.inactive_blocked"
+                  *ngIf="user.inactive_blocked && user.role === 'customer'"
                   type="button"
                   class="btn-reactivate"
                   (click)="reactivateCustomer(user.id)">
@@ -92,9 +97,9 @@ import { ToastService } from '../../../services/toast.service';
         </table>
       </div>
 
-      <div class="admin-pagination" *ngIf="filteredUsers.length > 0">
+      <div class="admin-pagination" *ngIf="!loadingList && filteredUsers.length > 0">
         <div class="admin-pagination-info">
-          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ filteredUsers.length }} users</span>
+          <span class="admin-pagination-count">Showing {{ getStartIndex() }}–{{ getEndIndex() }} of {{ totalRecords }} users</span>
           <select [(ngModel)]="itemsPerPage" (change)="onPageSizeChange()" class="admin-page-size-select">
             <option [value]="8">8</option>
             <option [value]="16">16</option>
@@ -141,6 +146,7 @@ import { ToastService } from '../../../services/toast.service';
     .email-cell { font-size: 12px; color: #9ca3af; font-weight: 400; }
     .role-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; background: #dbeafe; color: #1e40af; text-transform: capitalize; display: inline-block; }
     .empty-state-cell { text-align: center; padding: 40px; color: #6b7280; }
+    .loading-hint { padding: 16px 0; color: var(--admin-text-secondary, #6B7280); }
 
     .auth-cell {
       display: flex;
@@ -211,19 +217,21 @@ import { ToastService } from '../../../services/toast.service';
         justify-content: space-between;
       }
     }
-
   `]
 })
 export class AdminUsersComponent implements OnInit {
   users: any[] = [];
   filteredUsers: any[] = [];
+  totalRecords = 0;
   searchTerm = '';
   roleFilter = '';
-  
-  // Pagination
+  loadingList = false;
+  loadError = false;
+
   currentPage = 1;
-  itemsPerPage = 8; // Fixed to 8 records per page
+  itemsPerPage = 8;
   totalPages = 1;
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private adminService: AdminService,
@@ -235,44 +243,53 @@ export class AdminUsersComponent implements OnInit {
   }
 
   async loadUsers() {
+    this.loadingList = true;
+    this.loadError = false;
     try {
-      this.users = await this.adminService.getAllUsers();
-      this.filterUsers();
-    } catch {
-      this.toastService.error('Failed to load users');
+      const res = await this.adminService.getAllUsers({
+        role: this.roleFilter || undefined,
+        search: this.searchTerm.trim() || undefined
+      });
+      this.users = res.users;
+      this.filteredUsers = res.users;
+      this.totalRecords = res.total;
+      this.totalPages = Math.max(1, Math.ceil(this.totalRecords / this.itemsPerPage));
+      if (this.filteredUsers.length === 0 && this.totalRecords > 0 && this.currentPage > 1) {
+        this.currentPage = 1;
+        await this.loadUsers();
+        return;
+      }
+      console.log('[AdminUsers] loaded', {
+        role: this.roleFilter || 'all',
+        search: this.searchTerm || null,
+        total: this.totalRecords,
+        returned: this.users.length
+      });
+    } catch (err) {
+      this.loadError = true;
+      this.users = [];
+      this.filteredUsers = [];
+      this.totalRecords = 0;
+      console.error('[AdminUsers] load failed', err);
+      this.toastService.error(getApiErrorMessage(err, 'Failed to load users'));
+    } finally {
+      this.loadingList = false;
     }
   }
 
-  filterUsers() {
-    let filtered = [...this.users];
-    
-    // Only show regular users (customers) - exclude admin, superadmin, trainer
-    filtered = filtered.filter(user => 
-      user.role === 'customer'
-    );
-    
-    // Filter by search term
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(user => 
-        user.full_name?.toLowerCase().includes(term) ||
-        user.email?.toLowerCase().includes(term) ||
-        user.role?.toLowerCase().includes(term)
-      );
+  onSearchChange(value: string) {
+    this.searchTerm = value ?? '';
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => this.applyFilters(), 300);
+  }
+
+  applyFilters() {
+    if (this.searchDebounce) {
+      clearTimeout(this.searchDebounce);
+      this.searchDebounce = null;
     }
-    
-    // Filter by role (if role filter is set, but still only show customers)
-    if (this.roleFilter) {
-      filtered = filtered.filter(user => user.role === this.roleFilter);
-    }
-    
-    this.filteredUsers = filtered;
     this.currentPage = 1;
-    this.updatePagination();
-  }
-
-  updatePagination() {
-    this.totalPages = Math.ceil(this.filteredUsers.length / this.itemsPerPage);
+    void this.loadUsers();
   }
 
   getPaginatedUsers(): any[] {
@@ -291,44 +308,40 @@ export class AdminUsersComponent implements OnInit {
     const pages: (number | string)[] = [];
     const total = this.totalPages;
     const current = this.currentPage;
-    
+
     if (total <= 7) {
-      for (let i = 1; i <= total; i++) {
-        pages.push(i);
-      }
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else if (current <= 3) {
+      for (let i = 1; i <= 4; i++) pages.push(i);
+      pages.push('...');
+      pages.push(total);
+    } else if (current >= total - 2) {
+      pages.push(1);
+      pages.push('...');
+      for (let i = total - 3; i <= total; i++) pages.push(i);
     } else {
-      if (current <= 3) {
-        for (let i = 1; i <= 4; i++) pages.push(i);
-        pages.push('...');
-        pages.push(total);
-      } else if (current >= total - 2) {
-        pages.push(1);
-        pages.push('...');
-        for (let i = total - 3; i <= total; i++) pages.push(i);
-      } else {
-        pages.push(1);
-        pages.push('...');
-        for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-        pages.push('...');
-        pages.push(total);
-      }
+      pages.push(1);
+      pages.push('...');
+      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+      pages.push('...');
+      pages.push(total);
     }
-    
+
     return pages;
   }
 
   getStartIndex(): number {
-    return this.filteredUsers.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
+    return this.totalRecords === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1;
   }
 
   getEndIndex(): number {
     const end = this.currentPage * this.itemsPerPage;
-    return end > this.filteredUsers.length ? this.filteredUsers.length : end;
+    return end > this.totalRecords ? this.totalRecords : end;
   }
 
   onPageSizeChange() {
     this.currentPage = 1;
-    this.updatePagination();
+    this.totalPages = Math.max(1, Math.ceil(this.totalRecords / this.itemsPerPage));
   }
 
   async reactivateCustomer(userId: string) {
@@ -336,8 +349,8 @@ export class AdminUsersComponent implements OnInit {
       await firstValueFrom(this.adminService.updateUser(userId, { inactive_blocked: false }));
       await this.loadUsers();
       this.toastService.success('Customer reactivated');
-    } catch (error: any) {
-      this.toastService.error(error?.error?.message || 'Failed to reactivate');
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to reactivate'));
     }
   }
 
@@ -346,7 +359,6 @@ export class AdminUsersComponent implements OnInit {
   }
 
   exportUsers() {
-    // Simple CSV export
     const headers = ['Name', 'Email', 'Phone/Auth', 'Role', 'Joined'];
     const rows = this.filteredUsers.map(user => [
       user.full_name || '',
@@ -372,5 +384,4 @@ export class AdminUsersComponent implements OnInit {
     document.body.removeChild(link);
     this.toastService.success('Users exported successfully');
   }
-
 }

@@ -126,9 +126,41 @@ export class AdminService {
     return result || [];
   }
 
-  async getAllUsers(): Promise<any[]> {
-    const result = await firstValueFrom(this.http.get<any[]>('/admin/users'));
-    return result || [];
+  async getAllUsers(filters?: {
+    role?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ users: any[]; total: number; limit: number | null; offset: number }> {
+    const params = new URLSearchParams();
+    if (filters?.role) params.set('role', filters.role);
+    const search = filters?.search?.trim();
+    if (search) params.set('search', search);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+
+    const result = await firstValueFrom(
+      this.http.get<any>(`/admin/users${qs ? `?${qs}` : ''}`)
+    );
+
+    const usersFromTop = Array.isArray(result?.users) ? result.users : null;
+    const usersFromData = Array.isArray(result?.data?.users) ? result.data.users : null;
+    const usersFromArray = Array.isArray(result) ? result : null;
+    const users = usersFromTop || usersFromData || usersFromArray || [];
+
+    const totalRaw = result?.total ?? result?.data?.total;
+    const total = Number.isFinite(Number(totalRaw)) ? Number(totalRaw) : users.length;
+
+    const limitRaw = result?.limit ?? result?.data?.limit;
+    const offsetRaw = result?.offset ?? result?.data?.offset;
+
+    return {
+      users,
+      total,
+      limit: limitRaw != null ? Number(limitRaw) : null,
+      offset: Number.isFinite(Number(offsetRaw)) ? Number(offsetRaw) : 0
+    };
   }
 
   async getSettings(): Promise<any> {

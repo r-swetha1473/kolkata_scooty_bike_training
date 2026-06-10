@@ -26,6 +26,7 @@ const notificationService = require('../services/notification.service');
 const overdueBookingService = require('../services/overdueBooking.service');
 const { getDashboardStats } = require('../services/dashboardStats.service');
 const { buildBookingListQuery } = require('../utils/bookingSearch');
+const { buildAdminUsersListQuery } = require('../utils/adminUsersQuery');
 const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
 const { getClientIp } = require('../utils/authCookie');
 const trainerDeletionService = require('../services/trainerDeletion.service');
@@ -143,59 +144,79 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
 
 router.get('/users', requirePermission('users', 'view'), async (req, res, next) => {
   try {
-    const { role, search } = req.query;
-    
-    let query = `
-      SELECT 
-        p.id, 
-        p.email, 
-        p.full_name, 
-        p.phone, 
-        p.google_id,
-        p.role, 
-        p.created_at,
-        p.total_bookings,
-        p.last_booking_date,
-        p.weekly_booking_count,
-        p.weekly_reset_date,
-        p.inactive_blocked,
-        COUNT(b.id) FILTER (WHERE b.status NOT IN ('cancelled')) as active_bookings
-      FROM profiles p
-      LEFT JOIN bookings b ON p.id = b.user_id
-    `;
-    
-    const params = [];
-    const conditions = [];
-    
-    if (role) {
-      params.push(role);
-      conditions.push(`p.role = $${params.length}`);
-    }
-    
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(
-        p.full_name ILIKE $${params.length} OR 
-        p.email ILIKE $${params.length} OR 
-        p.phone ILIKE $${params.length}
-      )`);
-    }
-    
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-    
-    query += `
-      GROUP BY p.id, p.email, p.full_name, p.phone, p.google_id, p.role, p.created_at, 
-               p.total_bookings, p.last_booking_date, p.weekly_booking_count, p.weekly_reset_date,
-               p.inactive_blocked
-      ORDER BY p.created_at DESC
-    `;
+    const role = req.query.role != null ? String(req.query.role).trim() : '';
+    const search = req.query.search != null ? String(req.query.search).trim() : '';
+    const limit = req.query.limit;
+    const offset = req.query.offset;
 
-    const result = await db.query(query, params);
-    res.json(result.rows);
+    const { countSql, countParams, listSql, listParams, limit: safeLimit, offset: safeOffset } =
+      buildAdminUsersListQuery({ role, search, limit, offset });
+
+    console.log('[Admin] GET /users', { role: role || null, search: search || null, limit: safeLimit, offset: safeOffset });
+
+    const [countResult, listResult] = await Promise.all([
+      db.query(countSql, countParams),
+      db.query(listSql, listParams)
+    ]);
+
+    const total = Number(countResult.rows[0]?.total) || 0;
+    const users = listResult.rows;
+
+    console.log('[Admin] GET /users result', { total, returned: users.length });
+
+    res.json({
+      users,
+      total,
+      limit: safeLimit || null,
+      offset: safeOffset
+    });
   } catch (error) {
-    next(error);
+    const missingColumn = /column|does not exist|42703/i.test(String(error.message || ''));
+    if (!missingColumn) {
+      console.error('[Admin] GET /users failed:', error.message);
+      return next(error);
+    }
+
+    console.warn('[Admin] GET /users falling back to minimal profile query:', error.message);
+    try {
+      const role = req.query.role != null ? String(req.query.role).trim() : '';
+      const search = req.query.search != null ? String(req.query.search).trim() : '';
+      const conditions = [];
+      const params = [];
+      let idx = 1;
+      if (role) {
+        conditions.push(`p.role = $${idx++}`);
+        params.push(role);
+      }
+      if (search) {
+        conditions.push(`(
+          COALESCE(p.full_name, '') ILIKE $${idx} OR
+          COALESCE(p.email, '') ILIKE $${idx} OR
+          COALESCE(p.phone::text, '') ILIKE $${idx}
+        )`);
+        params.push(`%${search}%`);
+        idx++;
+      }
+      const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const fallback = await db.query(
+        `SELECT p.id, p.email, p.full_name, p.phone, p.role, p.created_at
+         FROM profiles p ${whereSql}
+         ORDER BY p.created_at DESC`,
+        params
+      );
+      const users = fallback.rows.map((row) => ({
+        ...row,
+        google_id: null,
+        inactive_blocked: false,
+        total_bookings: 0,
+        active_bookings: 0
+      }));
+      console.log('[Admin] GET /users fallback result', { returned: users.length });
+      return res.json({ users, total: users.length, limit: null, offset: 0 });
+    } catch (fallbackError) {
+      console.error('[Admin] GET /users fallback failed:', fallbackError.message);
+      return next(fallbackError);
+    }
   }
 });
 

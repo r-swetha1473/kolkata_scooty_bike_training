@@ -1,0 +1,76 @@
+/**
+ * Verify GET /api/admin/users against live or local API.
+ * Usage: API_BASE=https://kolkata-scooty-bike-training.onrender.com/api ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/verify_users_api.js
+ */
+require('dotenv').config();
+
+const API_BASE = (process.env.API_BASE || 'http://localhost:3000/api').replace(/\/$/, '');
+const EMAIL = process.env.ADMIN_EMAIL || 'admin@kolkatascotty.com';
+const PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+async function login() {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`Login failed ${res.status}: ${data.message || JSON.stringify(data)}`);
+  }
+  return data.token || data.accessToken;
+}
+
+async function getUsers(token, qs = '') {
+  const res = await fetch(`${API_BASE}/admin/users${qs}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = text;
+  }
+  return { status: res.status, data };
+}
+
+async function main() {
+  console.log('API_BASE:', API_BASE);
+  const token = await login();
+  console.log('Login: OK');
+
+  const all = await getUsers(token);
+  console.log('\n--- GET /admin/users (before fix on prod) ---');
+  console.log('status:', all.status);
+  if (all.status === 200) {
+    const users = Array.isArray(all.data) ? all.data : all.data?.users;
+    console.log('shape:', Array.isArray(all.data) ? 'array' : typeof all.data);
+    console.log('count:', users?.length ?? 0);
+    console.log('total:', all.data?.total ?? users?.length);
+    if (users?.[0]) console.log('sample:', JSON.stringify(users[0], null, 2));
+  } else {
+    console.log('error:', typeof all.data === 'string' ? all.data.slice(0, 500) : JSON.stringify(all.data, null, 2));
+  }
+
+  const customers = await getUsers(token, '?role=customer');
+  console.log('\n--- GET /admin/users?role=customer ---');
+  console.log('status:', customers.status);
+  if (customers.status === 200) {
+    const users = Array.isArray(customers.data) ? customers.data : customers.data?.users;
+    console.log('count:', users?.length ?? 0);
+  }
+
+  const search = await getUsers(token, '?search=test');
+  console.log('\n--- GET /admin/users?search=test ---');
+  console.log('status:', search.status);
+  if (search.status === 200) {
+    const users = Array.isArray(search.data) ? search.data : search.data?.users;
+    console.log('count:', users?.length ?? 0);
+  }
+}
+
+main().catch((e) => {
+  console.error('VERIFY_FAILED', e.message);
+  process.exit(1);
+});
