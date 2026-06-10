@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '../../../utils/api-error';
 const MODULES = ['dashboard', 'users', 'trainers', 'vehicles', 'bookings', 'slots', 'audit_logs', 'settings'];
 
 type AccountRole = 'admin' | 'subadmin';
+type FormField = 'full_name' | 'email' | 'phone' | 'password' | 'confirm_password';
 
 function defaultPermissions(): ModulePermission[] {
   return MODULES.map((module) => ({
@@ -122,73 +123,171 @@ function defaultPermissions(): ModulePermission[] {
         </table>
       </div>
 
-      <!-- Create / Edit modal -->
+      <!-- Create / Edit modal (shared) -->
       <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
-        <div class="modal-content account-modal" (click)="$event.stopPropagation()">
-          <h2>{{ editingId ? 'Edit Account' : 'Create Account' }}</h2>
-
-          <div class="form-grid">
-            <label>Name
-              <input class="admin-input" [(ngModel)]="form.full_name" required />
-            </label>
-            <label>Email
-              <input class="admin-input" type="email" [(ngModel)]="form.email" required />
-            </label>
-            <label>Phone Number
-              <input class="admin-input" [(ngModel)]="form.phone" placeholder="10-digit mobile" maxlength="10" />
-            </label>
-            <label *ngIf="!editingId">Role
-              <select class="admin-input" [(ngModel)]="form.role" (ngModelChange)="onRoleChange()">
-                <option value="admin">Admin</option>
-                <option value="subadmin">Sub Admin</option>
-              </select>
-            </label>
-            <label *ngIf="editingId">Role
-              <input class="admin-input" [value]="form.role === 'subadmin' ? 'Sub Admin' : 'Admin'" disabled />
-            </label>
-            <label *ngIf="!editingId">Password
-              <input class="admin-input" type="password" [(ngModel)]="form.password" minlength="8" autocomplete="new-password" />
-            </label>
-            <label *ngIf="!editingId">Confirm Password
-              <input class="admin-input" type="password" [(ngModel)]="form.confirm_password" minlength="8" autocomplete="new-password" />
-            </label>
-            <label>Status
-              <select class="admin-input" [(ngModel)]="form.status">
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </label>
+        <div
+          #accountModalPanel
+          class="modal-content account-modal"
+          (click)="$event.stopPropagation()"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-labelledby]="'account-modal-title'"
+          tabindex="-1">
+          <div class="modal-header">
+            <h2 id="account-modal-title">{{ editingId ? 'Edit Account' : 'Create Account' }}</h2>
+            <button type="button" class="modal-close-btn" (click)="closeModal()" aria-label="Close dialog">×</button>
           </div>
 
-          <div *ngIf="form.role === 'subadmin'">
-            <h3 class="matrix-title">Permission Matrix</h3>
-            <div class="permission-matrix-wrap">
-              <table class="permission-matrix">
-                <thead>
-                  <tr>
-                    <th>Module</th>
-                    <th>View</th>
-                    <th>Create</th>
-                    <th>Edit</th>
-                    <th>Delete</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let row of form.permissions">
-                    <td class="module-name">{{ formatModule(row.module) }}</td>
-                    <td><input type="checkbox" [(ngModel)]="row.can_view" [name]="row.module + '_view'" /></td>
-                    <td><input type="checkbox" [(ngModel)]="row.can_create" [name]="row.module + '_create'" [disabled]="!row.can_view" /></td>
-                    <td><input type="checkbox" [(ngModel)]="row.can_edit" [name]="row.module + '_edit'" [disabled]="!row.can_view" /></td>
-                    <td><input type="checkbox" [(ngModel)]="row.can_delete" [name]="row.module + '_delete'" [disabled]="!row.can_view" /></td>
-                  </tr>
-                </tbody>
-              </table>
+          <div class="modal-body">
+            <div class="account-form">
+              <div class="form-row">
+                <div class="form-field" [class.field-invalid]="showFieldError('full_name')">
+                  <label class="field-label" for="account-full-name">Name <span class="required">*</span></label>
+                  <input
+                    id="account-full-name"
+                    class="admin-input"
+                    [(ngModel)]="form.full_name"
+                    (blur)="markTouched('full_name')"
+                    autocomplete="name" />
+                  <span class="field-error" *ngIf="showFieldError('full_name')">Name is required</span>
+                </div>
+                <div class="form-field" [class.field-invalid]="showFieldError('email')">
+                  <label class="field-label" for="account-email">Email <span class="required">*</span></label>
+                  <input
+                    id="account-email"
+                    class="admin-input"
+                    type="email"
+                    [(ngModel)]="form.email"
+                    (blur)="markTouched('email')"
+                    autocomplete="email" />
+                  <span class="field-error" *ngIf="showFieldError('email')">
+                    {{ !form.email.trim() ? 'Email is required' : 'Enter a valid email address' }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-field" [class.field-invalid]="showFieldError('phone')">
+                  <label class="field-label" for="account-phone">Phone Number</label>
+                  <input
+                    id="account-phone"
+                    class="admin-input"
+                    [(ngModel)]="form.phone"
+                    (blur)="markTouched('phone')"
+                    placeholder="10-digit mobile"
+                    maxlength="10"
+                    inputmode="numeric" />
+                  <span class="field-error" *ngIf="showFieldError('phone')">Phone must be exactly 10 digits</span>
+                </div>
+                <div class="form-field">
+                  <label class="field-label" for="account-role">Role <span class="required" *ngIf="!editingId">*</span></label>
+                  <select
+                    *ngIf="!editingId"
+                    id="account-role"
+                    class="admin-input"
+                    [(ngModel)]="form.role"
+                    (ngModelChange)="onRoleChange()">
+                    <option value="admin">Admin</option>
+                    <option value="subadmin">Sub Admin</option>
+                  </select>
+                  <input
+                    *ngIf="editingId"
+                    id="account-role"
+                    class="admin-input"
+                    [value]="form.role === 'subadmin' ? 'Sub Admin' : 'Admin'"
+                    disabled />
+                </div>
+              </div>
+
+              <div class="form-row form-row-full">
+                <div class="form-field">
+                  <label class="field-label" for="account-status">Status</label>
+                  <select id="account-status" class="admin-input" [(ngModel)]="form.status">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row" *ngIf="!editingId">
+                <div class="form-field" [class.field-invalid]="showFieldError('password')">
+                  <label class="field-label" for="account-password">Password <span class="required">*</span></label>
+                  <input
+                    id="account-password"
+                    class="admin-input"
+                    type="password"
+                    [(ngModel)]="form.password"
+                    (blur)="markTouched('password')"
+                    minlength="8"
+                    autocomplete="new-password" />
+                  <span class="field-error" *ngIf="showFieldError('password')">Password must be at least 8 characters</span>
+                </div>
+                <div class="form-field" [class.field-invalid]="showFieldError('confirm_password')">
+                  <label class="field-label" for="account-confirm-password">Confirm Password <span class="required">*</span></label>
+                  <input
+                    id="account-confirm-password"
+                    class="admin-input"
+                    type="password"
+                    [(ngModel)]="form.confirm_password"
+                    (blur)="markTouched('confirm_password')"
+                    minlength="8"
+                    autocomplete="new-password" />
+                  <span class="field-error" *ngIf="showFieldError('confirm_password')">Passwords must match</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="permission-section" *ngIf="form.role === 'subadmin'" aria-labelledby="permission-matrix-title">
+              <h3 id="permission-matrix-title" class="matrix-title">Permission Matrix</h3>
+              <p class="matrix-hint">Scroll horizontally on small screens to view all permission columns.</p>
+              <div class="permission-matrix-wrap" tabindex="0" role="region" aria-label="Module permissions">
+                <table class="permission-matrix">
+                  <thead>
+                    <tr>
+                      <th scope="col">Module</th>
+                      <th scope="col">View</th>
+                      <th scope="col">Create</th>
+                      <th scope="col">Edit</th>
+                      <th scope="col">Delete</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of form.permissions">
+                      <td class="module-name">{{ formatModule(row.module) }}</td>
+                      <td>
+                        <label class="perm-check" [attr.aria-label]="formatModule(row.module) + ' view'">
+                          <input type="checkbox" [(ngModel)]="row.can_view" [name]="row.module + '_view'" />
+                        </label>
+                      </td>
+                      <td>
+                        <label class="perm-check" [attr.aria-label]="formatModule(row.module) + ' create'">
+                          <input type="checkbox" [(ngModel)]="row.can_create" [name]="row.module + '_create'" [disabled]="!row.can_view" />
+                        </label>
+                      </td>
+                      <td>
+                        <label class="perm-check" [attr.aria-label]="formatModule(row.module) + ' edit'">
+                          <input type="checkbox" [(ngModel)]="row.can_edit" [name]="row.module + '_edit'" [disabled]="!row.can_view" />
+                        </label>
+                      </td>
+                      <td>
+                        <label class="perm-check" [attr.aria-label]="formatModule(row.module) + ' delete'">
+                          <input type="checkbox" [(ngModel)]="row.can_delete" [name]="row.module + '_delete'" [disabled]="!row.can_view" />
+                        </label>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          <div class="modal-actions">
-            <button class="admin-btn admin-btn-secondary" (click)="closeModal()">Cancel</button>
-            <button class="admin-btn admin-btn-primary" [disabled]="saving" (click)="save()">
+          <div class="modal-footer">
+            <button type="button" class="admin-btn admin-btn-secondary modal-action-btn" (click)="closeModal()">Cancel</button>
+            <button
+              type="button"
+              class="admin-btn admin-btn-primary modal-action-btn"
+              [disabled]="saving || !isFormValid"
+              (click)="save()">
               {{ saving ? 'Saving…' : (editingId ? 'Update' : 'Create') }}
             </button>
           </div>
@@ -197,19 +296,51 @@ function defaultPermissions(): ModulePermission[] {
 
       <!-- Reset password modal -->
       <div class="modal-overlay" *ngIf="showResetModal" (click)="closeResetModal()">
-        <div class="modal-content reset-modal" (click)="$event.stopPropagation()">
-          <h2>Reset Password</h2>
-          <p class="reset-target">Account: <strong>{{ resetTarget?.full_name }}</strong> ({{ resetTarget?.email }})</p>
-          <p class="reset-hint">User will be required to change this password on next login.</p>
-          <label>Password
-            <input class="admin-input" type="password" [(ngModel)]="resetPassword" minlength="8" autocomplete="new-password" />
-          </label>
-          <label>Confirm Password
-            <input class="admin-input" type="password" [(ngModel)]="resetPasswordConfirm" minlength="8" autocomplete="new-password" />
-          </label>
-          <div class="modal-actions">
-            <button class="admin-btn admin-btn-secondary" (click)="closeResetModal()">Cancel</button>
-            <button class="admin-btn admin-btn-primary" [disabled]="resetting" (click)="confirmReset()">
+        <div
+          #resetModalPanel
+          class="modal-content compact-modal"
+          (click)="$event.stopPropagation()"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-modal-title"
+          aria-describedby="reset-modal-hint"
+          tabindex="-1">
+          <div class="modal-header">
+            <h2 id="reset-modal-title">Reset Password</h2>
+            <button type="button" class="modal-close-btn" (click)="closeResetModal()" aria-label="Close dialog">×</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-lead reset-target">
+              Account: <strong>{{ resetTarget?.full_name }}</strong>
+              <span class="modal-meta">({{ resetTarget?.email }})</span>
+            </p>
+            <p id="reset-modal-hint" class="modal-hint reset-hint">User will be required to change this password on next login.</p>
+            <div class="account-form compact-form">
+              <div class="form-field">
+                <label class="field-label" for="reset-password">New Password <span class="required">*</span></label>
+                <input
+                  id="reset-password"
+                  class="admin-input"
+                  type="password"
+                  [(ngModel)]="resetPassword"
+                  minlength="8"
+                  autocomplete="new-password" />
+              </div>
+              <div class="form-field">
+                <label class="field-label" for="reset-password-confirm">Confirm Password <span class="required">*</span></label>
+                <input
+                  id="reset-password-confirm"
+                  class="admin-input"
+                  type="password"
+                  [(ngModel)]="resetPasswordConfirm"
+                  minlength="8"
+                  autocomplete="new-password" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="admin-btn admin-btn-secondary modal-action-btn" (click)="closeResetModal()">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-primary modal-action-btn" [disabled]="resetting" (click)="confirmReset()">
               {{ resetting ? 'Resetting…' : 'Reset Password' }}
             </button>
           </div>
@@ -218,15 +349,29 @@ function defaultPermissions(): ModulePermission[] {
 
       <!-- Delete confirmation modal -->
       <div class="modal-overlay" *ngIf="showDeleteModal" (click)="closeDeleteModal()">
-        <div class="modal-content delete-modal" (click)="$event.stopPropagation()">
-          <h2>Delete Account</h2>
-          <p class="delete-warning">
-            Are you sure you want to delete <strong>{{ deleteTarget?.full_name }}</strong> ({{ deleteTarget?.email }})?
-          </p>
-          <p class="delete-hint">This action cannot be undone.</p>
-          <div class="modal-actions">
-            <button class="admin-btn admin-btn-secondary" (click)="closeDeleteModal()">Cancel</button>
-            <button class="admin-btn admin-btn-danger" [disabled]="deleting" (click)="confirmDelete()">
+        <div
+          #deleteModalPanel
+          class="modal-content compact-modal danger-modal"
+          (click)="$event.stopPropagation()"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+          aria-describedby="delete-modal-hint"
+          tabindex="-1">
+          <div class="modal-header">
+            <h2 id="delete-modal-title">Delete Account</h2>
+            <button type="button" class="modal-close-btn" (click)="closeDeleteModal()" aria-label="Close dialog">×</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-lead delete-warning">
+              Are you sure you want to delete <strong>{{ deleteTarget?.full_name }}</strong>?
+              <span class="modal-meta">({{ deleteTarget?.email }})</span>
+            </p>
+            <p id="delete-modal-hint" class="modal-hint delete-hint">This action cannot be undone.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="admin-btn admin-btn-secondary modal-action-btn" (click)="closeDeleteModal()">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-danger modal-action-btn" [disabled]="deleting" (click)="confirmDelete()">
               {{ deleting ? 'Deleting…' : 'Delete' }}
             </button>
           </div>
@@ -248,65 +393,252 @@ function defaultPermissions(): ModulePermission[] {
     .status-badge.active { background: #D1FAE5; color: #065F46; }
     .status-badge.inactive { background: #FEE2E2; color: #991B1B; }
     .pwd-flag { font-size: 12px; color: #B45309; font-weight: 600; }
-    .account-modal, .reset-modal, .delete-modal {
-      max-width: 720px;
-      width: min(95vw, 720px);
-      max-height: 92vh;
-      overflow-y: auto;
-    }
-    .reset-modal label, .delete-modal label {
+    .account-modal,
+    .compact-modal {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
-      font-size: 13px;
-      font-weight: 500;
+      overflow: hidden;
+      padding: 0;
+      margin: 0 auto;
+      max-height: 90vh;
     }
-    .reset-target, .delete-warning { margin: 0 0 8px; font-size: 14px; }
-    .reset-hint, .delete-hint { margin: 0 0 16px; font-size: 13px; color: var(--admin-text-secondary, #6B7280); }
-    .delete-hint { color: #B91C1C; font-weight: 600; }
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+    .account-modal {
+      max-width: 900px;
+      width: min(900px, 95vw);
+    }
+    .compact-modal {
+      max-width: 480px;
+      width: min(480px, 95vw);
+    }
+    .modal-header {
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 12px;
-      margin-bottom: 16px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--admin-border, #E5E7EB);
+      background: #fff;
     }
-    .form-grid label {
+    .modal-header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--admin-text, #111827);
+    }
+    .modal-close-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--admin-text-secondary, #6B7280);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .modal-close-btn:hover {
+      background: var(--admin-bg-hover, #F3F4F6);
+      color: var(--admin-text, #111827);
+    }
+    .modal-close-btn:focus-visible {
+      outline: 2px solid var(--admin-primary, #0066B1);
+      outline-offset: 2px;
+    }
+    .modal-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 24px 8px;
+      min-height: 0;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .modal-footer {
+      flex-shrink: 0;
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--admin-border, #E5E7EB);
+      background: #fff;
+      box-shadow: 0 -4px 12px rgba(17, 24, 39, 0.04);
+    }
+    .modal-action-btn {
+      min-width: 108px;
+      min-height: 40px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+    }
+    .modal-lead {
+      margin: 0 0 8px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--admin-text, #111827);
+    }
+    .modal-meta {
+      display: inline-block;
+      color: var(--admin-text-secondary, #6B7280);
+      font-size: 14px;
+      word-break: break-word;
+    }
+    .modal-hint {
+      margin: 0 0 16px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--admin-text-secondary, #6B7280);
+    }
+    .compact-form {
+      gap: 14px;
+    }
+    .danger-modal .modal-header h2 {
+      color: #B91C1C;
+    }
+    .delete-hint {
+      color: #B91C1C;
+      font-weight: 600;
+      margin-bottom: 0;
+    }
+    .account-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 0;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .form-row-full {
+      grid-template-columns: 1fr;
+    }
+    .form-field {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-width: 0;
+    }
+    .form-field .field-error {
+      min-height: 14px;
+    }
+    .field-label {
       font-size: 13px;
       font-weight: 500;
+      color: var(--admin-text, #111827);
+      line-height: 1.3;
     }
-    .matrix-title { margin: 16px 0 8px; font-size: 16px; }
+    .required {
+      color: #DC2626;
+    }
+    .form-field .admin-input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .field-invalid .admin-input {
+      border-color: #DC2626;
+      box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12);
+    }
+    .field-error {
+      font-size: 11px;
+      color: #DC2626;
+      line-height: 1.3;
+    }
+    .permission-section {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--admin-border, #E5E7EB);
+    }
+    .matrix-title {
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--admin-text, #111827);
+    }
+    .matrix-hint {
+      display: none;
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--admin-text-secondary, #6B7280);
+      line-height: 1.4;
+    }
     .permission-matrix-wrap {
-      overflow-x: auto;
+      overflow: auto;
       -webkit-overflow-scrolling: touch;
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      overscroll-behavior: contain;
+      border: 1px solid var(--admin-border, #E5E7EB);
+      border-radius: var(--admin-radius, 8px);
+      max-height: min(280px, 40vh);
+      scroll-behavior: smooth;
     }
     .permission-matrix {
       width: 100%;
-      min-width: 520px;
+      min-width: 480px;
       border-collapse: collapse;
     }
     .permission-matrix th,
     .permission-matrix td {
-      padding: 10px 12px;
+      padding: 8px 12px;
       border-bottom: 1px solid #F3F4F6;
       text-align: center;
-      font-size: 13px;
+      font-size: 12px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .permission-matrix td:not(.module-name) {
+      width: 72px;
     }
     .permission-matrix th:first-child,
     .permission-matrix td.module-name {
       text-align: left;
       font-weight: 600;
       text-transform: capitalize;
+      min-width: 100px;
     }
     .permission-matrix thead th {
-      background: var(--admin-bg-hover);
+      background: var(--admin-bg-hover, #F9FAFB);
       position: sticky;
       top: 0;
+      z-index: 1;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--admin-text-secondary, #6B7280);
+    }
+    .perm-check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      cursor: pointer;
+    }
+    .perm-check input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: var(--admin-primary, #0066B1);
+    }
+    .perm-check input[type="checkbox"]:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
     }
     .modal-overlay {
       position: fixed;
@@ -316,41 +648,97 @@ function defaultPermissions(): ModulePermission[] {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      overflow: hidden;
     }
     .modal-content {
       background: #fff;
       border-radius: 12px;
-      padding: 24px;
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
       width: 100%;
     }
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 20px;
-      flex-wrap: wrap;
+    @media (min-width: 1024px) {
+      .permission-matrix-wrap {
+        max-height: min(320px, 42vh);
+      }
     }
-    @media (max-width: 768px) {
-      .form-grid { grid-template-columns: 1fr; }
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .account-modal {
+        width: min(900px, 92vw);
+      }
+      .form-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 767px) {
+      .matrix-hint { display: block; }
+      .form-row { grid-template-columns: 1fr; }
       .actions-cell { flex-direction: column; }
       .actions-cell .admin-btn { width: 100%; }
+      .modal-header,
+      .modal-body,
+      .modal-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+      .permission-matrix-wrap {
+        max-height: min(200px, 30vh);
+      }
     }
     @media (max-width: 425px) {
-      .account-modal, .reset-modal, .delete-modal {
+      .account-modal,
+      .compact-modal {
         width: 100%;
-        max-height: 95vh;
+        max-height: 92vh;
+        border-radius: 10px;
       }
-      .permission-matrix { min-width: 480px; }
+      .permission-matrix { min-width: 400px; }
+      .matrix-hint { display: block; }
+      .modal-footer {
+        flex-wrap: wrap;
+      }
+      .modal-footer .modal-action-btn {
+        flex: 1 1 calc(50% - 6px);
+        min-width: 120px;
+      }
+    }
+    @media (max-width: 375px) {
+      .modal-header,
+      .modal-body,
+      .modal-footer {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+      .permission-matrix-wrap {
+        max-height: min(220px, 32vh);
+      }
     }
     @media (max-width: 320px) {
       .modal-overlay { padding: 8px; }
-      .account-modal, .reset-modal, .delete-modal { border-radius: 8px; }
+      .account-modal,
+      .compact-modal {
+        border-radius: 8px;
+        max-height: 94vh;
+      }
+      .modal-header h2 { font-size: 16px; }
+      .modal-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .modal-footer .modal-action-btn {
+        width: 100%;
+        min-width: 0;
+      }
+      .matrix-hint { font-size: 11px; }
     }
   `]
 })
-export class AdminSubAdminsComponent implements OnInit {
+export class AdminSubAdminsComponent implements OnInit, OnDestroy {
+  @ViewChild('accountModalPanel') accountModalPanel?: ElementRef<HTMLElement>;
+  @ViewChild('resetModalPanel') resetModalPanel?: ElementRef<HTMLElement>;
+  @ViewChild('deleteModalPanel') deleteModalPanel?: ElementRef<HTMLElement>;
+
   subAdmins: SubAdmin[] = [];
   admins: SubAdmin[] = [];
   loading = false;
@@ -368,6 +756,7 @@ export class AdminSubAdminsComponent implements OnInit {
   deleteRole: AccountRole | null = null;
   resetPassword = '';
   resetPasswordConfirm = '';
+  private touchedFields = new Set<FormField>();
 
   form = {
     full_name: '',
@@ -387,6 +776,78 @@ export class AdminSubAdminsComponent implements OnInit {
 
   async ngOnInit() {
     await Promise.all([this.load(), this.loadAdmins()]);
+  }
+
+  ngOnDestroy() {
+    this.unlockBodyScroll();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  handleDocumentKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      if (this.showModal) {
+        event.preventDefault();
+        this.closeModal();
+      } else if (this.showResetModal) {
+        event.preventDefault();
+        this.closeResetModal();
+      } else if (this.showDeleteModal) {
+        event.preventDefault();
+        this.closeDeleteModal();
+      }
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const panel = this.getActiveModalPanel();
+    if (!panel) return;
+    this.trapFocusInModal(event, panel);
+  }
+
+  private getActiveModalPanel(): HTMLElement | undefined {
+    if (this.showModal) return this.accountModalPanel?.nativeElement;
+    if (this.showResetModal) return this.resetModalPanel?.nativeElement;
+    if (this.showDeleteModal) return this.deleteModalPanel?.nativeElement;
+    return undefined;
+  }
+
+  private trapFocusInModal(event: KeyboardEvent, root?: HTMLElement) {
+    if (!root) return;
+    const selector =
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
+      (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1
+    );
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  private syncBodyScrollLock() {
+    const locked = this.showModal || this.showResetModal || this.showDeleteModal;
+    document.body.style.overflow = locked ? 'hidden' : '';
+  }
+
+  private unlockBodyScroll() {
+    document.body.style.overflow = '';
+  }
+
+  private focusActiveModal(preferSelector?: string) {
+    setTimeout(() => {
+      const panel = this.getActiveModalPanel();
+      if (!panel) return;
+      const preferred = preferSelector ? panel.querySelector<HTMLElement>(preferSelector) : null;
+      const first =
+        preferred ??
+        panel.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), button.modal-close-btn');
+      (first ?? panel).focus();
+    });
   }
 
   async load() {
@@ -415,6 +876,61 @@ export class AdminSubAdminsComponent implements OnInit {
     return module.replace(/_/g, ' ');
   }
 
+  get isFormValid(): boolean {
+    if (!this.form.full_name.trim()) return false;
+    if (!this.form.email.trim() || !this.isEmailValid(this.form.email)) return false;
+    if (this.form.phone.trim() && !/^[0-9]{10}$/.test(this.form.phone.trim())) return false;
+    if (!this.editingId) {
+      if (!this.form.password || this.form.password.length < 8) return false;
+      if (this.form.password !== this.form.confirm_password) return false;
+    }
+    return true;
+  }
+
+  markTouched(field: FormField) {
+    this.touchedFields.add(field);
+  }
+
+  private resetTouched() {
+    this.touchedFields.clear();
+  }
+
+  private touchAllFields() {
+    this.touchedFields.add('full_name');
+    this.touchedFields.add('email');
+    this.touchedFields.add('phone');
+    if (!this.editingId) {
+      this.touchedFields.add('password');
+      this.touchedFields.add('confirm_password');
+    }
+  }
+
+  showFieldError(field: FormField): boolean {
+    if (!this.touchedFields.has(field)) return false;
+    return this.isFieldInvalid(field);
+  }
+
+  private isFieldInvalid(field: FormField): boolean {
+    switch (field) {
+      case 'full_name':
+        return !this.form.full_name.trim();
+      case 'email':
+        return !this.form.email.trim() || !this.isEmailValid(this.form.email);
+      case 'phone':
+        return !!this.form.phone.trim() && !/^[0-9]{10}$/.test(this.form.phone.trim());
+      case 'password':
+        return !this.editingId && (!this.form.password || this.form.password.length < 8);
+      case 'confirm_password':
+        return !this.editingId && this.form.password !== this.form.confirm_password;
+      default:
+        return false;
+    }
+  }
+
+  private isEmailValid(email: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  }
+
   onRoleChange() {
     if (this.form.role === 'subadmin' && !this.editingId) {
       this.form.permissions = defaultPermissions();
@@ -422,6 +938,7 @@ export class AdminSubAdminsComponent implements OnInit {
   }
 
   openCreateModal() {
+    this.resetTouched();
     this.editingId = null;
     this.editingRole = null;
     this.form = {
@@ -435,9 +952,12 @@ export class AdminSubAdminsComponent implements OnInit {
       permissions: defaultPermissions()
     };
     this.showModal = true;
+    this.syncBodyScrollLock();
+    this.focusActiveModal('#account-full-name');
   }
 
   openEditModal(account: SubAdmin, role: AccountRole) {
+    this.resetTouched();
     this.editingId = account.id;
     this.editingRole = role;
     this.form = {
@@ -453,6 +973,8 @@ export class AdminSubAdminsComponent implements OnInit {
         : defaultPermissions()
     };
     this.showModal = true;
+    this.syncBodyScrollLock();
+    this.focusActiveModal('#account-full-name');
   }
 
   openResetModal(account: SubAdmin) {
@@ -460,18 +982,24 @@ export class AdminSubAdminsComponent implements OnInit {
     this.resetPassword = '';
     this.resetPasswordConfirm = '';
     this.showResetModal = true;
+    this.syncBodyScrollLock();
+    this.focusActiveModal('#reset-password');
   }
 
   openDeleteModal(account: SubAdmin, role: AccountRole) {
     this.deleteTarget = account;
     this.deleteRole = role;
     this.showDeleteModal = true;
+    this.syncBodyScrollLock();
+    this.focusActiveModal('.modal-footer .admin-btn-secondary');
   }
 
   closeModal() {
     this.showModal = false;
     this.editingId = null;
     this.editingRole = null;
+    this.resetTouched();
+    this.syncBodyScrollLock();
   }
 
   closeResetModal() {
@@ -479,12 +1007,14 @@ export class AdminSubAdminsComponent implements OnInit {
     this.resetTarget = null;
     this.resetPassword = '';
     this.resetPasswordConfirm = '';
+    this.syncBodyScrollLock();
   }
 
   closeDeleteModal() {
     this.showDeleteModal = false;
     this.deleteTarget = null;
     this.deleteRole = null;
+    this.syncBodyScrollLock();
   }
 
   private isActive(): boolean {
@@ -492,22 +1022,9 @@ export class AdminSubAdminsComponent implements OnInit {
   }
 
   async save() {
-    if (!this.form.full_name.trim() || !this.form.email.trim()) {
-      this.toast.error('Name and email are required');
-      return;
-    }
-    if (!this.editingId) {
-      if (!this.form.password || this.form.password.length < 8) {
-        this.toast.error('Password must be at least 8 characters');
-        return;
-      }
-      if (this.form.password !== this.form.confirm_password) {
-        this.toast.error('Password confirmation must match');
-        return;
-      }
-    }
-    if (this.form.phone && !/^[0-9]{10}$/.test(this.form.phone.trim())) {
-      this.toast.error('Phone number must be exactly 10 digits');
+    this.touchAllFields();
+    if (!this.isFormValid) {
+      this.toast.error('Please fix the highlighted fields');
       return;
     }
 
