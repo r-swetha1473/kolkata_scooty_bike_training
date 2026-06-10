@@ -5,6 +5,7 @@ const { loadUserPermissions, requirePermission } = require('../middleware/permis
 const { adminAccess } = require('../middleware/adminAccess');
 const auditService = require('../services/audit.service');
 const slotCapacityService = require('../services/slotCapacity.service');
+const { inferVehicleType } = require('../utils/vehicleType');
 const router = express.Router();
 
 const requireInactiveListAuth = (req, res, next) => {
@@ -83,11 +84,14 @@ router.post('/', ...adminAccess('vehicles', 'create'), async (req, res, next) =>
       return next(error);
     }
 
+    const trimmedName = name.trim();
+    const legacyType = inferVehicleType(trimmedName);
+
     const result = await db.query(
-      `INSERT INTO vehicles (name, max_per_slot, is_active)
-       VALUES ($1, $2, $3)
+      `INSERT INTO vehicles (name, max_per_slot, is_active, type)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, name, max_per_slot, is_active, created_at, updated_at`,
-      [name.trim(), parsedMaxPerSlot, is_active !== undefined ? Boolean(is_active) : true]
+      [trimmedName, parsedMaxPerSlot, is_active !== undefined ? Boolean(is_active) : true, legacyType]
     );
 
     const created = result.rows[0];
@@ -122,8 +126,11 @@ router.put('/:id', ...adminAccess('vehicles', 'edit'), async (req, res, next) =>
         error.errorCode = 'INVALID_NAME';
         return next(error);
       }
+      const trimmedName = name.trim();
       updates.push(`name = $${paramIndex++}`);
-      params.push(name.trim());
+      params.push(trimmedName);
+      updates.push(`type = $${paramIndex++}`);
+      params.push(inferVehicleType(trimmedName));
     }
 
     if (max_per_slot !== undefined) {
