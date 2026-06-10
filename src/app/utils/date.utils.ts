@@ -98,6 +98,34 @@ export function getToday(): string {
 }
 
 /**
+ * Today's calendar date in Asia/Kolkata (YYYY-MM-DD).
+ * Use for booking UI default date and same-day slot filtering.
+ */
+export function getKolkataToday(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+/**
+ * Current minutes since midnight in Asia/Kolkata.
+ */
+export function getKolkataCurrentMinutes(): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date());
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+  return hour * 60 + minute;
+}
+
+/**
  * Gets the day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
  * 
  * @param dateInput - Date to check

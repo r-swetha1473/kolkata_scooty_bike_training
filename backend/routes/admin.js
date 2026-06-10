@@ -26,6 +26,7 @@ const notificationService = require('../services/notification.service');
 const overdueBookingService = require('../services/overdueBooking.service');
 const { getDashboardStats } = require('../services/dashboardStats.service');
 const { buildBookingListQuery } = require('../utils/bookingSearch');
+const { enrichBookingTimes } = require('../utils/bookingTimeFormat');
 const { buildAdminUsersListQuery, LATEST_BOOKING_PHONE_SQL } = require('../utils/adminUsersQuery');
 const { enrichUsersWithDisplayPhone } = require('../utils/userPhone');
 const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
@@ -103,39 +104,44 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
 
     const result = await db.query(listSql, listParams);
 
-    const bookings = result.rows.map(row => ({
-      id: row.id,
-      user_id: row.user_id,
-      slot_id: row.slot_id,
-      trainer_id: row.trainer_id,
-      vehicle_id: row.vehicle_id,
-      status: row.status,
-      notes: row.notes,
-      phone: row.phone,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      user: {
-        id: row.user_id,
-        full_name: row.user_name,
-        email: row.user_email
-      },
-      trainer: {
-        id: row.trainer_table_id,
-        profile: {
-          id: row.trainer_profile_id,
-          full_name: row.trainer_name
-        }
-      },
-      slot: {
+    const bookings = result.rows.map((row) =>
+      enrichBookingTimes({
+        id: row.id,
+        user_id: row.user_id,
+        slot_id: row.slot_id,
+        trainer_id: row.trainer_id,
+        vehicle_id: row.vehicle_id,
+        status: row.status,
+        notes: row.notes,
+        phone: row.phone,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
         start_time: row.start_time,
         end_time: row.end_time,
-        slot_date: row.slot_date
-      },
-      vehicle_name: row.vehicle_name,
-      user_name: row.user_name,
-      user_email: row.user_email,
-      trainer_name: row.trainer_name
-    }));
+        slot_date: row.slot_date,
+        user: {
+          id: row.user_id,
+          full_name: row.user_name,
+          email: row.user_email
+        },
+        trainer: {
+          id: row.trainer_table_id,
+          profile: {
+            id: row.trainer_profile_id,
+            full_name: row.trainer_name
+          }
+        },
+        slot: {
+          start_time: row.start_time,
+          end_time: row.end_time,
+          slot_date: row.slot_date
+        },
+        vehicle_name: row.vehicle_name,
+        user_name: row.user_name,
+        user_email: row.user_email,
+        trainer_name: row.trainer_name
+      })
+    );
 
     res.json({ bookings, total, limit, offset });
   } catch (error) {

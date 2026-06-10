@@ -324,8 +324,9 @@ async function checkSlotCapacity() {
     const db = require('../db');
     const slotCapacityService = require('../services/slotCapacity.service');
     const vehicleCount = await slotCapacityService.getActiveVehicleCount();
+    const capacitySum = await slotCapacityService.getActiveVehicleCapacitySum();
     const enabled = await slotCapacityService.isAutoCapacityEnabled();
-    const expected = enabled ? Math.max(1, vehicleCount) : require('../config/app.config').SLOT_CAPACITY.DEFAULT;
+    const expected = enabled ? Math.max(1, capacitySum) : require('../config/app.config').SLOT_CAPACITY.DEFAULT;
 
     const mismatch = await db.query(
       `SELECT COUNT(*)::int AS count FROM slots
@@ -336,7 +337,7 @@ async function checkSlotCapacity() {
     );
     const count = Number(mismatch.rows[0]?.count) || 0;
     if (count === 0) {
-      pass('database', 'Slot capacity vs vehicles', `expected=${expected}, vehicles=${vehicleCount}`);
+      pass('database', 'Slot capacity vs vehicles', `expected=${expected}, vehicles=${vehicleCount}, sum=${capacitySum}`);
     } else {
       fail('database', 'Slot capacity vs vehicles', `${count} slot(s) still at wrong capacity (expected ${expected})`);
     }

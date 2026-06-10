@@ -247,10 +247,11 @@ async function generateSlotsForDate(dateString, options = {}) {
             UPDATE slots
             SET is_visible = $1,
                 capacity = CASE WHEN booked_count <= $3 THEN $3 ELSE capacity END,
+                trainer_id = COALESCE(trainer_id, $4),
                 updated_at = NOW()
             WHERE id = $2
             `,
-            [slot.is_visible, existing.rows[0].id, slot.capacity]
+            [slot.is_visible, existing.rows[0].id, slot.capacity, slot.trainer_id]
           );
 
           try {

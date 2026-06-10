@@ -1,5 +1,5 @@
 /**
- * Slot capacity derived from active vehicle count when auto-calculation is enabled.
+ * Slot capacity derived from SUM(max_per_slot) of active vehicles when auto-calculation is enabled.
  */
 
 const db = require('../db');
@@ -52,30 +52,97 @@ async function getActiveVehicleCount(client = null) {
   return Math.max(0, parseInt(result.rows[0]?.count || 0, 10));
 }
 
+/** Sum of max_per_slot across active vehicles — the correct aggregate slot capacity. */
+async function getActiveVehicleCapacitySum(client = null) {
+  const result = await query(
+    client,
+    'SELECT COALESCE(SUM(max_per_slot), 0)::int AS total FROM vehicles WHERE is_active = true'
+  );
+  return Math.max(0, parseInt(result.rows[0]?.total || 0, 10));
+}
+
 /**
  * Resolves slot capacity for new/updated slots.
- * When auto mode is on: capacity = count of active vehicles (minimum 1).
+ * When auto mode is on: capacity = SUM(max_per_slot) of active vehicles (minimum 1).
  */
 async function resolveSlotCapacity(client = null) {
   const enabled = await isAutoCapacityEnabled(client);
   if (!enabled) {
     return SLOT_CAPACITY.DEFAULT;
   }
-  const count = await getActiveVehicleCount(client);
-  return Math.max(1, count);
+  const total = await getActiveVehicleCapacitySum(client);
+  return Math.max(1, total);
 }
 
 async function syncSlotVehicleCapacities(slotIds, client = null) {
   for (const slotId of slotIds) {
     try {
       await query(client, 'SELECT ensure_slot_vehicle_capacities($1)', [slotId]);
+      await query(
+        client,
+        `
+        UPDATE slot_vehicle_capacity svc
+        SET capacity = v.max_per_slot
+        FROM vehicles v
+        WHERE svc.vehicle_id = v.id
+          AND svc.slot_id = $1
+          AND v.is_active = true
+        `,
+        [slotId]
+      );
     } catch (e) {
       const msg = String(e.message || '');
       if (!msg.includes('does not exist') && !msg.includes('ensure_slot_vehicle_capacities')) {
-        console.warn('[slotCapacity] ensure_slot_vehicle_capacities:', msg);
+        console.warn('[slotCapacity] syncSlotVehicleCapacities:', msg);
       }
     }
   }
+}
+
+async function fetchActiveTrainerIds(client = null) {
+  const result = await query(
+    client,
+    `SELECT id FROM trainers WHERE is_active = true ORDER BY created_at ASC NULLS LAST, id ASC`
+  );
+  return result.rows.map((row) => row.id);
+}
+
+/** Assign round-robin trainers to future slots missing trainer_id so they become bookable. */
+async function assignMissingTrainerIds(client = null) {
+  const trainerIds = await fetchActiveTrainerIds(client);
+  if (trainerIds.length === 0) {
+    return { updated: 0 };
+  }
+
+  const orphans = await query(
+    client,
+    `
+    SELECT id
+    FROM slots
+    WHERE trainer_id IS NULL
+      AND ${SLOT_DAY} >= ${KOLKATA_TODAY}
+      AND status NOT IN ('cancelled', 'completed', 'disabled')
+    ORDER BY start_time ASC
+    `,
+    []
+  );
+
+  let seq = 0;
+  for (const row of orphans.rows) {
+    const trainerId = trainerIds[seq % trainerIds.length];
+    await query(
+      client,
+      `UPDATE slots SET trainer_id = $1, updated_at = NOW() WHERE id = $2`,
+      [trainerId, row.id]
+    );
+    seq += 1;
+  }
+
+  if (orphans.rows.length > 0) {
+    console.log(`[slotCapacity] Assigned trainers to ${orphans.rows.length} slot(s) missing trainer_id`);
+  }
+
+  return { updated: orphans.rows.length };
 }
 
 /**
@@ -85,7 +152,10 @@ async function syncSlotVehicleCapacities(slotIds, client = null) {
 async function recalculateFutureSlotCapacities(adminId = null, client = null) {
   const enabled = await isAutoCapacityEnabled(client);
   const vehicleCount = await getActiveVehicleCount(client);
-  const capacity = enabled ? Math.max(1, vehicleCount) : SLOT_CAPACITY.DEFAULT;
+  const capacitySum = await getActiveVehicleCapacitySum(client);
+  const capacity = enabled ? Math.max(1, capacitySum) : SLOT_CAPACITY.DEFAULT;
+
+  await assignMissingTrainerIds(client);
 
   const result = await query(
     client,
@@ -114,12 +184,13 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
       auto_enabled: enabled,
       new_capacity: capacity,
       active_vehicles: vehicleCount,
+      capacity_sum: capacitySum,
       slots_updated: result.rows.length
     });
     await notificationService.createNotification({
       type: 'slot_capacity',
       title: 'Slot capacity updated',
-      body: `${result.rows.length} slot(s) from today onward set to capacity ${capacity} (${vehicleCount} active vehicle(s)).`,
+      body: `${result.rows.length} slot(s) from today onward set to capacity ${capacity} (sum of max_per_slot across ${vehicleCount} active vehicle(s)).`,
       entity_type: 'slot',
       entity_id: null,
       dedupeHours: 1
@@ -130,6 +201,7 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
     updated: result.rows.length,
     capacity,
     active_vehicles: vehicleCount,
+    capacity_sum: capacitySum,
     auto_enabled: enabled
   };
 }
@@ -138,7 +210,9 @@ module.exports = {
   SETTING_KEY,
   isAutoCapacityEnabled,
   getActiveVehicleCount,
+  getActiveVehicleCapacitySum,
   resolveSlotCapacity,
   recalculateFutureSlotCapacities,
-  syncSlotVehicleCapacities
+  syncSlotVehicleCapacities,
+  assignMissingTrainerIds
 };

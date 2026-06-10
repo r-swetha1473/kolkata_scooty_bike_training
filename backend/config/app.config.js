@@ -5,7 +5,7 @@
 
 // Slot capacity constants
 const SLOT_CAPACITY = {
-  MAX: 5,
+  MAX: 50,
   DEFAULT: 5
 };
 

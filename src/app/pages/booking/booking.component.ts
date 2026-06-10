@@ -6,7 +6,7 @@ import { AuthService } from '../../services/auth.service';
 import { ApiService, Trainer } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
-import { normalizeDate, addDays, getToday, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
+import { normalizeDate, addDays, getKolkataToday, getKolkataCurrentMinutes, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
 import {
   getVehicleCategoryOptions,
   getTotalAvailableSeats,
@@ -114,9 +114,15 @@ export class BookingComponent implements OnInit, OnDestroy {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    const today = new Date();
-    this.selectedDate = this.normalizeDate(today.toISOString().split('T')[0]);
+    this.selectedDate = getKolkataToday();
     await this.loadSlots(false);
+    if (this.slots.length === 0) {
+      for (let i = 1; i <= 7; i++) {
+        this.selectedDate = addDays(getKolkataToday(), i);
+        await this.loadSlots(true);
+        if (this.slots.length > 0) break;
+      }
+    }
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
   }
@@ -147,17 +153,12 @@ export class BookingComponent implements OnInit, OnDestroy {
           bookableOnly: true
         });
         // Filter only by time for today (hide past times today)
-        const today = getToday();
+        const today = getKolkataToday();
         let filtered = (allSlotsForDate || []);
-        
+
         if (normalizedDate === today) {
-          // Filter out past slots for today
-          const now = new Date();
-          const currentMinutes = now.getHours() * 60 + now.getMinutes();
-          filtered = filtered.filter(s => {
-            const slotMinutes = timeToMinutes(s.start_time);
-            return slotMinutes >= currentMinutes;
-          });
+          const currentMinutes = getKolkataCurrentMinutes();
+          filtered = filtered.filter((s) => timeToMinutes(s.start_time) >= currentMinutes);
         }
         
         // Sort slots by start time (numerically using minutes)

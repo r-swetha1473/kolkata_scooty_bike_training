@@ -256,7 +256,7 @@ router.get('/date/:date', async (req, res, next) => {
         WHERE b.slot_id = s.id AND b.vehicle_id = v.id AND b.status NOT IN ('cancelled')
       ) vehicle_booked ON true
       WHERE (s.slot_date = $1::date OR s.start_time::date = $1::date)
-      ${req.query.bookable_only === 'true' || req.query.bookable_only === '1' ? `AND (${sqlBookableSlotConditions('s')})` : ''}
+      ${req.query.bookable_only === 'true' || req.query.bookable_only === '1' ? `AND (${sqlBookableSlotConditions('s', { dateScoped: true })})` : ''}
       GROUP BY s.id, s.trainer_id, s.start_time, s.end_time, s.slot_date, s.capacity, s.booked_count,
                s.status, s.is_auto_generated, s.is_visible, s.created_at, s.updated_at,
                t.id, t.user_id, t.is_active, p.full_name
@@ -264,7 +264,22 @@ router.get('/date/:date', async (req, res, next) => {
     `;
 
     const result = await ensureAutoSlotsForDateIfNeeded(dateQuery, [date], date, 'date');
-    
+
+    if (req.query.bookable_only === 'true' || req.query.bookable_only === '1') {
+      console.log('[Slots Debug] GET /date/:date bookable_only', {
+        requestedDate: date,
+        slotsReturned: result.rows.length,
+        sample: result.rows.slice(0, 3).map((s) => ({
+          id: s.id,
+          start_time: s.start_time,
+          booked_count: s.booked_count,
+          capacity: s.capacity,
+          trainer_id: s.trainer_id,
+          status: s.status
+        }))
+      });
+    }
+
     res.json(result.rows);
   } catch (error) {
     // Handle PostgreSQL errors gracefully

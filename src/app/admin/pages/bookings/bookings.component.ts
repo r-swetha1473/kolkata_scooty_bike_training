@@ -106,7 +106,7 @@ import { firstValueFrom } from 'rxjs';
                 </div>
               </td>
               <td>{{ booking.trainer?.profile?.full_name || booking.trainer_name || 'N/A' }}</td>
-              <td>{{ booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A') }}</td>
+              <td>{{ booking.formatted_slot_time || (booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A')) }}</td>
               <td>
                 <span class="status-badge" [class]="'status-' + booking.status">
                   {{ booking.status }}

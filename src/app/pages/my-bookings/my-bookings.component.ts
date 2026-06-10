@@ -21,6 +21,7 @@ export interface BookingRow {
   start_time: string;
   end_time: string;
   slot_date?: string;
+  formatted_slot_time?: string;
   trainer_name: string;
   trainer_avatar?: string;
   vehicle_name?: string;
@@ -72,7 +73,7 @@ export interface BookingRow {
           <div class="booking-details">
             <div class="row">
               <span class="label">Date &amp; time</span>
-              <span>{{ formatDateTime(b.start_time) }}</span>
+              <span>{{ formatDateTime(b.start_time, b.formatted_slot_time) }}</span>
             </div>
             <div class="row">
               <span class="label">Duration</span>
@@ -121,7 +122,7 @@ export interface BookingRow {
           <div class="booking-details">
             <div class="row">
               <span class="label">Date &amp; time</span>
-              <span>{{ formatDateTime(b.start_time) }}</span>
+              <span>{{ formatDateTime(b.start_time, b.formatted_slot_time) }}</span>
             </div>
             <div class="row">
               <span class="label">Duration</span>
@@ -505,9 +506,10 @@ export class MyBookingsComponent implements OnInit {
       trainer_id: b.trainer_id,
       status: b.status,
       notes: b.notes || '',
-      start_time: b.start_time,
+      start_time: b.start_time || b.slot_time || b.booking_datetime,
       end_time: b.end_time,
       slot_date: b.slot_date,
+      formatted_slot_time: b.formatted_slot_time,
       trainer_name: b.trainer_name || 'Trainer',
       trainer_avatar: b.trainer_avatar,
       vehicle_name: b.vehicle_name || '',
@@ -541,7 +543,8 @@ export class MyBookingsComponent implements OnInit {
     return b.status === 'completed';
   }
 
-  formatDateTime(iso: string): string {
+  formatDateTime(iso: string, formatted?: string): string {
+    if (formatted) return formatted;
     const date = extractDateFromDateTime(iso);
     const time = extractTime(iso);
     if (!date || !time) return '';

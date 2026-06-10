@@ -1,4 +1,5 @@
 const express = require('express');
+const { enrichBookingTimes } = require('../utils/bookingTimeFormat');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const emailService = require('../services/email.service');
@@ -932,7 +933,7 @@ router.get('/my-bookings', authenticate, async (req, res, next) => {
       ORDER BY s.start_time DESC
     `, [req.user.id]);
 
-    res.json(result.rows);
+    res.json(result.rows.map(enrichBookingTimes));
   } catch (error) {
     next(error);
   }

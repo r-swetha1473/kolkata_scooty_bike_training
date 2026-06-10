@@ -22,8 +22,9 @@ async function checkDatabase() {
   const slotCapacityService = require('../services/slotCapacity.service');
 
   const vehicleCount = await slotCapacityService.getActiveVehicleCount();
+  const capacitySum = await slotCapacityService.getActiveVehicleCapacitySum();
   const enabled = await slotCapacityService.isAutoCapacityEnabled();
-  const expected = enabled ? Math.max(1, vehicleCount) : require('../config/app.config').SLOT_CAPACITY.DEFAULT;
+  const expected = enabled ? Math.max(1, capacitySum) : require('../config/app.config').SLOT_CAPACITY.DEFAULT;
 
   const mismatch = await db.query(
     `
@@ -37,6 +38,7 @@ async function checkDatabase() {
   const mismatched = Number(mismatch.rows[0]?.count) || 0;
 
   console.log(`Active vehicles: ${vehicleCount}`);
+  console.log(`Sum max_per_slot: ${capacitySum}`);
   console.log(`Auto capacity enabled: ${enabled}`);
   console.log(`Expected slot capacity: ${expected}`);
   console.log(`Mismatched future slots: ${mismatched}`);
@@ -75,9 +77,11 @@ async function checkPublicApi() {
 
     const vehicles = await vehiclesRes.json();
     const slotsPayload = await slotsRes.json();
-    const activeCount = Array.isArray(vehicles)
-      ? vehicles.filter((v) => v.is_active !== false).length
-      : 0;
+    const activeVehicles = Array.isArray(vehicles)
+      ? vehicles.filter((v) => v.is_active !== false)
+      : [];
+    const activeCount = activeVehicles.length;
+    const expectedSum = activeVehicles.reduce((sum, v) => sum + (Number(v.max_per_slot) || 0), 0);
     const slots = Array.isArray(slotsPayload?.slots)
       ? slotsPayload.slots
       : Array.isArray(slotsPayload)
@@ -87,14 +91,15 @@ async function checkPublicApi() {
     const apiCapacity = sample?.capacity;
 
     console.log(`API active vehicles: ${activeCount}`);
+    console.log(`API expected capacity sum: ${expectedSum}`);
     console.log(`API sample slot capacity: ${apiCapacity ?? 'n/a'}`);
 
     if (slots.length === 0) {
       return { pass: true, skipped: false, note: 'no slots returned' };
     }
 
-    const pass = Number(apiCapacity) === Math.max(1, activeCount);
-    return { pass, activeCount, apiCapacity };
+    const pass = Number(apiCapacity) === Math.max(1, expectedSum);
+    return { pass, activeCount, expectedSum, apiCapacity };
   } catch (e) {
     console.log(`SKIP: Public API check failed — ${e.message}`);
     return { pass: null, skipped: true };
