@@ -101,6 +101,12 @@ export class AuthService {
     try {
 
       const url = new URL(window.location.href);
+      const token = url.searchParams.get('token')?.trim();
+
+      if (token) {
+        setAuthToken(token);
+        url.searchParams.delete('token');
+      }
 
       if (url.searchParams.get('oauth') === 'success') {
 

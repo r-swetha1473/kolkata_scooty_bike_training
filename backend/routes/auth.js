@@ -9,6 +9,7 @@ const { validateLogin } = require('../validators');
 const auditService = require('../services/audit.service');
 const permissionsService = require('../services/permissions.service');
 const { setAuthCookie, clearAuthCookie, getClientIp } = require('../utils/authCookie');
+const { resolveGoogleCallbackUrl, maskClientId, logOAuthDebug } = require('../utils/googleOAuth');
 const router = express.Router();
 
 const loginLimiter = rateLimit({
@@ -131,6 +132,16 @@ router.get('/google', (req, res, next) => {
     error.errorCode = 'OAUTH_NOT_CONFIGURED';
     return next(error);
   }
+
+  logOAuthDebug('OAuth start', {
+    host: req.get('host'),
+    protocol: req.protocol,
+    configuredCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '(unset)',
+    resolvedCallbackUrl: resolveGoogleCallbackUrl(),
+    clientId: maskClientId(process.env.GOOGLE_CLIENT_ID),
+    hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET
+  });
+
   return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 
@@ -142,9 +153,54 @@ router.get('/google/callback',
       error.errorCode = 'OAUTH_NOT_CONFIGURED';
       return next(error);
     }
+
+    logOAuthDebug('OAuth callback received', {
+      host: req.get('host'),
+      protocol: req.protocol,
+      configuredCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '(unset)',
+      resolvedCallbackUrl: resolveGoogleCallbackUrl(),
+      hasAuthorizationCode: !!req.query.code,
+      oauthError: req.query.error || null,
+      oauthErrorDescription: req.query.error_description || null
+    });
+
     return next();
   },
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
+  (req, res, next) => {
+    passport.authenticate('google', { session: false }, (err, user, info) => {
+      if (err) {
+        logOAuthDebug('Token exchange failed', {
+          host: req.get('host'),
+          resolvedCallbackUrl: resolveGoogleCallbackUrl(),
+          hasAuthorizationCode: !!req.query.code,
+          errorName: err.name,
+          errorMessage: err.message,
+          oauthError: err.oauthError || null,
+          statusCode: err.statusCode || null
+        });
+        const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
+        return res.redirect(`${frontendUrl}/booking?error=oauth_token_exchange`);
+      }
+
+      if (!user) {
+        logOAuthDebug('OAuth callback without user', {
+          host: req.get('host'),
+          info: info || null
+        });
+        const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
+        return res.redirect(`${frontendUrl}/booking?error=auth_failed`);
+      }
+
+      logOAuthDebug('OAuth profile authenticated', {
+        profileId: user.google_id || user.provider_id || null,
+        userId: user.id,
+        email: user.email
+      });
+
+      req.user = user;
+      return next();
+    })(req, res, next);
+  },
   async (req, res) => {
     try {
       const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');
@@ -162,9 +218,18 @@ router.get('/google/callback',
       const token = signToken(user);
       setAuthCookie(res, token);
 
+      logOAuthDebug('OAuth session established', {
+        host: req.get('host'),
+        userId: user.id,
+        email: user.email,
+        cookieSet: true,
+        cookieOptions: require('../utils/authCookie').getAuthCookieOptions()
+      });
+
       await auditService.logAuthEvent(user.id, 'LOGIN_SUCCESS', { method: 'google_oauth', email: user.email }, getClientIp(req));
 
-      res.redirect(`${frontendUrl}/profile?oauth=success`);
+      // Pass token in redirect so SPA can persist it when cross-host cookies are unavailable.
+      res.redirect(`${frontendUrl}/profile?oauth=success&token=${encodeURIComponent(token)}`);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       const frontendUrl = (process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app').replace(/\/$/, '');

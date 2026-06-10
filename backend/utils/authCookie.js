@@ -1,8 +1,14 @@
 function getAuthCookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const secure =
+    process.env.COOKIE_SECURE === 'true' ||
+    (process.env.COOKIE_SECURE !== 'false' && isProduction);
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   };
 }

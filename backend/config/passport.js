@@ -2,6 +2,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const db = require('../db');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
+const { resolveGoogleCallbackUrl } = require('../utils/googleOAuth');
 
 function normalizeGoogleProfilePhone(profile) {
   const raw =
@@ -35,10 +36,13 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
 if (googleClientId && googleClientSecret) {
+  const googleCallbackUrl = resolveGoogleCallbackUrl();
+  console.log('[Google OAuth] Strategy configured with callback URL:', googleCallbackUrl);
+
   passport.use(new GoogleStrategy({
     clientID: googleClientId,
     clientSecret: googleClientSecret,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL
+    callbackURL: googleCallbackUrl
   },
   async (accessToken, refreshToken, profile, done) => {
     try {

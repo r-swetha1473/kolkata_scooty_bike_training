@@ -1,6 +1,22 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+function logAuthMeDebug(req, fields) {
+  if (req.originalUrl !== '/api/auth/me' && !req.originalUrl?.endsWith('/auth/me')) {
+    return;
+  }
+  const cookieHeader = req.headers.cookie || '';
+  console.log('[Auth Debug] /auth/me request', {
+    ...fields,
+    host: req.get('host'),
+    origin: req.headers.origin || null,
+    sessionId: req.sessionID || null,
+    hasCookieHeader: cookieHeader.length > 0,
+    hasAuthTokenCookie: cookieHeader.includes('auth_token='),
+    hasAuthorizationHeader: !!(req.headers.authorization && String(req.headers.authorization).trim())
+  });
+}
+
 const authenticate = async (req, res, next) => {
   try {
     if (!process.env.JWT_SECRET) {
@@ -37,6 +53,10 @@ const authenticate = async (req, res, next) => {
     }
 
     if (!token) {
+      logAuthMeDebug(req, {
+        failureReason: 'NO_TOKEN',
+        reqUser: req.user?.id || null
+      });
       const error = new Error('Authentication required. No token provided. Sign in again or send Authorization: Bearer <token>.');
       error.status = 401;
       error.errorCode = 'NO_TOKEN';
@@ -51,6 +71,11 @@ const authenticate = async (req, res, next) => {
     );
 
     if (result.rows.length === 0) {
+      logAuthMeDebug(req, {
+        failureReason: 'USER_NOT_FOUND',
+        tokenSource,
+        decodedUserId: decoded.userId
+      });
       const error = new Error('User not found');
       error.status = 401;
       error.errorCode = 'USER_NOT_FOUND';
@@ -59,8 +84,18 @@ const authenticate = async (req, res, next) => {
 
     req.user = result.rows[0];
     req.auth = { tokenSource };
+    logAuthMeDebug(req, {
+      success: true,
+      tokenSource,
+      reqUser: req.user.id,
+      email: req.user.email
+    });
     next();
   } catch (error) {
+    logAuthMeDebug(req, {
+      failureReason: error.errorCode || error.name || 'AUTHENTICATION_ERROR',
+      errorMessage: error.message
+    });
     // Handle JWT verification errors
     if (error.name === 'JsonWebTokenError') {
       error.status = 401;
