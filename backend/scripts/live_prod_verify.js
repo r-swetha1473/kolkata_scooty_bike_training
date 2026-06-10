@@ -1,7 +1,7 @@
 /**
  * Read-only live production verification (no auth required).
  */
-const API = 'https://kolkata-scooty-bike-training-1ild.onrender.com';
+const API = 'https://kolkata-scooty-bike-training.onrender.com';
 const FE = 'https://kolkata-scooty-bike-training.vercel.app';
 
 async function getJson(path) {

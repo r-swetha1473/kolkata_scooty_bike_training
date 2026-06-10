@@ -1121,7 +1121,7 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
 
   subscribeToSlotEvents() {
     try {
-      const apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training-1ild.onrender.com/api';
+      const apiUrl = environment.apiUrl || 'https://kolkata-scooty-bike-training.onrender.com/api';
       const url = `${apiUrl}/events`;
       this.slotEventSource = new EventSource(url);
       this.slotEventSource.onmessage = async (ev) => {
