@@ -1,18 +1,22 @@
 // Script to create default admin user
-// Usage: cd backend && node create_admin.js [email] [password]
-// Usage: cd backend && node create_admin.js admin@kolkatascotty.com admin123
+// Usage: cd backend && node create_admin.js <email> <password> [role]
+// Or:    ADMIN_EMAIL=... ADMIN_PASSWORD=... node create_admin.js
 
 const db = require('./db');
 const bcrypt = require('bcryptjs');
 
-const DEFAULT_EMAIL = 'admin@kolkatascotty.com';
-const DEFAULT_PASSWORD = 'admin123';
 const DEFAULT_ROLE = 'superadmin';
 
 async function createAdmin() {
   try {
-    const email = process.argv[2] || DEFAULT_EMAIL;
-    const password = process.argv[3] || DEFAULT_PASSWORD;
+    const email = process.argv[2] || process.env.ADMIN_EMAIL;
+    const password = process.argv[3] || process.env.ADMIN_PASSWORD;
+    if (!email || !password) {
+      console.error('Email and password required.');
+      console.error('Usage: node create_admin.js <email> <password> [role]');
+      console.error('Or set ADMIN_EMAIL and ADMIN_PASSWORD in the environment.');
+      process.exit(1);
+    }
     const role = process.argv[4] || DEFAULT_ROLE;
 
     console.log(`Creating admin user...`);

@@ -7,8 +7,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const API_BASE = (process.env.API_BASE || 'https://kolkata-scooty-bike-training.onrender.com/api').replace(/\/$/, '');
 const API_ROOT = API_BASE.replace(/\/api$/, '');
 const FE = process.env.FE_URL || 'https://kolkata-scooty-bike-training.vercel.app';
-const EMAIL = process.env.ADMIN_EMAIL || 'admin@kolkatascotty.com';
-const PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const { requireAdminCreds } = require('./lib/requireAdminCreds');
+const { email: EMAIL, password: PASSWORD } = requireAdminCreds();
 
 const report = {
   timestamp: new Date().toISOString(),

@@ -240,18 +240,6 @@ export class AdminUsersComponent implements OnInit {
         await this.loadUsers();
         return;
       }
-      const withPhone = this.users.filter((u) => this.displayPhone(u) !== 'Not Provided').length;
-      const bookingFallback = this.users.filter((u) => u.phone_source === 'booking').length;
-      const missingPhone = this.users.filter((u) => !u.phone).length;
-      console.log('[AdminUsers] loaded', {
-        role: this.roleFilter || 'all',
-        search: this.searchTerm || null,
-        total: this.totalRecords,
-        returned: this.users.length,
-        withPhone,
-        missingPhone,
-        bookingPhoneFallback: bookingFallback
-      });
     } catch (err) {
       this.loadError = true;
       this.users = [];

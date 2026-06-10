@@ -3,9 +3,9 @@
  * Centralized magic numbers and configuration values
  */
 
-// Slot capacity constants
+// Slot capacity constants (aligned with DB CHECK capacity 1–100, migration 20260610140000)
 const SLOT_CAPACITY = {
-  MAX: 50,
+  MAX: 100,
   DEFAULT: 5
 };
 

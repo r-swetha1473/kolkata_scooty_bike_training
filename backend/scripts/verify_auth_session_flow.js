@@ -1,8 +1,10 @@
 /**
  * Simulates post-OAuth session flow using admin login (JWT + cookie path).
  */
-const API = 'https://kolkata-scooty-bike-training.onrender.com/api';
-const FE = 'https://kolkata-scooty-bike-training.vercel.app';
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const { requireAdminCreds } = require('./lib/requireAdminCreds');
+const API = (process.env.API_BASE || 'https://kolkata-scooty-bike-training.onrender.com/api').replace(/\/$/, '');
+const FE = process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app';
 
 async function authMe(headers) {
   const res = await fetch(`${API}/auth/me`, {
@@ -14,11 +16,12 @@ async function authMe(headers) {
 }
 
 async function main() {
+  const { email, password } = requireAdminCreds();
   const loginRes = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: FE },
     credentials: 'include',
-    body: JSON.stringify({ email: 'admin@kolkatascotty.com', password: 'admin123' })
+    body: JSON.stringify({ email, password })
   });
   const login = await loginRes.json();
   const setCookie = loginRes.headers.get('set-cookie') || '';
@@ -51,7 +54,7 @@ async function main() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: FE },
     credentials: 'include',
-    body: JSON.stringify({ email: 'admin@kolkatascotty.com', password: 'admin123' })
+    body: JSON.stringify({ email, password })
   });
   const login2 = await login2Res.json();
   const bearer3 = await authMe({ Authorization: `Bearer ${login2.token}` });

@@ -74,7 +74,9 @@ async function main() {
   report.deploy.backendCommit = health.data?.version?.commitShort || version.data?.commitShort;
   report.deploy.backendAtTarget = String(report.deploy.backendCommit || '').startsWith('7b637fd');
 
-  const login = await api('/api/auth/login', null, 'POST', { email: 'admin@kolkatascotty.com', password: 'admin123' });
+  const { requireAdminCreds } = require('./lib/requireAdminCreds');
+  const { email, password } = requireAdminCreds();
+  const login = await api('/api/auth/login', null, 'POST', { email, password });
   const token = login.data?.token;
   report.auth = login.status;
 

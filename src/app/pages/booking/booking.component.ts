@@ -567,21 +567,21 @@ export class BookingComponent implements OnInit, OnDestroy {
   // PHASE 3: Use centralized date utilities
   changeDate(days: number) {
     if (!this.selectedDate) {
-      this.selectedDate = getToday();
+      this.selectedDate = getKolkataToday();
       this.onDateChange();
       return;
     }
     
     const normalizedDate = normalizeDate(this.selectedDate);
     if (!normalizedDate) {
-      this.selectedDate = getToday();
+      this.selectedDate = getKolkataToday();
       this.onDateChange();
       return;
     }
     
     // Add/subtract days using utility
     const newDate = addDays(normalizedDate, days);
-    const today = getToday();
+    const today = getKolkataToday();
     
     // Prevent navigating to past dates
     if (newDate < today) {

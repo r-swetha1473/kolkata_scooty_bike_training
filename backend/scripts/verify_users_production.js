@@ -4,8 +4,8 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const API = (process.env.API_BASE || 'https://kolkata-scooty-bike-training.onrender.com/api').replace(/\/$/, '');
-const EMAIL = process.env.ADMIN_EMAIL || 'admin@kolkatascotty.com';
-const PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const { requireAdminCreds } = require('./lib/requireAdminCreds');
+const { email: EMAIL, password: PASSWORD } = requireAdminCreds();
 
 async function login() {
   const res = await fetch(`${API}/auth/login`, {

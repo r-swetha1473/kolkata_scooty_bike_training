@@ -4,6 +4,7 @@ import { Observable, BehaviorSubject, firstValueFrom } from 'rxjs';
 import { map, tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { getAuthToken, setAuthToken, clearAuthToken } from '../utils/auth-token.storage';
+import { AuthService } from './auth.service';
 
 export interface User {
   id: string;
@@ -71,46 +72,13 @@ export class ApiService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
-  constructor(private http: HttpClient) {
-    this.captureOAuthTokenFromUrl();
-    this.loadUserFromToken();
-  }
-
-  private captureOAuthTokenFromUrl(): void {
-    try {
-      const url = new URL(window.location.href);
-      const token = url.searchParams.get('token');
-      if (!token) {
-        return;
-      }
-
-      setAuthToken(token);
-      url.searchParams.delete('token');
-      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  private loadUserFromToken() {
-    this.http.get<User>(`${this.apiUrl}/auth/me`, this.getHttpOptions(true)).subscribe({
-      next: (user) => {
-        this.currentUserSubject.next(user);
-      },
-      error: () => {
-        const token = getAuthToken();
-        if (token) {
-          this.http.get<User>(`${this.apiUrl}/profiles/me`, this.getHttpOptions(true)).subscribe({
-            next: (user) => this.currentUserSubject.next(user),
-            error: () => {
-              clearAuthToken();
-              this.currentUserSubject.next(null);
-            }
-          });
-        } else {
-          this.currentUserSubject.next(null);
-        }
-      }
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) {
+    // Single auth source: AuthService loads /auth/me once on startup
+    this.authService.userProfile$.subscribe((profile) => {
+      this.currentUserSubject.next(profile as User | null);
     });
   }
 
@@ -134,7 +102,7 @@ export class ApiService {
 
   setToken(token: string) {
     setAuthToken(token);
-    this.loadUserFromToken();
+    this.authService.reloadUserProfile();
   }
 
   signInWithGoogle() {

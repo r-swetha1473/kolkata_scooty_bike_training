@@ -2,20 +2,18 @@ const express = require('express');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const { validateSettingUpdate, validateSettingsUpdate } = require('../validators');
+const { filterPublicSettings, isPublicSettingsKey, PUBLIC_SETTINGS_KEYS } = require('../utils/publicSettings');
 const router = express.Router();
 
-// Get all settings (public)
+// Get public site settings only (no operational/admin keys)
 router.get('/', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT * FROM settings ORDER BY key');
-    
-    // Convert to object format
-    const settings = {};
-    result.rows.forEach(row => {
-      settings[row.key] = row.value;
-    });
+    const result = await db.query(
+      `SELECT key, value FROM settings WHERE key = ANY($1::text[]) ORDER BY key`,
+      [PUBLIC_SETTINGS_KEYS]
+    );
 
-    res.json(settings);
+    res.json(filterPublicSettings(result.rows));
   } catch (error) {
     next(error);
   }
@@ -48,11 +46,19 @@ router.get('/all', authenticate, async (req, res, next) => {
   }
 });
 
-// Get single setting (public)
+// Get single public site setting
 router.get('/:key', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT value FROM settings WHERE key = $1', [req.params.key]);
-    
+    const key = req.params.key;
+    if (!isPublicSettingsKey(key)) {
+      const error = new Error('Setting not found');
+      error.status = 404;
+      error.errorCode = 'SETTING_NOT_FOUND';
+      return next(error);
+    }
+
+    const result = await db.query('SELECT value FROM settings WHERE key = $1', [key]);
+
     if (result.rows.length === 0) {
       const error = new Error('Setting not found');
       error.status = 404;
@@ -60,7 +66,7 @@ router.get('/:key', async (req, res, next) => {
       return next(error);
     }
 
-    res.json({ key: req.params.key, value: result.rows[0].value });
+    res.json({ key, value: result.rows[0].value });
   } catch (error) {
     next(error);
   }

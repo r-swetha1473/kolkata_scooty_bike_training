@@ -28,9 +28,9 @@ module.exports = {
 
   // Slot configuration
   slot: {
-    // Maximum capacity per slot
-    maxCapacity: 5,
-    maxCapacityErrorMessage: 'Invalid slot configuration: capacity exceeds maximum of 5',
+    // Maximum capacity per slot (aligned with DB CHECK 1–100; runtime uses SUM(vehicles.max_per_slot))
+    maxCapacity: 100,
+    maxCapacityErrorMessage: 'Invalid slot configuration: capacity must be between 1 and 100',
     
     // Default capacity
     defaultCapacity: 5,

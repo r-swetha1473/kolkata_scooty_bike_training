@@ -21,11 +21,10 @@ if (Test-Path "backend\node_modules\pg") {
         Write-Host "  Setup Complete!" -ForegroundColor Green
         Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "You can now log in to the admin panel with:" -ForegroundColor Yellow
-        Write-Host "  Email:    admin@kolkatascotty.com" -ForegroundColor White
-        Write-Host "  Password: admin123" -ForegroundColor White
+        Write-Host "Log in with the admin email and password you passed to create_admin.js" -ForegroundColor Yellow
+        Write-Host "  (or ADMIN_EMAIL / ADMIN_PASSWORD from your environment)." -ForegroundColor White
         Write-Host ""
-        Write-Host "⚠️  IMPORTANT: Change the password after first login!" -ForegroundColor Yellow
+        Write-Host "⚠️  IMPORTANT: Use a strong password and change it after first login!" -ForegroundColor Yellow
         Write-Host ""
     } else {
         Write-Host "Migration completed with warnings. Check output above." -ForegroundColor Yellow

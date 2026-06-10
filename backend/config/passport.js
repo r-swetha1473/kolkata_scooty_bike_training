@@ -3,6 +3,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const db = require('../db');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const { resolveGoogleCallbackUrl } = require('../utils/googleOAuth');
+const { devLog, devWarn } = require('../utils/devLog');
 
 function normalizeGoogleProfilePhone(profile) {
   const raw =
@@ -70,7 +71,7 @@ if (googleClientId && googleClientSecret) {
             );
           } catch (e) {
             if (e.code === '23505') {
-              console.warn('[Google Auth] Could not set phone from Google (already in use):', existingUser.id);
+              devWarn('[Google Auth] Could not set phone from Google (already in use):', existingUser.id);
             } else {
               throw e;
             }
@@ -99,7 +100,7 @@ if (googleClientId && googleClientSecret) {
           );
         }
         const user = result.rows[0];
-        console.log(`[Google Auth] Authentication successful for user: ${user.email}, ID: ${user.id}`);
+        devLog(`[Google Auth] Authentication successful for user: ${user.email}, ID: ${user.id}`);
         return done(null, user);
       }
 
@@ -109,7 +110,7 @@ if (googleClientId && googleClientSecret) {
       );
 
       if (result.rows.length > 0) {
-        console.log(`[Google Auth] Updating existing user by email: ${email}`);
+        devLog(`[Google Auth] Updating existing user by email: ${email}`);
         const existingUser = result.rows[0];
         const nextPhone = resolvePhoneForGoogleLink(existingUser.phone, normPhone, googleId);
         try {
@@ -140,7 +141,7 @@ if (googleClientId && googleClientSecret) {
             throw e;
           }
         }
-        console.log(`[Google Auth] User updated with ID: ${result.rows[0].id}`);
+        devLog(`[Google Auth] User updated with ID: ${result.rows[0].id}`);
         return done(null, result.rows[0]);
       }
 
@@ -159,7 +160,7 @@ if (googleClientId && googleClientSecret) {
             row.email && email && row.email.toLowerCase() === email.toLowerCase();
           const allowPhoneMerge = emailMatches || isPlaceholderProfilePhone(row.phone);
           if (allowPhoneMerge) {
-            console.log(`[Google Auth] Linking Google account to existing profile by phone (merge): ${row.id}`);
+            devLog(`[Google Auth] Linking Google account to existing profile by phone (merge): ${row.id}`);
             try {
               result = await db.query(
                 `UPDATE profiles
@@ -176,7 +177,7 @@ if (googleClientId && googleClientSecret) {
               return done(null, result.rows[0]);
             } catch (e) {
               if (e.code === '23505') {
-                console.warn('[Google Auth] Phone merge: email conflict; linking Google without changing email');
+                devWarn('[Google Auth] Phone merge: email conflict; linking Google without changing email');
                 result = await db.query(
                   `UPDATE profiles
                    SET full_name = COALESCE(NULLIF(TRIM($1), ''), full_name),
@@ -196,7 +197,7 @@ if (googleClientId && googleClientSecret) {
         }
       }
 
-      console.log(`[Google Auth] Creating new user: ${email}`);
+      devLog(`[Google Auth] Creating new user: ${email}`);
       const phoneNumber = normPhone || `GOOGLE_${googleId}`;
       result = await db.query(
         `INSERT INTO profiles (email, full_name, google_id, provider_id, auth_provider, avatar_url, role, phone)
@@ -204,7 +205,7 @@ if (googleClientId && googleClientSecret) {
          RETURNING *`,
         [email, name, googleId, googleId, avatarUrl, phoneNumber]
       );
-      console.log(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
+      devLog(`[Google Auth] New user created with ID: ${result.rows[0].id}`);
       try {
         const notificationService = require('../services/notification.service');
         notificationService.createNotification({

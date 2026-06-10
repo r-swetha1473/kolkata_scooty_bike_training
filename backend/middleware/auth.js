@@ -2,6 +2,9 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 
 function logAuthMeDebug(req, fields) {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
   if (req.originalUrl !== '/api/auth/me' && !req.originalUrl?.endsWith('/auth/me')) {
     return;
   }

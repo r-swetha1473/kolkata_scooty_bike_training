@@ -42,6 +42,9 @@ function maskClientId(clientId) {
 }
 
 function logOAuthDebug(label, fields) {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
   console.log(`[Google OAuth Debug] ${label}`, fields);
 }
 

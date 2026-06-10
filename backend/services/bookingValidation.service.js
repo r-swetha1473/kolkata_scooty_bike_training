@@ -16,6 +16,10 @@ const {
   CANCELLATION_WINDOW_HOURS
 } = require('../config/app.config');
 const vehicleService = require('./vehicle.service');
+const {
+  getProfileInactiveStatus,
+  isCustomerInactiveBlocked
+} = require('../utils/profileInactive');
 
 /**
  * Validates booking eligibility based on phone number, slot details, and vehicle
@@ -43,12 +47,8 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
     }
 
     if (userId) {
-      const profileRow = await db.query(
-        'SELECT inactive_blocked, role FROM profiles WHERE id = $1',
-        [userId]
-      );
-      const pr = profileRow.rows[0];
-      if (pr?.role === 'customer' && pr?.inactive_blocked === true) {
+      const pr = await getProfileInactiveStatus(userId);
+      if (isCustomerInactiveBlocked(pr)) {
         return {
           eligible: false,
           reason: 'INACTIVE_BLOCKED',

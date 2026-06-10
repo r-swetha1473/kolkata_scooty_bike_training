@@ -26,6 +26,10 @@ const {
   assignTrainerForSlot,
   assignVehicleForSlot
 } = require('../services/bookingAssignment.service');
+const {
+  getProfileInactiveStatus,
+  isCustomerInactiveBlocked
+} = require('../utils/profileInactive');
 const router = express.Router();
 
 /** OAuth profiles use a synthetic phone (GOOGLE_<id>) until the user saves a real number. */
@@ -48,17 +52,19 @@ function logPostBookingRequest(req, res, next) {
       : b.phone === '' ? '(empty)' : '(omitted)',
     notes: typeof b.notes === 'string' && b.notes.length ? `[${b.notes.length} chars]` : '(empty)'
   };
-  console.log('[Bookings][POST] req.user:', {
-    id: u.id,
-    email: u.email,
-    role: u.role,
-    phone_registered: u.phone
-      ? String(u.phone).startsWith('GOOGLE_')
-        ? '(placeholder)'
-        : `***${String(u.phone).slice(-4)}`
-      : '(none)'
-  });
-  console.log('[Bookings][POST] req.body (normalized, phone masked):', bodyForLog);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Bookings][POST] req.user:', {
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      phone_registered: u.phone
+        ? String(u.phone).startsWith('GOOGLE_')
+          ? '(placeholder)'
+          : `***${String(u.phone).slice(-4)}`
+        : '(none)'
+    });
+    console.log('[Bookings][POST] req.body (normalized, phone masked):', bodyForLog);
+  }
   next();
 }
 
@@ -196,20 +202,25 @@ router.post(
       throw error;
     }
 
-    const userCheck = await client.query(
-      'SELECT phone, role, inactive_blocked FROM profiles WHERE id = $1',
+    const phoneRow = await client.query(
+      'SELECT phone FROM profiles WHERE id = $1',
       [req.user.id]
     );
 
-    if (userCheck.rows.length === 0) {
+    if (phoneRow.rows.length === 0) {
       const err = new Error('User not found');
       err.status = 404;
       throw err;
     }
 
-    const user = userCheck.rows[0];
+    const inactiveStatus = await getProfileInactiveStatus(req.user.id, client);
+    const user = {
+      phone: phoneRow.rows[0].phone,
+      role: inactiveStatus.role,
+      inactive_blocked: inactiveStatus.inactive_blocked
+    };
 
-    if (user.role === 'customer' && user.inactive_blocked === true) {
+    if (isCustomerInactiveBlocked(user)) {
       const blocked = new Error('Your account is inactive. Contact admin.');
       blocked.status = 403;
       blocked.errorCode = 'INACTIVE_BLOCKED';

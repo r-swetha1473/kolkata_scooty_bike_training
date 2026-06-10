@@ -2,13 +2,16 @@
  * Production verification — Trainers & Vehicles modules (with cleanup).
  * Uses documented admin account from apply_postgresql_migration.ps1
  */
-const API = 'https://kolkata-scooty-bike-training.onrender.com/api';
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const { requireAdminCreds } = require('./lib/requireAdminCreds');
+const API = (process.env.API_BASE || 'https://kolkata-scooty-bike-training.onrender.com/api').replace(/\/$/, '');
 
 async function login() {
+  const { email, password } = requireAdminCreds();
   const res = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@kolkatascotty.com', password: 'admin123' })
+    body: JSON.stringify({ email, password })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(`Login ${res.status}`);

@@ -265,7 +265,10 @@ router.get('/date/:date', async (req, res, next) => {
 
     const result = await ensureAutoSlotsForDateIfNeeded(dateQuery, [date], date, 'date');
 
-    if (req.query.bookable_only === 'true' || req.query.bookable_only === '1') {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (req.query.bookable_only === 'true' || req.query.bookable_only === '1')
+    ) {
       console.log('[Slots Debug] GET /date/:date bookable_only', {
         requestedDate: date,
         slotsReturned: result.rows.length,

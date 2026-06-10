@@ -19,6 +19,18 @@ const errorHandler = (err, req, res, next) => {
   let message = err.message || 'Internal server error';
   let errorCode = err.code || err.errorCode || 'INTERNAL_ERROR';
 
+  // Missing column — schema drift (migration not applied on production DB)
+  if (err.code === '42703') {
+    statusCode = 503;
+    errorCode = 'SCHEMA_MISMATCH';
+    message = 'Database schema is out of date. Contact support or retry after maintenance.';
+    console.error('[Schema] Missing column:', {
+      message: err.message,
+      url: req.originalUrl,
+      method: req.method
+    });
+  }
+
   // Handle specific error types
   // Database errors
   if (err.code && err.code.startsWith('23')) {

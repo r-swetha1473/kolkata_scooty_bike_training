@@ -2,9 +2,11 @@
  * Production Google OAuth + /auth/me verification (no browser required).
  * Run: node backend/scripts/verify_google_oauth_production.js
  */
-const API_ROOT = 'https://kolkata-scooty-bike-training.onrender.com';
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const { requireAdminCreds } = require('./lib/requireAdminCreds');
+const API_ROOT = (process.env.API_BASE || 'https://kolkata-scooty-bike-training.onrender.com/api').replace(/\/api\/?$/, '');
 const API = `${API_ROOT}/api`;
-const FE = 'https://kolkata-scooty-bike-training.vercel.app';
+const FE = process.env.FRONTEND_URL || 'https://kolkata-scooty-bike-training.vercel.app';
 const ACTIVE_CALLBACK = `${API_ROOT}/api/auth/google/callback`;
 const STALE_HOST = 'kolkata-scooty-bike-training-1ild.onrender.com';
 
@@ -27,10 +29,11 @@ async function getJson(path, opts = {}) {
 }
 
 async function loginAdmin() {
+  const { email, password } = requireAdminCreds();
   const { res, data } = await getJson('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: FE },
-    body: JSON.stringify({ email: 'admin@kolkatascotty.com', password: 'admin123' })
+    body: JSON.stringify({ email, password })
   });
   return { status: res.status, token: data.token, setCookie: res.headers.get('set-cookie') || '' };
 }
