@@ -48,6 +48,15 @@ async function main() {
     console.log('shape:', Array.isArray(all.data) ? 'array' : typeof all.data);
     console.log('count:', users?.length ?? 0);
     console.log('total:', all.data?.total ?? users?.length);
+    const googleLeaks = (users || []).filter((u) => /^GOOGLE_/i.test(String(u.phone || '')));
+    console.log('google_phone_leaks:', googleLeaks.length);
+    const rajani = (users || []).find((u) => /rajani/i.test(u.full_name || ''));
+    const indhuja = (users || []).find((u) => /indhuja/i.test(u.full_name || ''));
+    if (rajani) console.log('Rajani Saha phone:', rajani.phone, 'source:', rajani.phone_source);
+    if (indhuja) console.log('Indhuja phone:', indhuja.phone, 'source:', indhuja.phone_source);
+    const bookingFallback = (users || []).filter((u) => u.phone_source === 'booking').length;
+    const missing = (users || []).filter((u) => !u.phone).length;
+    console.log('missing_phone:', missing, 'booking_fallback:', bookingFallback);
     if (users?.[0]) console.log('sample:', JSON.stringify(users[0], null, 2));
   } else {
     console.log('error:', typeof all.data === 'string' ? all.data.slice(0, 500) : JSON.stringify(all.data, null, 2));

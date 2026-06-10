@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
 import { getApiErrorMessage } from '../../../utils/api-error';
+import { formatUserPhoneDisplay } from '../../../utils/phone-display';
 
 @Component({
   selector: 'app-admin-users',
@@ -74,10 +75,8 @@ import { getApiErrorMessage } from '../../../utils/api-error';
             <tr *ngFor="let user of getPaginatedUsers()">
               <td>{{ user.full_name }}</td>
               <td class="email-cell">{{ user.email }}</td>
-              <td class="auth-cell">
-                <span *ngIf="user.phone" class="auth-badge phone-badge">{{ user.phone }}</span>
-                <span *ngIf="!user.phone && user.google_id" class="auth-badge google-badge">Google</span>
-                <span *ngIf="!user.phone && !user.google_id" class="auth-badge guest-badge">Guest</span>
+              <td class="phone-cell" [class.phone-missing]="displayPhone(user) === 'Not Provided'">
+                {{ displayPhone(user) }}
               </td>
               <td>
                 <span *ngIf="user.inactive_blocked" class="status-blocked">Inactive (blocked)</span>
@@ -148,33 +147,15 @@ import { getApiErrorMessage } from '../../../utils/api-error';
     .empty-state-cell { text-align: center; padding: 40px; color: #6b7280; }
     .loading-hint { padding: 16px 0; color: var(--admin-text-secondary, #6B7280); }
 
-    .auth-cell {
-      display: flex;
-      align-items: center;
-    }
-
-    .auth-badge {
-      padding: 3px 8px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 500;
-      display: inline-block;
+    .phone-cell {
+      font-size: 13px;
+      color: #374151;
       white-space: nowrap;
     }
 
-    .phone-badge {
-      background: #F3F4F6;
-      color: #374151;
-    }
-
-    .google-badge {
-      background: #DBEAFE;
-      color: #1E40AF;
-    }
-
-    .guest-badge {
-      background: #FEF3C7;
-      color: #92400E;
+    .phone-cell.phone-missing {
+      color: #9CA3AF;
+      font-style: italic;
     }
 
     .status-active { font-size: 12px; color: #059669; font-weight: 600; }
@@ -259,11 +240,17 @@ export class AdminUsersComponent implements OnInit {
         await this.loadUsers();
         return;
       }
+      const withPhone = this.users.filter((u) => this.displayPhone(u) !== 'Not Provided').length;
+      const bookingFallback = this.users.filter((u) => u.phone_source === 'booking').length;
+      const missingPhone = this.users.filter((u) => !u.phone).length;
       console.log('[AdminUsers] loaded', {
         role: this.roleFilter || 'all',
         search: this.searchTerm || null,
         total: this.totalRecords,
-        returned: this.users.length
+        returned: this.users.length,
+        withPhone,
+        missingPhone,
+        bookingPhoneFallback: bookingFallback
       });
     } catch (err) {
       this.loadError = true;
@@ -354,16 +341,20 @@ export class AdminUsersComponent implements OnInit {
     }
   }
 
+  displayPhone(user: { phone?: string | null }): string {
+    return formatUserPhoneDisplay(user?.phone);
+  }
+
   formatDate(date: string) {
     return new Date(date).toLocaleDateString();
   }
 
   exportUsers() {
-    const headers = ['Name', 'Email', 'Phone/Auth', 'Role', 'Joined'];
+    const headers = ['Name', 'Email', 'Phone', 'Role', 'Joined'];
     const rows = this.filteredUsers.map(user => [
       user.full_name || '',
       user.email || '',
-      user.phone || (user.google_id ? 'Google' : 'Guest'),
+      this.displayPhone(user),
       user.role || '',
       this.formatDate(user.created_at)
     ]);

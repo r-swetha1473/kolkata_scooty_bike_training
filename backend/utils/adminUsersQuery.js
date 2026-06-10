@@ -2,6 +2,18 @@
  * Admin user list query builder — shared by GET /admin/users.
  */
 
+const LATEST_BOOKING_PHONE_SQL = `
+  (
+    SELECT TRIM(b.phone::text)
+    FROM bookings b
+    WHERE b.user_id = p.id
+      AND b.phone IS NOT NULL
+      AND TRIM(b.phone::text) <> ''
+      AND LEFT(UPPER(TRIM(b.phone::text)), 7) <> 'GOOGLE_'
+    ORDER BY b.created_at DESC
+    LIMIT 1
+  )`;
+
 function buildAdminUsersListQuery({ role, search, limit, offset }) {
   const conditions = [];
   const params = [];
@@ -17,7 +29,20 @@ function buildAdminUsersListQuery({ role, search, limit, offset }) {
     conditions.push(`(
       COALESCE(p.full_name, '') ILIKE $${idx} OR
       COALESCE(p.email, '') ILIKE $${idx} OR
-      COALESCE(p.phone::text, '') ILIKE $${idx}
+      (
+        p.phone IS NOT NULL
+        AND TRIM(p.phone::text) <> ''
+        AND LEFT(UPPER(TRIM(p.phone::text)), 7) <> 'GOOGLE_'
+        AND TRIM(p.phone::text) ILIKE $${idx}
+      ) OR
+      EXISTS (
+        SELECT 1 FROM bookings b
+        WHERE b.user_id = p.id
+          AND b.phone IS NOT NULL
+          AND TRIM(b.phone::text) <> ''
+          AND LEFT(UPPER(TRIM(b.phone::text)), 7) <> 'GOOGLE_'
+          AND TRIM(b.phone::text) ILIKE $${idx}
+      )
     )`);
     params.push(term);
     idx++;
@@ -35,7 +60,8 @@ function buildAdminUsersListQuery({ role, search, limit, offset }) {
       p.id,
       p.email,
       p.full_name,
-      p.phone,
+      p.phone AS profile_phone,
+      ${LATEST_BOOKING_PHONE_SQL} AS latest_booking_phone,
       p.google_id,
       p.role,
       p.created_at,
@@ -66,8 +92,9 @@ function buildAdminUsersListQuery({ role, search, limit, offset }) {
     listSql,
     listParams,
     limit: safeLimit,
-    offset: safeOffset
+    offset: safeOffset,
+    latestBookingPhoneSql: LATEST_BOOKING_PHONE_SQL
   };
 }
 
-module.exports = { buildAdminUsersListQuery };
+module.exports = { buildAdminUsersListQuery, LATEST_BOOKING_PHONE_SQL };

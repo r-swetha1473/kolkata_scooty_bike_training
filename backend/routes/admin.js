@@ -26,7 +26,8 @@ const notificationService = require('../services/notification.service');
 const overdueBookingService = require('../services/overdueBooking.service');
 const { getDashboardStats } = require('../services/dashboardStats.service');
 const { buildBookingListQuery } = require('../utils/bookingSearch');
-const { buildAdminUsersListQuery } = require('../utils/adminUsersQuery');
+const { buildAdminUsersListQuery, LATEST_BOOKING_PHONE_SQL } = require('../utils/adminUsersQuery');
+const { enrichUsersWithDisplayPhone } = require('../utils/userPhone');
 const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
 const { getClientIp } = require('../utils/authCookie');
 const trainerDeletionService = require('../services/trainerDeletion.service');
@@ -160,9 +161,15 @@ router.get('/users', requirePermission('users', 'view'), async (req, res, next) 
     ]);
 
     const total = Number(countResult.rows[0]?.total) || 0;
-    const users = listResult.rows;
+    const { users, stats } = enrichUsersWithDisplayPhone(listResult.rows);
 
-    console.log('[Admin] GET /users result', { total, returned: users.length });
+    console.log('[Admin] GET /users result', {
+      total,
+      returned: users.length,
+      missingPhone: stats.missingPhone,
+      profilePhone: stats.profilePhoneCount,
+      bookingPhone: stats.bookingPhoneCount
+    });
 
     res.json({
       users,
@@ -199,20 +206,32 @@ router.get('/users', requirePermission('users', 'view'), async (req, res, next) 
       }
       const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
       const fallback = await db.query(
-        `SELECT p.id, p.email, p.full_name, p.phone, p.role, p.created_at
+        `SELECT p.id, p.email, p.full_name, p.phone AS profile_phone, p.role, p.created_at,
+                p.google_id,
+                ${LATEST_BOOKING_PHONE_SQL} AS latest_booking_phone
          FROM profiles p ${whereSql}
          ORDER BY p.created_at DESC`,
         params
       );
-      const users = fallback.rows.map((row) => ({
-        ...row,
-        google_id: null,
-        inactive_blocked: false,
-        total_bookings: 0,
-        active_bookings: 0
-      }));
-      console.log('[Admin] GET /users fallback result', { returned: users.length });
-      return res.json({ users, total: users.length, limit: null, offset: 0 });
+      const enriched = enrichUsersWithDisplayPhone(
+        fallback.rows.map((row) => ({
+          ...row,
+          inactive_blocked: false,
+          total_bookings: 0,
+          active_bookings: 0
+        }))
+      );
+      console.log('[Admin] GET /users fallback result', {
+        returned: enriched.users.length,
+        missingPhone: enriched.stats.missingPhone,
+        bookingPhone: enriched.stats.bookingPhoneCount
+      });
+      return res.json({
+        users: enriched.users,
+        total: enriched.users.length,
+        limit: null,
+        offset: 0
+      });
     } catch (fallbackError) {
       console.error('[Admin] GET /users fallback failed:', fallbackError.message);
       return next(fallbackError);
