@@ -56,22 +56,25 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         };
       }
 
-      const activeBooking = await db.query(
-        `SELECT b.id
-         FROM bookings b
-         JOIN slots s ON b.slot_id = s.id
-         WHERE b.user_id = $1
-           AND b.status NOT IN ('cancelled', 'completed', 'no_show')
-           AND s.end_time > NOW()
-         LIMIT 1`,
-        [userId]
-      );
-      if (activeBooking.rows.length > 0) {
-        return {
-          eligible: false,
-          reason: 'ACTIVE_BOOKING_EXISTS',
-          message: 'You already have a booking. Cancel it to book another.'
-        };
+      if (slotDate) {
+        const activeBooking = await db.query(
+          `SELECT b.id, s.start_time, s.slot_date
+           FROM bookings b
+           JOIN slots s ON b.slot_id = s.id
+           WHERE b.user_id = $1
+             AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+             AND s.end_time > NOW()
+             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) = $2::date
+           LIMIT 1`,
+          [userId, slotDate]
+        );
+        if (activeBooking.rows.length > 0) {
+          return {
+            eligible: false,
+            reason: 'ACTIVE_BOOKING_EXISTS',
+            message: 'You already have a booking on this date. Cancel or update your existing booking.'
+          };
+        }
       }
     }
 

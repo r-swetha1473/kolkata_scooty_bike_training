@@ -227,23 +227,31 @@ router.post(
       throw blocked;
     }
 
-    const activeBookingRow = await client.query(
-      `SELECT b.id
-       FROM bookings b
-       JOIN slots s ON b.slot_id = s.id
-       WHERE b.user_id = $1
-         AND b.status NOT IN ('cancelled', 'completed', 'no_show')
-         AND s.end_time > NOW()
-       LIMIT 1`,
-      [req.user.id]
+    const slotDateRow = await client.query(
+      `SELECT COALESCE(slot_date, (start_time AT TIME ZONE 'UTC')::date) AS booking_date
+       FROM slots WHERE id = $1`,
+      [slot_id]
     );
-    if (activeBookingRow.rows.length > 0) {
-      const dup = new Error('You already have a booking. Cancel it to book another.');
-      dup.status = 400;
-      dup.errorCode = 'ACTIVE_BOOKING_EXISTS';
-      throw dup;
+    if (slotDateRow.rows.length > 0) {
+      const activeBookingRow = await client.query(
+        `SELECT b.id
+         FROM bookings b
+         JOIN slots s ON b.slot_id = s.id
+         WHERE b.user_id = $1
+           AND b.status NOT IN ('cancelled', 'completed', 'no_show')
+           AND s.end_time > NOW()
+           AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) = $2::date
+         LIMIT 1`,
+        [req.user.id, slotDateRow.rows[0].booking_date]
+      );
+      if (activeBookingRow.rows.length > 0) {
+        const dup = new Error('You already have a booking on this date. Cancel or update your existing booking.');
+        dup.status = 400;
+        dup.errorCode = 'ACTIVE_BOOKING_EXISTS';
+        throw dup;
+      }
     }
-    
+
     // PHASE 5: Fix MBR-002 - Enforce phone number must match registered profile phone
     // Business rule: "Booking allowed only for registered phone numbers"
     // If user has no phone registered, require them to provide one (and it will be registered)

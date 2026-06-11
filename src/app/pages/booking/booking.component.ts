@@ -56,7 +56,6 @@ export class BookingComponent implements OnInit, OnDestroy {
   showConfirmation = false;
   showLoginPrompt = false;
   showOwnBookingPopup = false;
-  showDifferentSlotPopup = false;
   showSlotTakenPopup = false;
   showUpdateBookingModal = false;
   activeBooking: ActiveBooking | null = null;
@@ -177,27 +176,32 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   async loadActiveBooking(): Promise<void> {
-    if (!this.authService.isAuthenticated()) {
+    if (!this.authService.isAuthenticated() || !this.selectedDate) {
       this.activeBooking = null;
       return;
     }
+    const viewDate = this.normalizeDate(this.selectedDate);
     this.activeBookingLoading = true;
     try {
       const raw = (await firstValueFrom(this.apiService.getMyBookings())) as any[];
-      const upcoming = (raw || []).filter((b: any) => {
+      const onSelectedDate = (raw || []).filter((b: any) => {
         const start = b.start_time || b.slot_time || b.booking_datetime;
+        const bookingDate =
+          extractDateFromDateTime(b.slot_date) ||
+          extractDateFromDateTime(start);
         return (
           b.status !== 'cancelled' &&
           b.status !== 'completed' &&
           start &&
-          !isPastDateTime(start)
+          !isPastDateTime(start) &&
+          bookingDate === viewDate
         );
       });
-      if (upcoming.length === 0) {
+      if (onSelectedDate.length === 0) {
         this.activeBooking = null;
         return;
       }
-      const b = upcoming[0];
+      const b = onSelectedDate[0];
       this.activeBooking = {
         id: b.id,
         slot_id: b.slot_id,
@@ -284,6 +288,7 @@ export class BookingComponent implements OnInit, OnDestroy {
           const affectedDate = data.slot_date || extractDateFromDateTime(data.start_time) || payload.date;
           if (!affectedDate || affectedDate === this.selectedDate) {
             await this.loadSlots(true);
+            await this.loadActiveBooking();
           }
         } catch (_) {}
       };
@@ -301,6 +306,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   async onDateChange() {
     this.selectedDate = this.normalizeDate(this.selectedDate);
     await this.loadSlots(false);
+    await this.loadActiveBooking();
   }
 
   async selectSlot(slot: Slot) {
@@ -319,15 +325,9 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.selectedSlot = slot;
 
     if (this.activeBooking) {
-      if (slot.id === this.activeBooking.slot_id) {
-        this.existingBooking = this.mapActiveToExisting(this.activeBooking);
-        this.showOwnBookingPopup = true;
-        return;
-      }
-      if (!this.isSlotFull(slot)) {
-        this.showDifferentSlotPopup = true;
-        return;
-      }
+      this.existingBooking = this.mapActiveToExisting(this.activeBooking);
+      this.showOwnBookingPopup = true;
+      return;
     }
 
     try {
@@ -503,16 +503,10 @@ export class BookingComponent implements OnInit, OnDestroy {
 
       if (code === 'ACTIVE_BOOKING_EXISTS') {
         await this.loadActiveBooking();
-        if (this.activeBooking && this.selectedSlot) {
-          if (this.selectedSlot.id === this.activeBooking.slot_id) {
-            this.existingBooking = this.mapActiveToExisting(this.activeBooking);
-            this.showOwnBookingPopup = true;
-          } else {
-            this.showDifferentSlotPopup = true;
-          }
-        } else {
-          this.showDifferentSlotPopup = true;
+        if (this.activeBooking) {
+          this.existingBooking = this.mapActiveToExisting(this.activeBooking);
         }
+        this.showOwnBookingPopup = true;
         this.errorMessage = '';
       } else if (code === 'TRAINER_SLOT_TAKEN') {
         this.errorMessage =
@@ -545,15 +539,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.existingBooking = null;
   }
 
-  closeDifferentSlotPopup(): void {
-    this.showDifferentSlotPopup = false;
-    this.selectedSlot = null;
-  }
-
-  keepCurrentBooking(): void {
-    this.closeDifferentSlotPopup();
-  }
-
   closeSlotTakenPopup(): void {
     this.showSlotTakenPopup = false;
     this.selectedSlot = null;
@@ -561,7 +546,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   viewExistingBooking(): void {
     this.closeOwnBookingPopup();
-    this.closeDifferentSlotPopup();
     this.router.navigate(['/my-bookings']);
   }
 
@@ -576,34 +560,12 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
   }
 
-  async openUpdateBookingFromSummary(): Promise<void> {
-    if (!this.activeBooking) {
-      return;
-    }
-    await this.goToActiveBookingDate();
-    const slot = this.slots.find((s) => s.id === this.activeBooking!.slot_id);
-    if (slot) {
-      this.selectedSlot = slot;
-    }
-    this.existingBooking = this.mapActiveToExisting(this.activeBooking);
-    await this.openUpdateBooking();
-  }
-
-  proceedToChangeSlot(): void {
-    if (!this.selectedSlot || this.isSlotFull(this.selectedSlot)) {
-      return;
-    }
-    this.showDifferentSlotPopup = false;
-    this.openVehicleSelection(this.selectedSlot);
-  }
-
   async openUpdateBooking(): Promise<void> {
     const booking = this.existingBooking || (this.activeBooking ? this.mapActiveToExisting(this.activeBooking) : null);
     if (!booking) {
       return;
     }
-    if (!this.selectedSlot && this.activeBooking) {
-      await this.goToActiveBookingDate();
+    if (this.activeBooking) {
       const slot = this.slots.find((s) => s.id === this.activeBooking!.slot_id);
       if (slot) {
         this.selectedSlot = slot;
@@ -615,7 +577,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     this.existingBooking = booking;
     this.showOwnBookingPopup = false;
-    this.showDifferentSlotPopup = false;
     this.updateForm = {
       trainerId: this.existingBooking.trainer_id,
       vehicleId: this.existingBooking.vehicle_id
@@ -835,6 +796,37 @@ export class BookingComponent implements OnInit, OnDestroy {
       return `0 / ${total} Available`;
     }
     return `${available} / ${total} Available`;
+  }
+
+  getSameDateBookingMessage(): string {
+    const booking = this.getDisplayBooking();
+    if (!booking) {
+      return 'You already have a booking on this date.';
+    }
+    return `You already have a booking on ${this.formatBookingDateShort(booking)} at ${this.formatBookingTime(booking)}.`;
+  }
+
+  formatBookingDateShort(booking: ActiveBooking | { slot_date?: string; start_time?: string } | null): string {
+    if (!booking) {
+      return '';
+    }
+    const dateStr =
+      extractDateFromDateTime(booking.slot_date) ||
+      extractDateFromDateTime((booking as ActiveBooking).start_time) ||
+      normalizeDate(booking.slot_date) ||
+      normalizeDate((booking as ActiveBooking).start_time);
+    if (!dateStr) {
+      return '';
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) {
+      return '';
+    }
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${d} ${months[m - 1]} ${y}`;
   }
 
   formatBookingDate(booking: ActiveBooking | { slot_date?: string; start_time?: string; formatted_slot_time?: string } | null): string {
