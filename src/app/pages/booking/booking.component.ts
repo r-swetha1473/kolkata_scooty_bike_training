@@ -205,7 +205,10 @@ export class BookingComponent implements OnInit, OnDestroy {
         vehicle_id: b.vehicle_id,
         start_time: b.start_time || b.slot_time || b.booking_datetime,
         end_time: b.end_time,
-        slot_date: b.slot_date,
+        slot_date:
+          extractDateFromDateTime(b.slot_date) ||
+          extractDateFromDateTime(b.start_time || b.slot_time || b.booking_datetime) ||
+          undefined,
         formatted_slot_time: b.formatted_slot_time,
         trainer_name: b.trainer_name,
         vehicle_name: b.vehicle_name,
@@ -838,14 +841,33 @@ export class BookingComponent implements OnInit, OnDestroy {
     if (!booking) {
       return '';
     }
-    const dateStr = booking.slot_date || extractDateFromDateTime((booking as ActiveBooking).start_time);
+
+    const dateStr =
+      extractDateFromDateTime(booking.slot_date) ||
+      extractDateFromDateTime((booking as ActiveBooking).start_time) ||
+      normalizeDate(booking.slot_date) ||
+      normalizeDate((booking as ActiveBooking).start_time);
+
     if (!dateStr) {
+      if (booking.formatted_slot_time) {
+        const parts = booking.formatted_slot_time.split(',');
+        if (parts.length >= 2) {
+          return `${parts[0].trim()}, ${parts[1].trim()}`;
+        }
+      }
       return '';
     }
+
     const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d || Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) {
+      return '';
+    }
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dateObj = new Date(Date.UTC(y, m - 1, d));
+    if (Number.isNaN(dateObj.getTime())) {
+      return '';
+    }
     return `${days[dateObj.getUTCDay()]}, ${months[m - 1]} ${d}, ${y}`;
   }
 
