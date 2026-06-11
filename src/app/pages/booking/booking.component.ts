@@ -6,7 +6,8 @@ import { AuthService } from '../../services/auth.service';
 import { ApiService, Trainer } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
-import { normalizeDate, addDays, getKolkataToday, getKolkataCurrentMinutes, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../utils/date.utils';
+import { normalizeDate, addDays, getKolkataToday, getKolkataCurrentMinutes, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime, isPastDateTime } from '../../utils/date.utils';
+import { Subscription } from 'rxjs';
 import {
   getVehicleCategoryOptions,
   getTotalAvailableSeats,
@@ -15,6 +16,29 @@ import {
 } from '../../utils/vehicle.utils';
 import { firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
+
+const FEW_SLOTS_THRESHOLD = 2;
+
+export interface ActiveBooking {
+  id: string;
+  slot_id: string;
+  trainer_id: string;
+  vehicle_id: string;
+  start_time: string;
+  end_time?: string;
+  slot_date?: string;
+  formatted_slot_time?: string;
+  trainer_name?: string;
+  vehicle_name?: string;
+  vehicle_type?: string;
+  status: string;
+}
+
+interface BookingConfirmationDetails {
+  date: string;
+  time: string;
+  vehicle: string;
+}
 
 @Component({
   selector: 'app-booking',
@@ -32,8 +56,13 @@ export class BookingComponent implements OnInit, OnDestroy {
   showConfirmation = false;
   showLoginPrompt = false;
   showOwnBookingPopup = false;
+  showDifferentSlotPopup = false;
   showSlotTakenPopup = false;
   showUpdateBookingModal = false;
+  activeBooking: ActiveBooking | null = null;
+  activeBookingLoading = false;
+  confirmationDetails: BookingConfirmationDetails | null = null;
+  private authSubscription?: Subscription;
   existingBooking: {
     id: string;
     trainer_id: string;
@@ -125,6 +154,16 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
     this.startAutoRefresh();
     this.subscribeToSlotEvents();
+    this.authSubscription = this.authService.userProfile$.subscribe((user) => {
+      if (user) {
+        void this.loadActiveBooking();
+      } else {
+        this.activeBooking = null;
+      }
+    });
+    if (this.authService.isAuthenticated()) {
+      await this.loadActiveBooking();
+    }
   }
 
   ngOnDestroy() {
@@ -133,6 +172,50 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
     if (this.slotEvents) {
       this.slotEvents.close();
+    }
+    this.authSubscription?.unsubscribe();
+  }
+
+  async loadActiveBooking(): Promise<void> {
+    if (!this.authService.isAuthenticated()) {
+      this.activeBooking = null;
+      return;
+    }
+    this.activeBookingLoading = true;
+    try {
+      const raw = (await firstValueFrom(this.apiService.getMyBookings())) as any[];
+      const upcoming = (raw || []).filter((b: any) => {
+        const start = b.start_time || b.slot_time || b.booking_datetime;
+        return (
+          b.status !== 'cancelled' &&
+          b.status !== 'completed' &&
+          start &&
+          !isPastDateTime(start)
+        );
+      });
+      if (upcoming.length === 0) {
+        this.activeBooking = null;
+        return;
+      }
+      const b = upcoming[0];
+      this.activeBooking = {
+        id: b.id,
+        slot_id: b.slot_id,
+        trainer_id: b.trainer_id,
+        vehicle_id: b.vehicle_id,
+        start_time: b.start_time || b.slot_time || b.booking_datetime,
+        end_time: b.end_time,
+        slot_date: b.slot_date,
+        formatted_slot_time: b.formatted_slot_time,
+        trainer_name: b.trainer_name,
+        vehicle_name: b.vehicle_name,
+        vehicle_type: b.vehicle_type,
+        status: b.status
+      };
+    } catch {
+      /* keep previous activeBooking on transient errors */
+    } finally {
+      this.activeBookingLoading = false;
     }
   }
 
@@ -232,6 +315,18 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     this.selectedSlot = slot;
 
+    if (this.activeBooking) {
+      if (slot.id === this.activeBooking.slot_id) {
+        this.existingBooking = this.mapActiveToExisting(this.activeBooking);
+        this.showOwnBookingPopup = true;
+        return;
+      }
+      if (!this.isSlotFull(slot)) {
+        this.showDifferentSlotPopup = true;
+        return;
+      }
+    }
+
     try {
       const status = await this.apiService.getSlotBookingStatus(slot.id);
       if (status.ownedByMe && status.booking) {
@@ -254,6 +349,11 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.showSlotTakenPopup = true;
       return;
     }
+    this.openVehicleSelection(slot);
+  }
+
+  private openVehicleSelection(slot: Slot): void {
+    this.selectedSlot = slot;
     this.vehicleOptions = getVehicleCategoryOptions(slot.vehicle_capacities);
     this.selectedVehicleId = '';
     this.showVehicleModal = true;
@@ -362,8 +462,15 @@ export class BookingComponent implements OnInit, OnDestroy {
         return;
       }
 
+      const bookedSlot = this.selectedSlot;
+      const confirmation = {
+        date: this.formatBookingDateFromSlot(bookedSlot!),
+        time: this.formatTime(bookedSlot!.start_time),
+        vehicle: this.getSelectedVehicleLabel() || this.getVehicleDisplayFromSlot(bookedSlot!)
+      };
+
       await firstValueFrom(
-        this.apiService.createBooking(this.selectedSlot.id, {
+        this.apiService.createBooking(bookedSlot!.id, {
           phone: this.bookingForm.phone.trim(),
           notes: (this.bookingForm.notes || '').trim(),
           trainer_id: this.bookingForm.trainerId.trim(),
@@ -372,12 +479,9 @@ export class BookingComponent implements OnInit, OnDestroy {
       );
 
       this.closeBookingModal();
-      this.showConfirmation = true;
+      this.showBookingConfirmation(confirmation);
 
-      setTimeout(() => {
-        this.showConfirmation = false;
-      }, 4000);
-
+      await this.loadActiveBooking();
       await this.loadSlots(false);
     } catch (error: any) {
       const status = error?.status;
@@ -395,7 +499,17 @@ export class BookingComponent implements OnInit, OnDestroy {
       }
 
       if (code === 'ACTIVE_BOOKING_EXISTS') {
-        this.showOwnBookingPopup = true;
+        await this.loadActiveBooking();
+        if (this.activeBooking && this.selectedSlot) {
+          if (this.selectedSlot.id === this.activeBooking.slot_id) {
+            this.existingBooking = this.mapActiveToExisting(this.activeBooking);
+            this.showOwnBookingPopup = true;
+          } else {
+            this.showDifferentSlotPopup = true;
+          }
+        } else {
+          this.showDifferentSlotPopup = true;
+        }
         this.errorMessage = '';
       } else if (code === 'TRAINER_SLOT_TAKEN') {
         this.errorMessage =
@@ -428,6 +542,15 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.existingBooking = null;
   }
 
+  closeDifferentSlotPopup(): void {
+    this.showDifferentSlotPopup = false;
+    this.selectedSlot = null;
+  }
+
+  keepCurrentBooking(): void {
+    this.closeDifferentSlotPopup();
+  }
+
   closeSlotTakenPopup(): void {
     this.showSlotTakenPopup = false;
     this.selectedSlot = null;
@@ -435,15 +558,61 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   viewExistingBooking(): void {
     this.closeOwnBookingPopup();
+    this.closeDifferentSlotPopup();
     this.router.navigate(['/my-bookings']);
   }
 
+  async goToActiveBookingDate(): Promise<void> {
+    if (!this.activeBooking?.slot_date) {
+      return;
+    }
+    const date = this.normalizeDate(this.activeBooking.slot_date);
+    if (date !== this.selectedDate) {
+      this.selectedDate = date;
+      await this.loadSlots(false);
+    }
+  }
+
+  async openUpdateBookingFromSummary(): Promise<void> {
+    if (!this.activeBooking) {
+      return;
+    }
+    await this.goToActiveBookingDate();
+    const slot = this.slots.find((s) => s.id === this.activeBooking!.slot_id);
+    if (slot) {
+      this.selectedSlot = slot;
+    }
+    this.existingBooking = this.mapActiveToExisting(this.activeBooking);
+    await this.openUpdateBooking();
+  }
+
+  proceedToChangeSlot(): void {
+    if (!this.selectedSlot || this.isSlotFull(this.selectedSlot)) {
+      return;
+    }
+    this.showDifferentSlotPopup = false;
+    this.openVehicleSelection(this.selectedSlot);
+  }
+
   async openUpdateBooking(): Promise<void> {
-    if (!this.existingBooking || !this.selectedSlot) {
+    const booking = this.existingBooking || (this.activeBooking ? this.mapActiveToExisting(this.activeBooking) : null);
+    if (!booking) {
+      return;
+    }
+    if (!this.selectedSlot && this.activeBooking) {
+      await this.goToActiveBookingDate();
+      const slot = this.slots.find((s) => s.id === this.activeBooking!.slot_id);
+      if (slot) {
+        this.selectedSlot = slot;
+      }
+    }
+    if (!this.selectedSlot) {
       return;
     }
 
+    this.existingBooking = booking;
     this.showOwnBookingPopup = false;
+    this.showDifferentSlotPopup = false;
     this.updateForm = {
       trainerId: this.existingBooking.trainer_id,
       vehicleId: this.existingBooking.vehicle_id
@@ -494,11 +663,24 @@ export class BookingComponent implements OnInit, OnDestroy {
           this.updateForm.vehicleId
         )
       );
+      const updateSlot = this.selectedSlot;
+      const vehicleLabel =
+        this.vehicleOptions.find((v) => v.vehicle_id === this.updateForm.vehicleId)?.label ||
+        this.getVehicleDisplay(this.activeBooking || this.existingBooking);
+      const confirmation = {
+        date: this.activeBooking
+          ? this.formatBookingDate(this.activeBooking)
+          : updateSlot
+            ? this.formatBookingDateFromSlot(updateSlot)
+            : '',
+        time: updateSlot
+          ? this.formatTime(updateSlot.start_time)
+          : this.formatBookingTime(this.activeBooking),
+        vehicle: vehicleLabel
+      };
       this.closeUpdateBookingModal();
-      this.showConfirmation = true;
-      setTimeout(() => {
-        this.showConfirmation = false;
-      }, 4000);
+      this.showBookingConfirmation(confirmation);
+      await this.loadActiveBooking();
       await this.loadSlots(false);
     } catch (error: any) {
       const body = error?.error;
@@ -602,6 +784,141 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   getRemainingSeats(slot: Slot): number {
     return getTotalAvailableSeats(slot);
+  }
+
+  getSlotCapacity(slot: Slot): number {
+    return Number(slot.capacity) || 0;
+  }
+
+  getAvailableCount(slot: Slot): number {
+    return this.getRemainingSeats(slot);
+  }
+
+  isUserBookedSlot(slot: Slot): boolean {
+    return !!this.activeBooking && this.activeBooking.slot_id === slot.id;
+  }
+
+  isFewSlotsLeft(slot: Slot): boolean {
+    if (this.isSlotDisabled(slot) || this.isSlotFull(slot) || this.isUserBookedSlot(slot)) {
+      return false;
+    }
+    const available = this.getAvailableCount(slot);
+    return available > 0 && available <= FEW_SLOTS_THRESHOLD;
+  }
+
+  getSlotStatusLabel(slot: Slot): string {
+    if (this.isSlotDisabled(slot)) {
+      return 'DISABLED';
+    }
+    if (this.isUserBookedSlot(slot)) {
+      return 'YOUR BOOKING';
+    }
+    if (this.isSlotFull(slot)) {
+      return 'FULL';
+    }
+    if (this.isFewSlotsLeft(slot)) {
+      return 'FEW SLOTS LEFT';
+    }
+    return 'AVAILABLE';
+  }
+
+  getCapacityLabel(slot: Slot): string {
+    const total = this.getSlotCapacity(slot);
+    const available = this.getAvailableCount(slot);
+    if (this.isUserBookedSlot(slot)) {
+      return 'Your booking';
+    }
+    if (this.isSlotFull(slot)) {
+      return `0 / ${total} Available`;
+    }
+    return `${available} / ${total} Available`;
+  }
+
+  formatBookingDate(booking: ActiveBooking | { slot_date?: string; start_time?: string; formatted_slot_time?: string } | null): string {
+    if (!booking) {
+      return '';
+    }
+    const dateStr = booking.slot_date || extractDateFromDateTime((booking as ActiveBooking).start_time);
+    if (!dateStr) {
+      return '';
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dateObj = new Date(Date.UTC(y, m - 1, d));
+    return `${days[dateObj.getUTCDay()]}, ${months[m - 1]} ${d}, ${y}`;
+  }
+
+  formatBookingDateFromSlot(slot: Slot): string {
+    const dateStr = extractDateFromDateTime(slot.start_time) || this.selectedDate;
+    return this.formatBookingDate({ slot_date: dateStr, start_time: slot.start_time });
+  }
+
+  formatBookingTime(booking: ActiveBooking | null): string {
+    if (!booking) {
+      return '';
+    }
+    if (booking.formatted_slot_time) {
+      const parts = booking.formatted_slot_time.split(',');
+      return parts[parts.length - 1]?.trim() || booking.formatted_slot_time;
+    }
+    return booking.start_time ? this.formatTime(booking.start_time) : '';
+  }
+
+  getVehicleDisplay(booking: ActiveBooking | typeof this.existingBooking | null): string {
+    if (!booking) {
+      return '';
+    }
+    const name = 'vehicle_name' in booking ? booking.vehicle_name : '';
+    const type = 'vehicle_type' in booking ? booking.vehicle_type : '';
+    if (name && type) {
+      return `${name} (${type})`;
+    }
+    return name || type || 'Not specified';
+  }
+
+  getVehicleDisplayFromSlot(slot: Slot): string {
+    return this.getSelectedVehicleLabel();
+  }
+
+  getDisplayBooking(): ActiveBooking | null {
+    if (this.activeBooking) {
+      return this.activeBooking;
+    }
+    if (this.existingBooking && this.selectedSlot) {
+      return {
+        id: this.existingBooking.id,
+        slot_id: this.selectedSlot.id,
+        trainer_id: this.existingBooking.trainer_id,
+        vehicle_id: this.existingBooking.vehicle_id,
+        start_time: this.selectedSlot.start_time,
+        end_time: this.selectedSlot.end_time,
+        slot_date: extractDateFromDateTime(this.selectedSlot.start_time) || this.selectedDate,
+        trainer_name: this.existingBooking.trainer_name,
+        vehicle_name: this.existingBooking.vehicle_name,
+        status: 'confirmed'
+      };
+    }
+    return null;
+  }
+
+  private mapActiveToExisting(booking: ActiveBooking): NonNullable<typeof this.existingBooking> {
+    return {
+      id: booking.id,
+      trainer_id: booking.trainer_id,
+      vehicle_id: booking.vehicle_id,
+      trainer_name: booking.trainer_name,
+      vehicle_name: booking.vehicle_name
+    };
+  }
+
+  private showBookingConfirmation(details: BookingConfirmationDetails): void {
+    this.confirmationDetails = details;
+    this.showConfirmation = true;
+    setTimeout(() => {
+      this.showConfirmation = false;
+      this.confirmationDetails = null;
+    }, 6000);
   }
 
   getSelectedVehicleLabel(): string {

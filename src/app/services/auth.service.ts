@@ -96,24 +96,28 @@ export class AuthService {
 
 
 
+  private static readonly OAUTH_RETURN_KEY = 'oauth_return_url';
+
   private handleOAuthRedirect(): void {
 
     try {
 
       const url = new URL(window.location.href);
       const token = url.searchParams.get('token')?.trim();
+      const oauthSuccess = url.searchParams.get('oauth') === 'success';
 
       if (token) {
         setAuthToken(token);
         url.searchParams.delete('token');
       }
 
-      if (url.searchParams.get('oauth') === 'success') {
-
+      if (oauthSuccess) {
         url.searchParams.delete('oauth');
+      }
 
+      if (token || oauthSuccess) {
         window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-
+        this.redirectAfterOAuthIfNeeded();
       }
 
     } catch {
@@ -122,6 +126,18 @@ export class AuthService {
 
     }
 
+  }
+
+  private redirectAfterOAuthIfNeeded(): void {
+    const returnUrl = sessionStorage.getItem(AuthService.OAUTH_RETURN_KEY);
+    if (!returnUrl) {
+      return;
+    }
+    sessionStorage.removeItem(AuthService.OAUTH_RETURN_KEY);
+    const target = returnUrl.startsWith('/') ? returnUrl : '/booking';
+    if (window.location.pathname !== target.split('?')[0]) {
+      queueMicrotask(() => this.router.navigateByUrl(target));
+    }
   }
 
 
@@ -154,10 +170,10 @@ export class AuthService {
 
 
 
-  signInWithGoogle(): void {
-
+  signInWithGoogle(returnUrl?: string): void {
+    const path = returnUrl || `${window.location.pathname}${window.location.search}`;
+    sessionStorage.setItem(AuthService.OAUTH_RETURN_KEY, path || '/booking');
     window.location.href = `${this.http['apiUrl']}/auth/google`;
-
   }
 
 

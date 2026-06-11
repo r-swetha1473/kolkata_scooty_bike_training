@@ -61,12 +61,42 @@
         </div>
       </div>
 
+      <div class="current-booking-card" *ngIf="activeBooking">
+        <div class="current-booking-header">
+          <h2 class="current-booking-title">Your Current Booking</h2>
+          <span class="booking-badge">Active</span>
+        </div>
+        <div class="current-booking-details">
+          <div class="booking-detail-row">
+            <span class="detail-label">Date</span>
+            <span class="detail-value">{{ formatBookingDate(activeBooking) }}</span>
+          </div>
+          <div class="booking-detail-row">
+            <span class="detail-label">Time</span>
+            <span class="detail-value">{{ formatBookingTime(activeBooking) }}</span>
+          </div>
+          <div class="booking-detail-row">
+            <span class="detail-label">Vehicle</span>
+            <span class="detail-value">{{ getVehicleDisplay(activeBooking) }}</span>
+          </div>
+        </div>
+        <p class="booking-date-hint" *ngIf="activeBooking.slot_date && normalizeDate(activeBooking.slot_date) !== selectedDate">
+          Your booking is on a different day.
+          <button type="button" class="link-btn" (click)="goToActiveBookingDate()">Show on calendar</button>
+        </p>
+        <div class="current-booking-actions">
+          <button type="button" class="btn btn-confirm" (click)="viewExistingBooking()">View Booking</button>
+          <button type="button" class="btn btn-secondary" (click)="openUpdateBookingFromSummary()">Update Booking</button>
+        </div>
+      </div>
+
       <div class="slots-container-card">
         <div class="slots-header">
           <h2 class="page-title">Available Time Slots</h2>
           <div class="legend">
             <span class="legend-item"><span class="dot available"></span> Available</span>
-            <span class="legend-item"><span class="dot partial"></span> Partially Booked</span>
+            <span class="legend-item"><span class="dot your-booking"></span> Your Booking</span>
+            <span class="legend-item"><span class="dot partial"></span> Few Slots Left</span>
             <span class="legend-item"><span class="dot full"></span> Full</span>
             <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
           </div>
@@ -84,26 +114,28 @@
           <div
             *ngFor="let slot of slots"
             class="slot-card"
-            [class.available]="isSlotAvailable(slot) && !isSlotPartiallyBooked(slot)"
-            [class.partial]="isSlotPartiallyBooked(slot)"
-            [class.full]="isSlotFull(slot)"
+            [class.your-booking]="isUserBookedSlot(slot)"
+            [class.available]="!isUserBookedSlot(slot) && isSlotAvailable(slot) && !isFewSlotsLeft(slot)"
+            [class.partial]="!isUserBookedSlot(slot) && isFewSlotsLeft(slot)"
+            [class.full]="!isUserBookedSlot(slot) && isSlotFull(slot)"
             [class.disabled]="isSlotDisabled(slot)"
             (click)="selectSlot(slot)">
+            <span class="your-booking-badge" *ngIf="isUserBookedSlot(slot)">✓ Your Booking</span>
             <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
-            <div class="slot-status-text">
-              {{ isSlotDisabled(slot) ? 'DISABLED' : (isSlotFull(slot) ? 'FULL' : (isSlotPartiallyBooked(slot) ? 'PARTIAL' : 'AVAILABLE')) }}
-            </div>
-            <div class="slot-trainer slot-trainer-hint" *ngIf="slot.trainer?.profile?.full_name">
+            <div class="slot-status-text">{{ getSlotStatusLabel(slot) }}</div>
+            <div class="slot-trainer slot-trainer-hint" *ngIf="slot.trainer?.profile?.full_name && !isUserBookedSlot(slot)">
               <svg class="trainer-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                 <circle cx="12" cy="7" r="4"></circle>
               </svg>
               Default: {{ slot.trainer.profile.full_name }}
             </div>
-            <div class="slot-trainer slot-trainer-hint" *ngIf="!slot.trainer?.profile?.full_name">
+            <div class="slot-trainer slot-trainer-hint" *ngIf="!slot.trainer?.profile?.full_name && !isUserBookedSlot(slot)">
               Trainer assigned when you book
             </div>
-            <div class="slot-capacity">{{ getRemainingSeats(slot) }} seat{{ getRemainingSeats(slot) === 1 ? '' : 's' }} left</div>
+            <div class="slot-capacity" [class.your-booking-capacity]="isUserBookedSlot(slot)">
+              {{ getCapacityLabel(slot) }}
+            </div>
           </div>
         </div>
       </div>
@@ -304,13 +336,73 @@
   </div>
 
   <div class="modal-overlay" *ngIf="showOwnBookingPopup" (click)="closeOwnBookingPopup()">
-    <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-content booking-detail-modal" (click)="$event.stopPropagation()">
       <button type="button" class="close-btn" (click)="closeOwnBookingPopup()" aria-label="Close">×</button>
-      <h2>Already booked</h2>
-      <p class="modal-subtitle">You have already booked this slot.</p>
+      <h2>Your Current Booking</h2>
+      <p class="modal-subtitle">This is the slot you have already booked.</p>
+      <div class="booking-detail-list" *ngIf="getDisplayBooking() as booking">
+        <div class="booking-detail-item">
+          <span class="detail-label">Date</span>
+          <span class="detail-value">{{ formatBookingDate(booking) }}</span>
+        </div>
+        <div class="booking-detail-item">
+          <span class="detail-label">Time</span>
+          <span class="detail-value">{{ formatBookingTime(booking) }}</span>
+        </div>
+        <div class="booking-detail-item">
+          <span class="detail-label">Vehicle</span>
+          <span class="detail-value">{{ getVehicleDisplay(booking) }}</span>
+        </div>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-confirm" (click)="viewExistingBooking()">View Booking</button>
         <button type="button" class="btn btn-secondary" (click)="openUpdateBooking()">Update Booking</button>
+        <button type="button" class="btn btn-ghost" (click)="closeOwnBookingPopup()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showDifferentSlotPopup" (click)="closeDifferentSlotPopup()">
+    <div class="modal-content booking-detail-modal" (click)="$event.stopPropagation()">
+      <button type="button" class="close-btn" (click)="closeDifferentSlotPopup()" aria-label="Close">×</button>
+      <h2>You already have a booking</h2>
+      <p class="modal-subtitle">You can only hold one active booking at a time. To switch slots, cancel your current booking from My Bookings first.</p>
+      <div class="booking-compare">
+        <div class="booking-compare-block" *ngIf="getDisplayBooking() as booking">
+          <h3>Current Booking</h3>
+          <div class="booking-detail-item">
+            <span class="detail-label">Date</span>
+            <span class="detail-value">{{ formatBookingDate(booking) }}</span>
+          </div>
+          <div class="booking-detail-item">
+            <span class="detail-label">Time</span>
+            <span class="detail-value">{{ formatBookingTime(booking) }}</span>
+          </div>
+          <div class="booking-detail-item">
+            <span class="detail-label">Vehicle</span>
+            <span class="detail-value">{{ getVehicleDisplay(booking) }}</span>
+          </div>
+        </div>
+        <div class="booking-compare-block selected-slot" *ngIf="selectedSlot">
+          <h3>Selected Slot</h3>
+          <div class="booking-detail-item">
+            <span class="detail-label">Date</span>
+            <span class="detail-value">{{ formatBookingDateFromSlot(selectedSlot) }}</span>
+          </div>
+          <div class="booking-detail-item">
+            <span class="detail-label">Time</span>
+            <span class="detail-value">{{ formatTime(selectedSlot.start_time) }}</span>
+          </div>
+          <div class="booking-detail-item">
+            <span class="detail-label">Availability</span>
+            <span class="detail-value">{{ getCapacityLabel(selectedSlot) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-confirm" (click)="proceedToChangeSlot()">Update Booking</button>
+        <button type="button" class="btn btn-secondary" (click)="keepCurrentBooking()">Keep Current Booking</button>
+        <button type="button" class="btn btn-ghost" (click)="closeDifferentSlotPopup()">Close</button>
       </div>
     </div>
   </div>
@@ -368,9 +460,19 @@
   </div>
 
   <div class="toast success" [class.show]="showConfirmation">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-      <polyline points="20 6 9 17 4 12"></polyline>
-    </svg>
-    Booking confirmed! We'll send you a confirmation SMS shortly.
+    <div class="toast-content">
+      <div class="toast-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <strong>Booking Confirmed</strong>
+      </div>
+      <div class="toast-details" *ngIf="confirmationDetails">
+        <div><span>Date:</span> {{ confirmationDetails.date }}</div>
+        <div><span>Time:</span> {{ confirmationDetails.time }}</div>
+        <div><span>Vehicle:</span> {{ confirmationDetails.vehicle }}</div>
+      </div>
+      <p class="toast-note">We'll send you a confirmation SMS shortly.</p>
+    </div>
   </div>
 </div>
