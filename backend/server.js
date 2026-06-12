@@ -279,6 +279,13 @@ if (process.env.DISABLE_SLOT_CAPACITY_STARTUP !== '1') {
   });
 }
 
+if (process.env.DISABLE_REACTIVATION_SCHEMA_STARTUP !== '1') {
+  const reactivationService = require('./services/reactivationRequest.service');
+  reactivationService.ensureSchemaOnStartup().catch((err) => {
+    console.error('[Reactivation schema startup]', err.message);
+  });
+}
+
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);

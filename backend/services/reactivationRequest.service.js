@@ -6,6 +6,27 @@ const db = require('../db');
 const notificationService = require('./notification.service');
 const { getProfileInactiveStatus } = require('../utils/profileInactive');
 
+const ENSURE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS account_reactivation_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'rejected')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  admin_notes TEXT,
+  user_message TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reactivation_one_pending_per_user
+  ON account_reactivation_requests (user_id)
+  WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_reactivation_requests_status_requested
+  ON account_reactivation_requests (status, requested_at DESC);
+`;
+
 async function tableExists() {
   const r = await db.query(
     `SELECT EXISTS (
@@ -14,6 +35,33 @@ async function tableExists() {
      ) AS exists`
   );
   return !!r.rows[0]?.exists;
+}
+
+async function ensureSchemaOnStartup() {
+  try {
+    if (await tableExists()) {
+      return { ok: true, created: false };
+    }
+    await db.query(ENSURE_SCHEMA_SQL);
+    console.log('[Reactivation schema] account_reactivation_requests table ensured');
+    return { ok: true, created: true };
+  } catch (error) {
+    console.error('[Reactivation schema]', error.message);
+    return { ok: false, error: error.message };
+  }
+}
+
+async function requireTable() {
+  if (await tableExists()) {
+    return;
+  }
+  await ensureSchemaOnStartup();
+  if (!(await tableExists())) {
+    const err = new Error('Reactivation requests are not available yet. Please contact admin.');
+    err.status = 503;
+    err.errorCode = 'SCHEMA_NOT_READY';
+    throw err;
+  }
 }
 
 async function getLatestForUser(userId) {
@@ -32,12 +80,7 @@ async function getLatestForUser(userId) {
 }
 
 async function createRequest(user) {
-  if (!(await tableExists())) {
-    const err = new Error('Reactivation requests are not available yet. Please contact admin.');
-    err.status = 503;
-    err.errorCode = 'SCHEMA_NOT_READY';
-    throw err;
-  }
+  await requireTable();
 
   const profile = await getProfileInactiveStatus(user.id);
   if (profile.role !== 'customer' || !profile.inactive_blocked) {
@@ -82,6 +125,7 @@ async function createRequest(user) {
 }
 
 async function listForAdmin({ status = '', limit = 50, offset = 0 } = {}) {
+  await requireTable().catch(() => {});
   if (!(await tableExists())) {
     return { requests: [], total: 0 };
   }
@@ -128,11 +172,7 @@ async function listForAdmin({ status = '', limit = 50, offset = 0 } = {}) {
 }
 
 async function approveRequest(requestId, adminId) {
-  if (!(await tableExists())) {
-    const err = new Error('Reactivation requests table not available');
-    err.status = 503;
-    throw err;
-  }
+  await requireTable();
 
   const client = await db.getClient();
   try {
@@ -187,11 +227,7 @@ async function approveRequest(requestId, adminId) {
 }
 
 async function rejectRequest(requestId, adminId, adminNotes = null) {
-  if (!(await tableExists())) {
-    const err = new Error('Reactivation requests table not available');
-    err.status = 503;
-    throw err;
-  }
+  await requireTable();
 
   const reqResult = await db.query(
     `SELECT id, status FROM account_reactivation_requests WHERE id = $1`,
@@ -226,6 +262,7 @@ async function rejectRequest(requestId, adminId, adminNotes = null) {
 }
 
 module.exports = {
+  ensureSchemaOnStartup,
   getLatestForUser,
   createRequest,
   listForAdmin,
