@@ -15,7 +15,21 @@ import { firstValueFrom } from 'rxjs';
       <div *ngIf="loading && !userProfile" class="loading">Loading profile…</div>
 
       <div *ngIf="showInactiveBanner" class="banner-inactive" role="alert">
-        Your account is inactive. Contact admin.
+        <p class="banner-text">Your account is inactive. Contact admin.</p>
+        <button
+          *ngIf="userProfile?.inactive_blocked"
+          type="button"
+          class="btn-reactivation"
+          (click)="openReactivationModal()"
+          [disabled]="reactivationSubmitting || reactivationStatus?.status === 'pending'">
+          {{ reactivationStatus?.status === 'pending' ? 'Request Pending' : 'Request Account Reactivation' }}
+        </button>
+        <p *ngIf="reactivationStatus" class="reactivation-status" [class]="'status-' + reactivationStatus.status">
+          Request status: {{ reactivationStatus.status_label }}
+        </p>
+        <p *ngIf="reactivationStatus?.user_message" class="reactivation-message">
+          {{ reactivationStatus.user_message }}
+        </p>
       </div>
 
       <div class="profile-card" *ngIf="userProfile">
@@ -83,6 +97,28 @@ import { firstValueFrom } from 'rxjs';
           <a routerLink="/my-bookings">View my bookings →</a>
         </p>
       </div>
+
+      <div class="modal-overlay" *ngIf="showReactivationModal" (click)="closeReactivationModal()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <button type="button" class="close-btn" (click)="closeReactivationModal()" aria-label="Close">×</button>
+          <h2>Request Account Reactivation</h2>
+          <p class="modal-subtitle">
+            Your account is currently inactive.
+            Do you want to send a reactivation request to the administrator?
+          </p>
+          <p class="err" *ngIf="reactivationError">{{ reactivationError }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" (click)="closeReactivationModal()">Cancel</button>
+            <button
+              type="button"
+              class="btn-save"
+              (click)="submitReactivationRequest()"
+              [disabled]="reactivationSubmitting">
+              {{ reactivationSubmitting ? 'Sending…' : 'Send Request' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [
@@ -104,7 +140,88 @@ import { firstValueFrom } from 'rxjs';
         padding: 14px 18px;
         border-radius: 10px;
         margin-bottom: 20px;
+      }
+      .banner-text {
+        margin: 0 0 12px 0;
         font-weight: 600;
+      }
+      .btn-reactivation {
+        padding: 10px 16px;
+        background: #991b1b;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        min-height: 44px;
+      }
+      .btn-reactivation:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .reactivation-status {
+        margin: 12px 0 0;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .status-pending { color: #b45309; }
+      .status-approved { color: #059669; }
+      .status-rejected { color: #991b1b; }
+      .reactivation-message {
+        margin: 8px 0 0;
+        font-size: 14px;
+        color: #7f1d1d;
+      }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        padding: 16px;
+      }
+      .modal-content {
+        background: var(--bg-primary);
+        border-radius: 12px;
+        padding: 24px;
+        width: min(440px, 100%);
+        position: relative;
+        box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.2));
+      }
+      .modal-content h2 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+      .modal-subtitle {
+        margin: 0 0 16px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+      .close-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        border: none;
+        background: transparent;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+      .btn-cancel {
+        padding: 10px 16px;
+        border: 1px solid var(--border-primary);
+        border-radius: 8px;
+        background: var(--bg-secondary);
+        cursor: pointer;
+        min-height: 44px;
       }
       .profile-card {
         background: var(--bg-primary);
@@ -233,6 +350,12 @@ import { firstValueFrom } from 'rxjs';
         .k {
           min-width: 0;
         }
+        .modal-actions {
+          flex-direction: column-reverse;
+        }
+        .modal-actions button {
+          width: 100%;
+        }
       }
     `
   ]
@@ -245,6 +368,14 @@ export class ProfileComponent implements OnInit {
   phoneUpdateSuccess = '';
   phoneUpdateError = '';
   showInactiveBanner = false;
+  showReactivationModal = false;
+  reactivationSubmitting = false;
+  reactivationError = '';
+  reactivationStatus: {
+    status: string;
+    status_label: string;
+    user_message?: string;
+  } | null = null;
 
   constructor(
     private authService: AuthService,
@@ -281,10 +412,63 @@ export class ProfileComponent implements OnInit {
         this.syncPhoneInputFromProfile();
         if (profile?.inactive_blocked) {
           this.showInactiveBanner = true;
+          void this.loadReactivationStatus();
+        } else {
+          this.reactivationStatus = null;
+          this.showInactiveBanner = false;
         }
       });
+
+      if (this.userProfile?.inactive_blocked) {
+        await this.loadReactivationStatus();
+      }
     } finally {
       this.loading = false;
+    }
+  }
+
+  async loadReactivationStatus(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.httpService.get<{ request: any }>('/profile/reactivation-status')
+      );
+      this.reactivationStatus = res?.request || null;
+      if (this.reactivationStatus?.status === 'approved') {
+        this.authService.reloadUserProfile();
+      }
+    } catch {
+      /* optional endpoint */
+    }
+  }
+
+  openReactivationModal(): void {
+    this.reactivationError = '';
+    this.showReactivationModal = true;
+  }
+
+  closeReactivationModal(): void {
+    this.showReactivationModal = false;
+    this.reactivationError = '';
+  }
+
+  async submitReactivationRequest(): Promise<void> {
+    this.reactivationSubmitting = true;
+    this.reactivationError = '';
+    try {
+      await firstValueFrom(
+        this.httpService.post<{ success: boolean; message: string }>(
+          '/profile/reactivation-request',
+          {}
+        )
+      );
+      this.closeReactivationModal();
+      await this.loadReactivationStatus();
+    } catch (error: any) {
+      const body = error?.error;
+      this.reactivationError =
+        body?.message || body?.error || error?.message || 'Could not send request.';
+    } finally {
+      this.reactivationSubmitting = false;
     }
   }
 

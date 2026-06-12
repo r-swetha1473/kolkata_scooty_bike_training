@@ -23,6 +23,7 @@ const {
 const auditService = require('../services/audit.service');
 const slotCapacityService = require('../services/slotCapacity.service');
 const notificationService = require('../services/notification.service');
+const reactivationService = require('../services/reactivationRequest.service');
 const overdueBookingService = require('../services/overdueBooking.service');
 const { getDashboardStats } = require('../services/dashboardStats.service');
 const { buildBookingListQuery } = require('../utils/bookingSearch');
@@ -1213,6 +1214,45 @@ router.delete('/users/:id', async (req, res, next) => {
       error.errorCode = 'CANNOT_DELETE_USER';
       return next(error);
     }
+    next(error);
+  }
+});
+
+router.get('/reactivation-requests', requirePermission('users', 'view'), async (req, res, next) => {
+  try {
+    const status = req.query.status != null ? String(req.query.status).trim() : '';
+    const limit = req.query.limit;
+    const offset = req.query.offset;
+    const result = await reactivationService.listForAdmin({ status, limit, offset });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/reactivation-requests/:id/approve', requirePermission('users', 'edit'), async (req, res, next) => {
+  try {
+    const updated = await reactivationService.approveRequest(req.params.id, req.user.id);
+    res.json({
+      success: true,
+      message: 'Account reactivated successfully',
+      request: updated
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/reactivation-requests/:id/reject', requirePermission('users', 'edit'), async (req, res, next) => {
+  try {
+    const adminNotes = req.body?.admin_notes || req.body?.adminNotes || null;
+    const updated = await reactivationService.rejectRequest(req.params.id, req.user.id, adminNotes);
+    res.json({
+      success: true,
+      message: 'Reactivation request rejected',
+      request: updated
+    });
+  } catch (error) {
     next(error);
   }
 });

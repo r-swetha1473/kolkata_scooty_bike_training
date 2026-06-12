@@ -294,4 +294,31 @@ export class AdminService {
   getAdmins(): Observable<SubAdmin[]> {
     return this.http.get<SubAdmin[]>('/admin/admins');
   }
+
+  getReactivationRequests(filters?: {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ requests: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    return firstValueFrom(
+      this.http.get<{ requests: any[]; total: number }>(
+        `/admin/reactivation-requests${qs ? `?${qs}` : ''}`
+      )
+    );
+  }
+
+  approveReactivationRequest(requestId: string): Observable<any> {
+    return this.http.put(`/admin/reactivation-requests/${requestId}/approve`, {});
+  }
+
+  rejectReactivationRequest(requestId: string, adminNotes?: string): Observable<any> {
+    return this.http.put(`/admin/reactivation-requests/${requestId}/reject`, {
+      admin_notes: adminNotes || ''
+    });
+  }
 }

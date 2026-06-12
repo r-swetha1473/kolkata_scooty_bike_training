@@ -120,6 +120,7 @@ const publicLimiter = rateLimit({
 // Register routes - apply limiters as middleware
 app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Public GET endpoints with lenient limiter
 app.use('/api/trainers', (req, res, next) => {

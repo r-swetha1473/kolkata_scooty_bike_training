@@ -112,6 +112,16 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'reactivation-requests',
+        canActivate: [permissionGuard('users', 'view'), passwordChangeRequiredGuard],
+        loadComponent: () =>
+          loadWithRetry(() =>
+            import('./admin/pages/reactivation-requests/reactivation-requests.component').then(
+              (m) => m.AdminReactivationRequestsComponent
+            )
+          )
+      },
+      {
         path: 'vehicles',
         canActivate: [permissionGuard('vehicles', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>

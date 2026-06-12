@@ -14,7 +14,8 @@ const NOTIFICATION_TYPES = new Set([
   'vehicle_availability',
   'slot_capacity',
   'new_customer',
-  'sub_admin_action'
+  'sub_admin_action',
+  'account_reactivation_request'
 ]);
 
 async function tableExists(tableName) {

@@ -3,6 +3,7 @@ const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const config = require('../app.config');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
+const reactivationService = require('../services/reactivationRequest.service');
 const router = express.Router();
 
 router.get('/me', authenticate, async (req, res, next) => {
@@ -72,6 +73,44 @@ router.put('/me', authenticate, async (req, res, next) => {
       return next(dup);
     }
     next(err);
+  }
+});
+
+router.get('/reactivation-status', authenticate, async (req, res, next) => {
+  try {
+    const latest = await reactivationService.getLatestForUser(req.user.id);
+    if (!latest) {
+      return res.json({ request: null });
+    }
+    res.json({
+      request: {
+        id: latest.id,
+        status: latest.status,
+        requested_at: latest.requested_at,
+        reviewed_at: latest.reviewed_at,
+        user_message: latest.user_message,
+        status_label:
+          latest.status === 'pending'
+            ? 'Pending Review'
+            : latest.status === 'approved'
+              ? 'Approved'
+              : 'Rejected'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/reactivation-request', authenticate, async (req, res, next) => {
+  try {
+    await reactivationService.createRequest(req.user);
+    res.status(201).json({
+      success: true,
+      message: 'Reactivation request sent successfully'
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
