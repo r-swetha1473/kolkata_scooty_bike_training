@@ -49,6 +49,11 @@ const CHECKS = [
     migration: '20260609150000_admin_notifications.sql',
     name: 'admin_notification_reads table',
     sql: `SELECT to_regclass('public.admin_notification_reads') AS ok`
+  },
+  {
+    migration: '20260612120000_account_reactivation_requests.sql',
+    name: 'account_reactivation_requests table',
+    sql: `SELECT to_regclass('public.account_reactivation_requests') AS ok`
   }
 ];
 
