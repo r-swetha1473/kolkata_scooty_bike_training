@@ -210,10 +210,10 @@ export class ApiService {
     return this.get(`/bookings/slot/${slotId}/status`);
   }
 
-  updateBooking(bookingId: string, trainerId: string, vehicleId: string): Observable<Booking> {
+  updateBooking(bookingId: string, vehicleId: string): Observable<Booking> {
     return this.http.put<Booking>(
       `${this.apiUrl}/bookings/${bookingId}/update`,
-      { trainer_id: trainerId, vehicle_id: vehicleId },
+      { vehicle_id: vehicleId },
       { headers: this.getAuthHeaders(), withCredentials: true }
     );
   }

@@ -22,11 +22,6 @@ const notificationService = require('../services/notification.service');
 const { normalizeBookingCreateBody } = require('../middleware/bookingPayload');
 const { normalizeIndianMobileDigits } = require('../utils/phoneNormalize');
 const {
-  assignTrainerAndVehicleForSlot,
-  assignTrainerForSlot,
-  assignVehicleForSlot
-} = require('../services/bookingAssignment.service');
-const {
   getProfileInactiveStatus,
   isCustomerInactiveBlocked
 } = require('../utils/profileInactive');
@@ -303,11 +298,6 @@ router.post(
 
     const uuidPattern =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const chosenTrainerId =
-      clientTrainerId && uuidPattern.test(String(clientTrainerId).trim())
-        ? String(clientTrainerId).trim()
-        : null;
-
     let trainer_id;
     let vehicle_id;
 
@@ -342,86 +332,15 @@ router.post(
       vehicle_id = chosenVehicleId;
     }
 
-    if (chosenTrainerId) {
-      const trainerRow = await client.query(
-        `SELECT id FROM trainers WHERE id = $1 AND is_active = true`,
-        [chosenTrainerId]
-      );
-      if (trainerRow.rows.length === 0) {
-        const err = new Error('Selected trainer is not available.');
-        err.status = 400;
-        err.errorCode = 'TRAINER_INACTIVE';
-        throw err;
-      }
-      const taken = await client.query(
-        `SELECT 1 FROM bookings b
-         WHERE b.slot_id = $1 AND b.trainer_id = $2 AND b.status NOT IN ('cancelled')
-         LIMIT 1`,
-        [slot_id, chosenTrainerId]
-      );
-      if (taken.rows.length > 0) {
-        const err = new Error(
-          'This trainer is already booked for this time slot. Choose another trainer.'
-        );
-        err.status = 409;
-        err.errorCode = 'TRAINER_SLOT_TAKEN';
-        throw err;
-      }
-      trainer_id = chosenTrainerId;
-      if (!vehicle_id) {
-        const v = await assignVehicleForSlot(client, slot_id);
-        if (!v.ok) {
-          const assignMessages = {
-            NO_VEHICLE_CAPACITY:
-              'This time slot is full for all training vehicles. Please choose another slot.'
-          };
-          const err = new Error(
-            assignMessages[v.code] || 'Unable to assign a vehicle for this slot.'
-          );
-          err.status = 409;
-          err.errorCode = v.code || 'ASSIGNMENT_FAILED';
-          throw err;
-        }
-        vehicle_id = v.vehicleId;
-      }
-    } else {
-      if (vehicle_id) {
-        const t = await assignTrainerForSlot(client, slot_id);
-        if (!t.ok) {
-          const assignMessages = {
-            SLOT_NOT_FOUND: 'Slot not found',
-            NO_TRAINER_AVAILABLE:
-              'No trainer is available for this slot. Try another time or contact support.'
-          };
-          const err = new Error(
-            assignMessages[t.code] || 'Unable to assign trainer for this slot.'
-          );
-          err.status = t.code === 'SLOT_NOT_FOUND' ? 404 : 409;
-          err.errorCode = t.code || 'ASSIGNMENT_FAILED';
-          throw err;
-        }
-        trainer_id = t.trainerId;
-      } else {
-        const assignResult = await assignTrainerAndVehicleForSlot(client, slot_id);
-        if (!assignResult.ok) {
-          const assignMessages = {
-            SLOT_NOT_FOUND: 'Slot not found',
-            NO_TRAINER_AVAILABLE:
-              'No trainer is available for this slot. Try another time or contact support.',
-            NO_VEHICLE_CAPACITY:
-              'This time slot is full for all training vehicles. Please choose another slot.'
-          };
-          const err = new Error(
-            assignMessages[assignResult.code] || 'Unable to assign trainer or vehicle for this slot.'
-          );
-          err.status = assignResult.code === 'SLOT_NOT_FOUND' ? 404 : 409;
-          err.errorCode = assignResult.code || 'ASSIGNMENT_FAILED';
-          throw err;
-        }
-        trainer_id = assignResult.trainerId;
-        vehicle_id = assignResult.vehicleId;
-      }
+    if (!vehicle_id) {
+      const err = new Error('vehicle_id is required. Please select a vehicle type.');
+      err.status = 400;
+      err.errorCode = 'VEHICLE_REQUIRED';
+      throw err;
     }
+
+    // Customer bookings: trainer is assigned by admin later; capacity is vehicle/slot based only.
+    trainer_id = null;
 
     const slotCheck = await client.query(
       `SELECT start_time, end_time, slot_date FROM slots WHERE id = $1`,
@@ -500,12 +419,6 @@ router.post(
           CASE 
             WHEN ls.id IS NULL THEN 'SLOT_NOT_FOUND'
             WHEN vc.vehicle_capacity IS NULL THEN 'INVALID_VEHICLE'
-            WHEN (SELECT id FROM trainers WHERE id = $4) IS NULL THEN 'TRAINER_NOT_FOUND'
-            WHEN (SELECT is_active FROM trainers WHERE id = $4) IS NOT TRUE THEN 'TRAINER_INACTIVE'
-            WHEN EXISTS (
-              SELECT 1 FROM bookings b
-              WHERE b.slot_id = $1 AND b.trainer_id = $4 AND b.status NOT IN ('cancelled')
-            ) THEN 'TRAINER_SLOT_TAKEN'
             WHEN ls.status IN ('disabled', 'cancelled') THEN 'SLOT_NOT_AVAILABLE'
             WHEN ls.status NOT IN ('available', 'full') THEN 'SLOT_INVALID_STATUS'
             WHEN ls.start_time <= NOW() THEN 'SLOT_PAST'
@@ -518,7 +431,7 @@ router.post(
       ),
       booking_insert AS (
         INSERT INTO bookings (user_id, slot_id, trainer_id, vehicle_id, phone, status, notes)
-        SELECT $2, $1, $4, $3, $5, $6, $7
+        SELECT $2, $1, NULL, $3, $4, $5, $6
         FROM slot_validation sv
         WHERE validation_status = 'VALID'
         RETURNING *
@@ -567,7 +480,7 @@ router.post(
       WHERE NOT EXISTS (SELECT 1 FROM booking_insert)
         AND sv.validation_status != 'VALID'
       LIMIT 1`,
-      [slot_id, req.user.id, vehicle_id, trainer_id, bookingPhone, config.booking.defaultStatus, notes]
+      [slot_id, req.user.id, vehicle_id, bookingPhone, config.booking.defaultStatus, notes]
     );
 
     if (bookingResult.rows.length === 0) {
@@ -693,19 +606,24 @@ router.post(
       const [userResult, slotResult, trainerResult, vehicleResult] = await Promise.all([
         db.query('SELECT * FROM profiles WHERE id = $1', [req.user.id]),
         db.query('SELECT * FROM slots WHERE id = $1', [slot_id]),
-        db.query(`
-          SELECT t.*, p.full_name, p.avatar_url 
-          FROM trainers t 
-          JOIN profiles p ON t.user_id = p.id 
-          WHERE t.id = $1
-        `, [booking.trainer_id]),
+        booking.trainer_id
+          ? db.query(
+              `SELECT t.*, p.full_name, p.avatar_url
+               FROM trainers t
+               JOIN profiles p ON t.user_id = p.id
+               WHERE t.id = $1`,
+              [booking.trainer_id]
+            )
+          : Promise.resolve({ rows: [] }),
         db.query('SELECT * FROM vehicles WHERE id = $1', [vehicle_id])
       ]);
 
-      if (userResult.rows[0] && slotResult.rows[0] && trainerResult.rows[0] && vehicleResult.rows[0]) {
+      if (userResult.rows[0] && slotResult.rows[0] && vehicleResult.rows[0]) {
         const user = userResult.rows[0];
         const slot = slotResult.rows[0];
-        const trainer = { full_name: trainerResult.rows[0].full_name };
+        const trainer = {
+          full_name: trainerResult.rows[0]?.full_name || 'To be assigned'
+        };
         const vehicle = vehicleResult.rows[0];
 
         // Send email notification
@@ -798,8 +716,8 @@ router.get('/slot/:slotId/status', authenticate, async (req, res, next) => {
               p.full_name AS trainer_name,
               v.name AS vehicle_name
        FROM bookings b
-       JOIN trainers t ON b.trainer_id = t.id
-       JOIN profiles p ON t.user_id = p.id
+       LEFT JOIN trainers t ON b.trainer_id = t.id
+       LEFT JOIN profiles p ON t.user_id = p.id
        LEFT JOIN vehicles v ON b.vehicle_id = v.id
        WHERE b.slot_id = $1
          AND b.user_id = $2
@@ -850,9 +768,9 @@ router.put('/:id/update', authenticate, async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { trainer_id, vehicle_id } = req.body;
-    if (!trainer_id || !vehicle_id) {
-      const error = new Error('trainer_id and vehicle_id are required');
+    const { vehicle_id } = req.body;
+    if (!vehicle_id) {
+      const error = new Error('vehicle_id is required');
       error.status = 400;
       error.errorCode = 'MISSING_FIELDS';
       throw error;
@@ -874,26 +792,6 @@ router.put('/:id/update', authenticate, async (req, res, next) => {
 
     const booking = bookingResult.rows[0];
     const slotId = booking.slot_id;
-
-    const trainerCheck = await client.query(
-      `SELECT t.id FROM trainers t
-       WHERE t.id = $1 AND t.is_active = true
-         AND NOT EXISTS (
-           SELECT 1 FROM bookings b
-           WHERE b.slot_id = $2
-             AND b.trainer_id = t.id
-             AND b.status NOT IN ('cancelled')
-             AND b.id <> $3
-         )`,
-      [trainer_id, slotId, booking.id]
-    );
-
-    if (trainerCheck.rows.length === 0) {
-      const error = new Error('That trainer is not available for this slot');
-      error.status = 409;
-      error.errorCode = 'TRAINER_SLOT_TAKEN';
-      throw error;
-    }
 
     if (booking.vehicle_id !== vehicle_id) {
       const vehicleAvail = await vehicleService.checkVehicleAvailability(slotId, vehicle_id);
@@ -918,10 +816,10 @@ router.put('/:id/update', authenticate, async (req, res, next) => {
 
     const updateResult = await client.query(
       `UPDATE bookings
-       SET trainer_id = $1, vehicle_id = $2, updated_at = NOW()
-       WHERE id = $3 AND user_id = $4
+       SET vehicle_id = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3
        RETURNING *`,
-      [trainer_id, vehicle_id, req.params.id, req.user.id]
+      [vehicle_id, req.params.id, req.user.id]
     );
 
     await client.query('COMMIT');
@@ -945,8 +843,8 @@ router.get('/my-bookings', authenticate, async (req, res, next) => {
              v.name as vehicle_name, v.type as vehicle_type
       FROM bookings b
       JOIN slots s ON b.slot_id = s.id
-      JOIN trainers t ON b.trainer_id = t.id
-      JOIN profiles p ON t.user_id = p.id
+      LEFT JOIN trainers t ON b.trainer_id = t.id
+      LEFT JOIN profiles p ON t.user_id = p.id
       LEFT JOIN vehicles v ON b.vehicle_id = v.id
       WHERE b.user_id = $1
       ORDER BY s.start_time DESC

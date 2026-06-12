@@ -5,6 +5,7 @@ import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
 import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
+import { categorizeVehicleName } from '../../../utils/vehicle.utils';
 
 @Component({
   selector: 'app-admin-bookings',
@@ -90,8 +91,9 @@ import { firstValueFrom } from 'rxjs';
           <thead>
             <tr>
               <th>Customer</th>
-              <th>Trainer</th>
               <th>Slot Time</th>
+              <th>Vehicle</th>
+              <th>Trainer</th>
               <th>Status</th>
               <th>Created</th>
               <th>Actions</th>
@@ -105,8 +107,9 @@ import { firstValueFrom } from 'rxjs';
                   <div class="email">{{ booking.user?.email || booking.user_email || '' }}</div>
                 </div>
               </td>
-              <td>{{ booking.trainer?.profile?.full_name || booking.trainer_name || 'N/A' }}</td>
               <td>{{ booking.formatted_slot_time || (booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A')) }}</td>
+              <td>{{ getVehicleLabel(booking) }}</td>
+              <td>{{ booking.trainer?.profile?.full_name || booking.trainer_name || 'Unassigned' }}</td>
               <td>
                 <span class="status-badge" [class]="'status-' + booking.status">
                   {{ booking.status }}
@@ -588,6 +591,15 @@ export class AdminBookingsComponent implements OnInit {
     } catch (error: unknown) {
       this.toastService.error(getApiErrorMessage(error, 'Failed to update booking status'));
     }
+  }
+
+  getVehicleLabel(booking: { vehicle_name?: string }): string {
+    const name = booking?.vehicle_name || '';
+    const category = categorizeVehicleName(name);
+    if (category === 'ev_scooty') return 'Electric Scooty';
+    if (category === 'petrol_scooty') return 'Petrol Scooty';
+    if (category === 'bike') return 'Bike';
+    return name || 'N/A';
   }
 
   formatDate(dateString: string): string {

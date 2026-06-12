@@ -2,7 +2,7 @@ const { body } = require('express-validator');
 const { handleValidationErrors } = require('./common');
 
 const ID_HINT =
-  'Send JSON with slot_id (UUID), vehicle_id (UUID), optional trainer_id (active trainer for this booking), and optional phone, notes.';
+  'Send JSON with slot_id (UUID), vehicle_id (UUID), and optional phone, notes.';
 
 /**
  * Validation for POST /api/bookings (runs after normalizeBookingCreateBody).

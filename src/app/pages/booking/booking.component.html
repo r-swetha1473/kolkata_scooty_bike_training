@@ -3,7 +3,7 @@
     <div class="container">
       <div class="hero-content">
         <h1 class="hero-title">Book Your Training Slot</h1>
-        <p class="hero-subtitle">Choose your preferred date and time, then select a vehicle type and trainer to complete your booking.</p>
+        <p class="hero-subtitle">Choose your preferred date and time, then select a vehicle type to complete your booking.</p>
       </div>
     </div>
   </section>
@@ -227,27 +227,6 @@
       </p>
 
       <form (ngSubmit)="confirmBooking()">
-        <p *ngIf="trainersLoading" class="form-hint">Loading trainers…</p>
-
-        <div class="form-group" *ngIf="!trainersLoading && trainersForSlot.length > 0">
-          <label for="trainer">Trainer (driver) *</label>
-          <select
-            id="trainer"
-            name="trainer"
-            [(ngModel)]="bookingForm.trainerId"
-            required>
-            <option value="" disabled>Choose a trainer</option>
-            <option *ngFor="let t of trainersForSlot" [value]="t.id">
-              {{ t.profile?.full_name || 'Trainer' }}
-            </option>
-          </select>
-          <small class="form-hint">Each trainer can only be booked once per time slot.</small>
-        </div>
-        <div class="error-message" *ngIf="trainersLoadError">{{ trainersLoadError }}</div>
-        <div class="error-message" *ngIf="!trainersLoading && !trainersLoadError && trainersForSlot.length === 0">
-          No active trainers are available. Please contact support.
-        </div>
-
         <div class="form-group">
           <label for="phone">Mobile Number *</label>
           <input
@@ -281,7 +260,7 @@
         <button
           type="submit"
           class="btn btn-confirm"
-          [disabled]="trainersLoading || !captchaVerified || loading || !bookingForm.phone || !bookingForm.trainerId || trainersForSlot.length === 0">
+          [disabled]="!captchaVerified || loading || !bookingForm.phone">
           {{ loading ? 'Booking…' : 'Confirm Booking' }}
         </button>
       </form>
@@ -336,18 +315,6 @@
         {{ formatTime(selectedSlot.start_time) }} - {{ formatTime(selectedSlot.end_time) }}
       </p>
 
-      <p *ngIf="trainersLoading" class="form-hint">Loading trainers…</p>
-
-      <div class="form-group" *ngIf="!trainersLoading && trainersForSlot.length > 0">
-        <label for="update-trainer">Trainer *</label>
-        <select id="update-trainer" name="update-trainer" [(ngModel)]="updateForm.trainerId" required>
-          <option value="" disabled>Choose a trainer</option>
-          <option *ngFor="let t of trainersForSlot" [value]="t.id">
-            {{ t.profile?.full_name || 'Trainer' }}
-          </option>
-        </select>
-      </div>
-
       <div class="form-group" *ngIf="vehicleOptions.length > 0">
         <label for="update-vehicle">Vehicle *</label>
         <select id="update-vehicle" name="update-vehicle" [(ngModel)]="updateForm.vehicleId" required>
@@ -358,14 +325,13 @@
         </select>
       </div>
 
-      <div class="error-message" *ngIf="trainersLoadError">{{ trainersLoadError }}</div>
       <div class="error-message" *ngIf="errorMessage">{{ errorMessage }}</div>
 
       <button
         type="button"
         class="btn btn-confirm"
         (click)="confirmUpdateBooking()"
-        [disabled]="updateInFlight || trainersLoading || !updateForm.trainerId || !updateForm.vehicleId">
+        [disabled]="updateInFlight || !updateForm.vehicleId">
         {{ updateInFlight ? 'Saving…' : 'Save Changes' }}
       </button>
     </div>

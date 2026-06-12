@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../services/slot.service';
 import { AuthService } from '../../services/auth.service';
-import { ApiService, Trainer } from '../../services/api.service';
+import { ApiService } from '../../services/api.service';
 import { CaptchaComponent } from '../../components/captcha/captcha.component';
 import { environment } from '../../../environments/environment';
 import { normalizeDate, addDays, getKolkataToday, getKolkataCurrentMinutes, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime, isPastDateTime } from '../../utils/date.utils';
@@ -69,7 +69,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     trainer_name?: string;
     vehicle_name?: string;
   } | null = null;
-  updateForm = { trainerId: '', vehicleId: '' };
+  updateForm = { vehicleId: '' };
   updateInFlight = false;
   captchaVerified = false;
   loading = false;
@@ -80,17 +80,12 @@ export class BookingComponent implements OnInit, OnDestroy {
   errorMessage = '';
   refreshInterval: any;
   slotEvents?: EventSource;
-  trainersForSlot: Trainer[] = [];
-  trainersLoadError = '';
-  trainersLoading = false;
-
   vehicleOptions: VehicleCategoryOption[] = [];
   selectedVehicleId = '';
 
   bookingForm = {
     phone: '',
-    notes: '',
-    trainerId: ''
+    notes: ''
   };
 
   constructor(
@@ -388,23 +383,6 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     this.showBookingModal = true;
     this.captchaVerified = false;
-    this.trainersForSlot = [];
-    this.trainersLoadError = '';
-    this.bookingForm.trainerId = '';
-    this.trainersLoading = true;
-
-    try {
-      this.trainersForSlot = await firstValueFrom(
-        this.apiService.getAvailableTrainersForSlot(this.selectedSlot.id)
-      );
-      if (this.trainersForSlot.length === 1) {
-        this.bookingForm.trainerId = this.trainersForSlot[0].id;
-      }
-    } catch {
-      this.trainersLoadError = 'Could not load trainers. Please try again.';
-    } finally {
-      this.trainersLoading = false;
-    }
   }
 
   backToVehicleSelection() {
@@ -445,11 +423,6 @@ export class BookingComponent implements OnInit, OnDestroy {
     }
     if (!this.selectedSlot || !this.captchaVerified || !this.selectedVehicleId) return;
 
-    if (!this.bookingForm.trainerId) {
-      this.errorMessage = 'Please select a trainer.';
-      return;
-    }
-
     if (!this.bookingForm.phone || !/^[0-9]{10}$/.test(this.bookingForm.phone)) {
       this.errorMessage = 'Please enter a valid 10-digit mobile number';
       return;
@@ -476,7 +449,6 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.apiService.createBooking(bookedSlot!.id, {
           phone: this.bookingForm.phone.trim(),
           notes: (this.bookingForm.notes || '').trim(),
-          trainer_id: this.bookingForm.trainerId.trim(),
           vehicle_id: this.selectedVehicleId
         })
       );
@@ -508,10 +480,6 @@ export class BookingComponent implements OnInit, OnDestroy {
         }
         this.showOwnBookingPopup = true;
         this.errorMessage = '';
-      } else if (code === 'TRAINER_SLOT_TAKEN') {
-        this.errorMessage =
-          body?.message ||
-          'That trainer was just taken for this slot. Choose another trainer and try again.';
       } else if (code === 'VEHICLE_CAPACITY_FULL') {
         this.errorMessage =
           body?.message ||
@@ -578,25 +546,11 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.existingBooking = booking;
     this.showOwnBookingPopup = false;
     this.updateForm = {
-      trainerId: this.existingBooking.trainer_id,
       vehicleId: this.existingBooking.vehicle_id
     };
     this.vehicleOptions = getVehicleCategoryOptions(this.selectedSlot.vehicle_capacities);
-    this.trainersForSlot = [];
-    this.trainersLoadError = '';
-    this.trainersLoading = true;
     this.errorMessage = '';
     this.showUpdateBookingModal = true;
-
-    try {
-      this.trainersForSlot = await firstValueFrom(
-        this.apiService.getAvailableTrainersForSlot(this.selectedSlot.id)
-      );
-    } catch {
-      this.trainersLoadError = 'Could not load trainers. Please try again.';
-    } finally {
-      this.trainersLoading = false;
-    }
   }
 
   closeUpdateBookingModal(): void {
@@ -611,8 +565,8 @@ export class BookingComponent implements OnInit, OnDestroy {
     if (this.updateInFlight || !this.existingBooking) {
       return;
     }
-    if (!this.updateForm.trainerId || !this.updateForm.vehicleId) {
-      this.errorMessage = 'Please select a trainer and vehicle.';
+    if (!this.updateForm.vehicleId) {
+      this.errorMessage = 'Please select a vehicle.';
       return;
     }
 
@@ -621,11 +575,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
     try {
       await firstValueFrom(
-        this.apiService.updateBooking(
-          this.existingBooking.id,
-          this.updateForm.trainerId,
-          this.updateForm.vehicleId
-        )
+        this.apiService.updateBooking(this.existingBooking.id, this.updateForm.vehicleId)
       );
       const updateSlot = this.selectedSlot;
       const vehicleLabel =
@@ -649,9 +599,7 @@ export class BookingComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       const body = error?.error;
       const code = body?.errorCode;
-      if (code === 'TRAINER_SLOT_TAKEN') {
-        this.errorMessage = body?.message || 'That trainer is not available for this slot.';
-      } else if (code === 'VEHICLE_CAPACITY_FULL') {
+      if (code === 'VEHICLE_CAPACITY_FULL') {
         this.errorMessage = body?.message || 'That vehicle is fully booked for this slot.';
       } else {
         this.errorMessage = body?.message || body?.error || 'Failed to update booking.';
@@ -664,12 +612,8 @@ export class BookingComponent implements OnInit, OnDestroy {
   resetForm() {
     this.bookingForm = {
       phone: '',
-      notes: '',
-      trainerId: ''
+      notes: ''
     };
-    this.trainersForSlot = [];
-    this.trainersLoadError = '';
-    this.trainersLoading = false;
     this.errorMessage = '';
   }
 

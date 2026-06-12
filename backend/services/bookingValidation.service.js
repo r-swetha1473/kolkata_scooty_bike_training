@@ -222,14 +222,6 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
     
     // Check 4: Slot availability (if slotId provided)
     if (slotId) {
-      if (!trainerId || !uuidPattern.test(String(trainerId))) {
-        return {
-          eligible: false,
-          reason: 'TRAINER_REQUIRED',
-          message: 'Please select a trainer for this slot.'
-        };
-      }
-
       // Get slot details and vehicle-specific booking counts
       const slotCheck = await db.query(
         `SELECT 
@@ -280,39 +272,6 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
           reason: 'SLOT_NOT_VISIBLE',
           message: config.slot.visibilityWindowMessage,
           details: { slotStartTime: slot.start_time, hoursUntil }
-        };
-      }
-
-      const trainerRow = await db.query(
-        `SELECT id, is_active FROM trainers WHERE id = $1`,
-        [trainerId]
-      );
-      if (trainerRow.rows.length === 0) {
-        return {
-          eligible: false,
-          reason: 'TRAINER_NOT_FOUND',
-          message: 'Selected trainer was not found.'
-        };
-      }
-      if (trainerRow.rows[0].is_active !== true) {
-        return {
-          eligible: false,
-          reason: 'TRAINER_INACTIVE',
-          message: 'This trainer is not available for booking.'
-        };
-      }
-
-      const trainerTaken = await db.query(
-        `SELECT 1 FROM bookings b
-         WHERE b.slot_id = $1 AND b.trainer_id = $2 AND b.status NOT IN ('cancelled')
-         LIMIT 1`,
-        [slotId, trainerId]
-      );
-      if (trainerTaken.rows.length > 0) {
-        return {
-          eligible: false,
-          reason: 'TRAINER_SLOT_TAKEN',
-          message: 'This trainer is already booked for this time slot. Choose another trainer.'
         };
       }
 
