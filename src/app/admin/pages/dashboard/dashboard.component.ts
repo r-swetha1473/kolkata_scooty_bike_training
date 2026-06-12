@@ -18,10 +18,12 @@ import {
   aggregateDailyBookings,
   aggregateStatusCounts,
   aggregateVehicleUsage,
+  ChartCleanup,
   renderDonutChart,
   renderLineChart,
   renderStatusBarChart
 } from '../../utils/dashboard-charts';
+import { ChartTooltip } from '../../utils/chart-tooltip';
 
 interface KpiCard {
   label: string;
@@ -248,6 +250,12 @@ interface KpiCard {
         border-radius: 14px;
         padding: 16px;
         box-shadow: var(--admin-shadow-sm);
+        transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+      }
+      .chart-card:hover {
+        box-shadow: var(--admin-shadow-lg);
+        transform: translateY(-2px);
+        border-color: var(--admin-border-hover);
       }
       .chart-card h3 { margin: 0 0 12px; font-size: 15px; color: var(--admin-text); }
       .chart-wide { grid-column: span 2; }
@@ -309,6 +317,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
   chartsReady = false;
   kpiCards: KpiCard[] = [];
   private chartBookings: any[] = [];
+  private chartCleanups: ChartCleanup[] = [];
   private resizeHandler = () => this.renderCharts();
 
   constructor(
@@ -330,6 +339,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
   ngOnDestroy() {
     window.removeEventListener('resize', this.resizeHandler);
+    this.destroyCharts();
+    ChartTooltip.destroyInstance();
   }
 
   async loadStats() {
@@ -375,19 +386,30 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     }
   }
 
+  private destroyCharts() {
+    this.chartCleanups.forEach((cleanup) => cleanup());
+    this.chartCleanups = [];
+  }
+
   private renderCharts() {
     if (!this.chartsReady) return;
+    this.destroyCharts();
+
     const lineEl = this.lineChartHost?.nativeElement;
     const donutEl = this.donutChartHost?.nativeElement;
     const statusEl = this.statusChartHost?.nativeElement;
     if (lineEl) {
-      renderLineChart(lineEl, aggregateDailyBookings(this.chartBookings, 30));
+      this.chartCleanups.push(
+        renderLineChart(lineEl, aggregateDailyBookings(this.chartBookings, 30))
+      );
     }
     if (donutEl) {
-      renderDonutChart(donutEl, aggregateVehicleUsage(this.chartBookings));
+      this.chartCleanups.push(renderDonutChart(donutEl, aggregateVehicleUsage(this.chartBookings)));
     }
     if (statusEl) {
-      renderStatusBarChart(statusEl, aggregateStatusCounts(this.chartBookings));
+      this.chartCleanups.push(
+        renderStatusBarChart(statusEl, aggregateStatusCounts(this.chartBookings))
+      );
     }
   }
 
