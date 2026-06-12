@@ -42,24 +42,19 @@ function logPostBookingRequest(req, res, next) {
   const u = req.user || {};
   const bodyForLog = {
     slot_id: b.slot_id,
+    vehicle_id: b.vehicle_id,
+    trainer_id: b.trainer_id || null,
     phone: b.phone
       ? `***${String(b.phone).slice(-4)} (${String(b.phone).length} digits)`
       : b.phone === '' ? '(empty)' : '(omitted)',
     notes: typeof b.notes === 'string' && b.notes.length ? `[${b.notes.length} chars]` : '(empty)'
   };
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[Bookings][POST] req.user:', {
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      phone_registered: u.phone
-        ? String(u.phone).startsWith('GOOGLE_')
-          ? '(placeholder)'
-          : `***${String(u.phone).slice(-4)}`
-        : '(none)'
-    });
-    console.log('[Bookings][POST] req.body (normalized, phone masked):', bodyForLog);
-  }
+  console.log('[Bookings][POST] request payload:', {
+    user_id: u.id,
+    email: u.email,
+    role: u.role,
+    body: bodyForLog
+  });
   next();
 }
 
@@ -341,6 +336,17 @@ router.post(
 
     // Customer bookings: trainer is assigned by admin later; capacity is vehicle/slot based only.
     trainer_id = null;
+
+    if (process.env.LOG_BOOKING_DEBUG === '1') {
+      console.log('[Bookings][POST] pre-insert:', {
+        user_id: req.user.id,
+        slot_id,
+        vehicle_id,
+        trainer_id,
+        slot_date: null,
+        booking_phone: bookingPhone ? `***${String(bookingPhone).slice(-4)}` : null
+      });
+    }
 
     const slotCheck = await client.query(
       `SELECT start_time, end_time, slot_date FROM slots WHERE id = $1`,
@@ -655,10 +661,26 @@ router.post(
     } catch (rollbackErr) {
       console.error('[Bookings][POST /] Rollback failed:', rollbackErr.message);
     }
-    if (process.env.NODE_ENV === 'development') {
-      console.error('[Bookings][POST /] Error:', error.message, error.code);
+    if (error?.code && String(error.code).startsWith('23')) {
+      console.error('[Bookings][POST /] Database constraint error:', {
+        code: error.code,
+        constraint: error.constraint,
+        table: error.table,
+        column: error.column,
+        detail: error.detail,
+        message: error.message,
+        stack: error.stack,
+        sql_operation: 'INSERT INTO bookings (user_id, slot_id, trainer_id, vehicle_id, phone, status, notes) via slot_validation CTE',
+        user_id: req.user?.id,
+        slot_id: req.body?.slot_id,
+        vehicle_id: req.body?.vehicle_id,
+        trainer_id: null,
+        phone: req.body?.phone ? `***${String(req.body.phone).slice(-4)}` : undefined
+      });
+    } else if (process.env.NODE_ENV === 'development' || process.env.LOG_BOOKING_DEBUG === '1') {
+      console.error('[Bookings][POST /] Error:', error.message, error.code, error.stack);
     }
-    
+
     // PHASE 5: Fix DIR-002 - Handle lock timeout errors (NOWAIT failures)
     // If slot is locked by another transaction, provide clear error message
     if (error.code === '55P03' || error.message.includes('could not obtain lock') || error.message.includes('lock not available')) {
