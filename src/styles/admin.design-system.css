@@ -7,14 +7,27 @@
    GLOBAL VARIABLES
    ============================================ */
 :root {
-  /* BMW-Inspired Colors */
-  --admin-primary: #0066B1;
-  --admin-primary-hover: #005A9E;
-  --admin-primary-light: rgba(0, 102, 177, 0.08);
-  --admin-secondary: #6B7280;
-  --admin-danger: #EF4444;
-  --admin-danger-hover: #DC2626;
-  --admin-success: #10B981;
+  /* BMW-Inspired Colors (synced with site theme) */
+  --admin-primary: var(--primary-blue, #0066B1);
+  --admin-primary-hover: var(--dark-blue, #005A9E);
+  --admin-primary-light: var(--status-info-bg, rgba(0, 102, 177, 0.08));
+  --admin-secondary: var(--text-muted, #6B7280);
+  --admin-danger: var(--status-error, #EF4444);
+  --admin-danger-hover: var(--danger, #DC2626);
+  --admin-success: var(--status-success, #10B981);
+
+  /* Dashboard chart palette (derived from site theme) */
+  --chart-primary: var(--admin-primary);
+  --chart-accent-2: var(--admin-success);
+  --chart-accent-3: var(--status-warning, #F59E0B);
+  --chart-accent-4: var(--admin-secondary);
+  --chart-pending: var(--status-warning, #F59E0B);
+  --chart-confirmed: var(--status-info, var(--primary-blue));
+  --chart-completed: var(--status-success, #10B981);
+  --chart-cancelled: var(--status-error, #EF4444);
+  --chart-axis: var(--admin-text-muted);
+  --chart-grid: var(--admin-border);
+  --chart-surface: var(--admin-bg);
   
   /* Borders & Backgrounds */
   --admin-border: #E5E7EB;

@@ -1,6 +1,48 @@
 import * as d3 from 'd3';
 import { categorizeVehicleName } from '../../utils/vehicle.utils';
 
+export interface ChartTheme {
+  primary: string;
+  palette: string[];
+  status: Record<string, string>;
+  axis: string;
+  grid: string;
+  surface: string;
+}
+
+function readCssVar(name: string, fallback: string, root?: HTMLElement): string {
+  if (typeof document === 'undefined') return fallback;
+  const el = root || document.documentElement;
+  const value = getComputedStyle(el).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+export function getChartTheme(root?: HTMLElement): ChartTheme {
+  return {
+    primary: readCssVar('--chart-primary', '#0066B1', root),
+    palette: [
+      readCssVar('--chart-primary', '#0066B1', root),
+      readCssVar('--chart-accent-2', '#10B981', root),
+      readCssVar('--chart-accent-3', '#F59E0B', root),
+      readCssVar('--chart-accent-4', '#6B7280', root)
+    ],
+    status: {
+      pending: readCssVar('--chart-pending', '#F59E0B', root),
+      confirmed: readCssVar('--chart-confirmed', '#0066B1', root),
+      completed: readCssVar('--chart-completed', '#10B981', root),
+      cancelled: readCssVar('--chart-cancelled', '#EF4444', root)
+    },
+    axis: readCssVar('--chart-axis', '#9CA3AF', root),
+    grid: readCssVar('--chart-grid', '#E5E7EB', root),
+    surface: readCssVar('--chart-surface', '#FFFFFF', root)
+  };
+}
+
+function styleAxes(g: d3.Selection<SVGGElement, unknown, null, undefined>, theme: ChartTheme): void {
+  g.selectAll('.domain, .tick line').attr('stroke', theme.grid);
+  g.selectAll('.tick text').attr('fill', theme.axis);
+}
+
 export interface BookingChartRow {
   created_at?: string;
   status?: string;
@@ -66,9 +108,10 @@ export function aggregateStatusCounts(bookings: BookingChartRow[]): { status: st
 
 export function renderLineChart(
   container: HTMLElement,
-  data: { date: string; count: number }[],
-  color = '#0066B1'
+  data: { date: string; count: number }[]
 ): void {
+  const theme = getChartTheme(container);
+  const color = theme.primary;
   d3.select(container).selectAll('*').remove();
   const width = container.clientWidth || 480;
   const height = 260;
@@ -118,6 +161,20 @@ export function renderLineChart(
     .attr('font-size', 10);
 
   g.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size', 10);
+  styleAxes(g, theme);
+
+  const area = d3
+    .area<{ date: string; count: number }>()
+    .x((d) => x(d.date) || 0)
+    .y0(innerH)
+    .y1((d) => y(d.count))
+    .curve(d3.curveMonotoneX);
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', color)
+    .attr('fill-opacity', 0.08)
+    .attr('d', area);
 
   g.append('path')
     .datum(data)
@@ -139,15 +196,20 @@ export function renderDonutChart(
   container: HTMLElement,
   data: { label: string; value: number }[]
 ): void {
+  const theme = getChartTheme(container);
+  const colors = theme.palette;
   d3.select(container).selectAll('*').remove();
   if (!data.length) {
-    d3.select(container).append('p').attr('class', 'chart-empty').text('No vehicle data');
+    d3.select(container)
+      .append('p')
+      .attr('class', 'chart-empty')
+      .style('color', theme.axis)
+      .text('No vehicle data');
     return;
   }
   const width = container.clientWidth || 320;
   const height = 260;
   const radius = Math.min(width, height) / 2 - 12;
-  const colors = ['#0066B1', '#10B981', '#F59E0B', '#6B7280'];
 
   const svg = d3
     .select(container)
@@ -167,10 +229,14 @@ export function renderDonutChart(
     .join('path')
     .attr('d', arc)
     .attr('fill', (_, i) => colors[i % colors.length])
-    .attr('stroke', '#fff')
+    .attr('stroke', theme.surface)
     .attr('stroke-width', 2);
 
-  const legend = d3.select(container).append('div').attr('class', 'chart-legend');
+  const legend = d3
+    .select(container)
+    .append('div')
+    .attr('class', 'chart-legend')
+    .style('color', theme.axis);
   data.forEach((d, i) => {
     legend
       .append('div')
@@ -183,18 +249,14 @@ export function renderStatusBarChart(
   container: HTMLElement,
   data: { status: string; count: number }[]
 ): void {
+  const theme = getChartTheme(container);
+  const colors = theme.status;
   d3.select(container).selectAll('*').remove();
   const width = container.clientWidth || 480;
   const height = 260;
   const margin = { top: 16, right: 16, bottom: 36, left: 40 };
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
-  const colors: Record<string, string> = {
-    pending: '#F59E0B',
-    confirmed: '#3B82F6',
-    completed: '#10B981',
-    cancelled: '#EF4444'
-  };
 
   const svg = d3
     .select(container)
@@ -224,6 +286,7 @@ export function renderStatusBarChart(
     .attr('font-size', 11);
 
   g.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size', 10);
+  styleAxes(g, theme);
 
   g.selectAll('rect')
     .data(data)
@@ -233,5 +296,5 @@ export function renderStatusBarChart(
     .attr('width', x.bandwidth())
     .attr('height', (d) => innerH - y(d.count))
     .attr('rx', 6)
-    .attr('fill', (d) => colors[d.status] || '#6B7280');
+    .attr('fill', (d) => colors[d.status] || theme.palette[3]);
 }

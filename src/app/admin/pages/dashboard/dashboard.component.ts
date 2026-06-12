@@ -249,7 +249,7 @@ interface KpiCard {
         padding: 16px;
         box-shadow: var(--admin-shadow-sm);
       }
-      .chart-card h3 { margin: 0 0 12px; font-size: 15px; color: #111827; }
+      .chart-card h3 { margin: 0 0 12px; font-size: 15px; color: var(--admin-text); }
       .chart-wide { grid-column: span 2; }
       .chart-host { width: 100%; min-height: 260px; }
       .chart-host-donut ::ng-deep .chart-legend {
@@ -258,7 +258,7 @@ interface KpiCard {
         gap: 8px 14px;
         margin-top: 8px;
         font-size: 12px;
-        color: #4b5563;
+        color: var(--chart-axis);
       }
       .chart-host-donut ::ng-deep .legend-item { display: flex; align-items: center; gap: 6px; }
       .chart-host-donut ::ng-deep .dot {
@@ -402,8 +402,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
       { label: 'Active Trainers', value: n(s.activeTrainers ?? s.totalTrainers), icon: '✓', tone: 'success' },
       { label: 'Active Vehicles', value: n(s.activeVehicles), icon: '🚗', tone: 'default' },
       { label: "Today's Bookings", value: n(s.todayBookings), icon: '📅', tone: 'purple', trend: 'Live today' },
-      { label: 'Pending Bookings', value: n(s.pendingBookings), icon: '⏳', tone: 'warn' },
-      { label: 'Revenue', value: 'N/A', icon: '₹', tone: 'default', trend: 'Not configured' }
+      { label: 'Pending Bookings', value: n(s.pendingBookings), icon: '⏳', tone: 'warn' }
     ];
   }
 
