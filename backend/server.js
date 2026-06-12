@@ -1,7 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const {
+  strictLimiter,
+  pollingLimiter,
+  adminLimiter
+} = require('./middleware/rateLimiters');
 const session = require('express-session');
 const passport = require('passport');
 const cookieParser = require('cookie-parser');
@@ -27,6 +31,9 @@ const { runOverdueBookingDetection } = require('./services/overdueDetection.serv
 
 const app = express();
 const events = require('./events');
+
+// Render sits behind a reverse proxy — required for correct req.ip in rate limiting
+app.set('trust proxy', 1);
 
 app.use(helmet());
 
@@ -101,21 +108,13 @@ app.use(passport.session());
 
 require('./config/passport');
 
-// Create rate limiters
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again later.'
-});
+const [strictLog, strictLimit] = strictLimiter;
+const [adminLog, adminLimit] = adminLimiter;
 
-// Very lenient limiter for public GET endpoints (for polling)
-const publicLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5000, // Allow 5000 requests per 15 minutes for polling
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many requests, please try again later.'
-});
+function runLimiterPair(pair, req, res, next) {
+  const [logMw, limiter] = pair;
+  logMw(req, res, () => limiter(req, res, next));
+}
 
 // Register routes - apply limiters as middleware
 app.use('/api/auth', authRoutes);
@@ -125,42 +124,42 @@ app.use('/api/profile', profileRoutes);
 // Public GET endpoints with lenient limiter
 app.use('/api/trainers', (req, res, next) => {
   if (req.method === 'GET') {
-    return publicLimiter(req, res, next);
+    return runLimiterPair(pollingLimiter, req, res, next);
   }
-  return strictLimiter(req, res, next);
+  return runLimiterPair(strictLimiter, req, res, next);
 });
 app.use('/api/trainers', trainerRoutes);
 
 app.use('/api/slots', (req, res, next) => {
   if (req.method === 'GET') {
-    return publicLimiter(req, res, next);
+    return runLimiterPair(pollingLimiter, req, res, next);
   }
-  return strictLimiter(req, res, next);
+  return runLimiterPair(strictLimiter, req, res, next);
 });
 app.use('/api/slots', slotRoutes);
 
 app.use('/api/vehicles', (req, res, next) => {
   if (req.method === 'GET') {
-    return publicLimiter(req, res, next);
+    return runLimiterPair(pollingLimiter, req, res, next);
   }
-  return strictLimiter(req, res, next);
+  return runLimiterPair(strictLimiter, req, res, next);
 });
 app.use('/api/vehicles', vehiclesRoutes);
 
 app.use('/api/settings', (req, res, next) => {
   if (req.method === 'GET') {
-    return publicLimiter(req, res, next);
+    return runLimiterPair(pollingLimiter, req, res, next);
   }
-  return strictLimiter(req, res, next);
+  return runLimiterPair(strictLimiter, req, res, next);
 });
 app.use('/api/settings', settingsRoutes);
 
-// Protected routes with strict limiter
-app.use('/api/bookings', strictLimiter, bookingRoutes);
-app.use('/api/admin', strictLimiter, adminRoutes);
-app.use('/api/admin-management', strictLimiter, adminManagementRoutes);
-app.use('/api/ratings', strictLimiter, ratingsRoutes);
-app.use('/api/recognition', strictLimiter, recognitionRoutes);
+// Protected routes
+app.use('/api/bookings', strictLog, strictLimit, bookingRoutes);
+app.use('/api/admin', adminLog, adminLimit, adminRoutes);
+app.use('/api/admin-management', adminLog, adminLimit, adminManagementRoutes);
+app.use('/api/ratings', strictLog, strictLimit, ratingsRoutes);
+app.use('/api/recognition', strictLog, strictLimit, recognitionRoutes);
 
 app.get('/health', (req, res) => {
   res.json({
