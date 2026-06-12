@@ -204,6 +204,10 @@ export class AdminService {
     return this.http.put(`/admin/bookings/${bookingId}/status`, { status });
   }
 
+  assignBookingTrainer(bookingId: string, trainerId: string | null): Observable<any> {
+    return this.http.put(`/admin/bookings/${bookingId}/trainer`, { trainer_id: trainerId });
+  }
+
   deleteBooking(bookingId: string): Observable<any> {
     return this.http.delete(`/admin/bookings/${bookingId}`);
   }

@@ -3,9 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 import { categorizeVehicleName } from '../../../utils/vehicle.utils';
+import { PermissionService } from '../../../services/permission.service';
 
 @Component({
   selector: 'app-admin-bookings',
@@ -85,9 +87,9 @@ import { categorizeVehicleName } from '../../../utils/vehicle.utils';
         </div>
       </div>
 
-      <div class="admin-table-container">
+      <div class="admin-table-container bookings-table-wrap">
         <p *ngIf="loadingList" class="loading-hint">Loading…</p>
-        <table class="admin-data-table" *ngIf="!loadingList">
+        <table class="admin-data-table bookings-table" *ngIf="!loadingList">
           <thead>
             <tr>
               <th>Customer</th>
@@ -108,8 +110,12 @@ import { categorizeVehicleName } from '../../../utils/vehicle.utils';
                 </div>
               </td>
               <td>{{ booking.formatted_slot_time || (booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A')) }}</td>
-              <td>{{ getVehicleLabel(booking) }}</td>
-              <td>{{ booking.trainer?.profile?.full_name || booking.trainer_name || 'Unassigned' }}</td>
+              <td><span class="vehicle-pill">{{ getVehicleLabel(booking) }}</span></td>
+              <td>
+                <span class="trainer-pill" [class.unassigned]="!getTrainerName(booking)">
+                  {{ getTrainerName(booking) || 'Unassigned' }}
+                </span>
+              </td>
               <td>
                 <span class="status-badge" [class]="'status-' + booking.status">
                   {{ booking.status }}
@@ -118,6 +124,16 @@ import { categorizeVehicleName } from '../../../utils/vehicle.utils';
               <td>{{ formatDate(booking.created_at) }}</td>
               <td>
                 <div class="action-buttons">
+                  <button
+                    *ngIf="perms.can('bookings', 'edit') && !getTrainerName(booking)"
+                    class="btn-action btn-assign"
+                    (click)="openAssignTrainer(booking)"
+                    title="Assign trainer"
+                    aria-label="Assign trainer">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    </svg>
+                  </button>
                   <button
                     *ngIf="booking.status === 'pending'"
                     class="btn-action btn-confirm"
@@ -214,11 +230,126 @@ import { categorizeVehicleName } from '../../../utils/vehicle.utils';
           </button>
         </div>
       </div>
+
+      <div class="modal-overlay" *ngIf="assignModalOpen" (click)="closeAssignTrainer()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <h2>Assign Trainer</h2>
+          <div class="modal-field">
+            <label>Customer Name</label>
+            <input type="text" [value]="assignForm.customerName" readonly />
+          </div>
+          <div class="modal-field">
+            <label>Slot Time</label>
+            <input type="text" [value]="assignForm.slotTime" readonly />
+          </div>
+          <div class="modal-field">
+            <label>Vehicle</label>
+            <input type="text" [value]="assignForm.vehicle" readonly />
+          </div>
+          <div class="modal-field">
+            <label for="trainerSelect">Trainer</label>
+            <select id="trainerSelect" [(ngModel)]="assignForm.trainerId" class="admin-select full-width">
+              <option value="">Select trainer</option>
+              <option *ngFor="let t of trainers" [value]="t.id">
+                {{ t.profile?.full_name || t.full_name || 'Trainer' }}
+              </option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="admin-btn admin-btn-secondary" (click)="closeAssignTrainer()">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-primary" (click)="saveTrainerAssignment()" [disabled]="assignSaving || !assignForm.trainerId">
+              {{ assignSaving ? 'Saving…' : 'Save Assignment' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
     .bookings-page {
       max-width: 1400px;
+    }
+
+    .bookings-table-wrap {
+      border-radius: 12px;
+      box-shadow: var(--admin-shadow-md);
+      border: 1px solid var(--admin-border);
+      background: #fff;
+    }
+
+    .bookings-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f9fafb;
+      box-shadow: inset 0 -1px 0 var(--admin-border);
+    }
+
+    .vehicle-pill, .trainer-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .trainer-pill.unassigned {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .btn-assign {
+      border-color: #8b5cf6;
+      color: #7c3aed;
+    }
+
+    .btn-assign:hover {
+      background: #7c3aed;
+      color: #fff;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9000;
+      padding: 16px;
+    }
+
+    .modal-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 22px;
+      width: min(460px, 100%);
+      box-shadow: var(--admin-shadow-hover);
+    }
+
+    .modal-card h2 { margin: 0 0 16px; font-size: 20px; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--admin-text-secondary);
+    }
+    .modal-field input, .full-width { width: 100%; }
+    .modal-field input {
+      padding: 10px 12px;
+      border: 1px solid var(--admin-border);
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
     }
 
     .loading-hint {
@@ -407,9 +538,22 @@ export class AdminBookingsComponent implements OnInit {
   totalPages = 1;
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
+  assignModalOpen = false;
+  assignSaving = false;
+  trainers: any[] = [];
+  assignForm = {
+    bookingId: '',
+    customerName: '',
+    slotTime: '',
+    vehicle: '',
+    trainerId: ''
+  };
+
   constructor(
     private adminService: AdminService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private confirmDialog: ConfirmDialogService,
+    public perms: PermissionService
   ) {}
 
   async ngOnInit() {
@@ -569,8 +713,60 @@ export class AdminBookingsComponent implements OnInit {
     return end > this.totalRecords ? this.totalRecords : end;
   }
 
+  getTrainerName(booking: any): string {
+    return booking?.trainer?.profile?.full_name || booking?.trainer_name || '';
+  }
+
+  async openAssignTrainer(booking: any) {
+    this.assignForm = {
+      bookingId: booking.id,
+      customerName: booking.user?.full_name || booking.user_name || 'N/A',
+      slotTime:
+        booking.formatted_slot_time ||
+        (booking.slot?.start_time ? this.formatDateTime(booking.slot.start_time) : 'N/A'),
+      vehicle: this.getVehicleLabel(booking),
+      trainerId: booking.trainer_id || ''
+    };
+    if (!this.trainers.length) {
+      try {
+        this.trainers = (await this.adminService.getAllTrainers()).filter((t) => t.is_active !== false);
+      } catch {
+        this.trainers = [];
+      }
+    }
+    this.assignModalOpen = true;
+  }
+
+  closeAssignTrainer() {
+    this.assignModalOpen = false;
+    this.assignSaving = false;
+  }
+
+  async saveTrainerAssignment() {
+    if (!this.assignForm.bookingId || !this.assignForm.trainerId) return;
+    this.assignSaving = true;
+    try {
+      await firstValueFrom(
+        this.adminService.assignBookingTrainer(this.assignForm.bookingId, this.assignForm.trainerId)
+      );
+      this.toastService.success('Trainer assigned successfully');
+      this.closeAssignTrainer();
+      await this.loadBookings();
+    } catch (error: unknown) {
+      this.toastService.error(getApiErrorMessage(error, 'Failed to assign trainer'));
+    } finally {
+      this.assignSaving = false;
+    }
+  }
+
   async updateStatus(bookingId: string, status: string) {
-    if (!confirm(`Are you sure you want to mark this booking as ${status}?`)) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Update booking status',
+      message: `Are you sure you want to mark this booking as ${status}?`,
+      confirmLabel: 'Yes, update',
+      variant: status === 'cancelled' ? 'danger' : 'warning'
+    });
+    if (!ok) return;
 
     try {
       await firstValueFrom(this.adminService.updateBookingStatus(bookingId, status));
@@ -611,9 +807,13 @@ export class AdminBookingsComponent implements OnInit {
   }
 
   async deleteBooking(bookingId: string) {
-    if (!confirm('Are you sure you want to permanently delete this booking? This action cannot be undone.')) {
-      return;
-    }
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete booking',
+      message: 'Are you sure you want to permanently delete this booking? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger'
+    });
+    if (!ok) return;
 
     try {
       await firstValueFrom(this.adminService.deleteBooking(bookingId));

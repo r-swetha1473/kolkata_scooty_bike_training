@@ -4,11 +4,13 @@ import { CommonModule } from '@angular/common';
 import { AuthService } from './services/auth.service';
 import { SettingsService, SiteSettings } from './services/settings.service';
 import { filter } from 'rxjs/operators';
+import { ToastComponent } from './components/toast/toast.component';
+import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule, ToastComponent, ConfirmDialogComponent],
   template: `
     <div class="app-container">
       <header class="header" *ngIf="!isAdminRoute" [class.scrolled]="isScrolled">
@@ -68,6 +70,9 @@ import { filter } from 'rxjs/operators';
       <main [class.no-padding-top]="isAdminRoute">
         <router-outlet></router-outlet>
       </main>
+
+      <app-toast></app-toast>
+      <app-confirm-dialog></app-confirm-dialog>
 
       <footer class="footer" *ngIf="!isAdminRoute">
         <div class="container">

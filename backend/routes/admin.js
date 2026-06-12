@@ -884,6 +884,56 @@ router.put('/bookings/:id/status', requirePermission('bookings', 'edit'), valida
   }
 });
 
+// Assign trainer to booking (admin only; does not affect customer booking create flow)
+router.put('/bookings/:id/trainer', requirePermission('bookings', 'edit'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const trainer_id = req.body?.trainer_id || null;
+
+    const bookingCheck = await db.query('SELECT * FROM bookings WHERE id = $1', [id]);
+    if (bookingCheck.rows.length === 0) {
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
+    }
+
+    if (trainer_id) {
+      const trainerCheck = await db.query(
+        'SELECT id FROM trainers WHERE id = $1 AND is_active = true',
+        [trainer_id]
+      );
+      if (trainerCheck.rows.length === 0) {
+        const error = new Error('Trainer not found or inactive');
+        error.status = 400;
+        error.errorCode = 'TRAINER_INACTIVE';
+        return next(error);
+      }
+
+      const dup = await db.query(
+        `SELECT id FROM bookings
+         WHERE slot_id = $1 AND trainer_id = $2 AND id != $3 AND status NOT IN ('cancelled')`,
+        [bookingCheck.rows[0].slot_id, trainer_id, id]
+      );
+      if (dup.rows.length > 0) {
+        const error = new Error('This trainer is already assigned for this slot');
+        error.status = 409;
+        error.errorCode = 'TRAINER_SLOT_TAKEN';
+        return next(error);
+      }
+    }
+
+    const result = await db.query(
+      'UPDATE bookings SET trainer_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [trainer_id, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Delete booking
 router.delete('/bookings/:id', requirePermission('bookings', 'delete'), async (req, res, next) => {
   try {

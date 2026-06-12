@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SlotService, Slot } from '../../../services/slot.service';
 import { TrainerService, Trainer } from '../../../services/trainer.service';
 import { ToastService } from '../../../services/toast.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { environment } from '../../../../environments/environment';
 import { normalizeDate, addDays, getToday, isSameDay, formatTimeToAMPM, timeToMinutes, extractTime, extractDateFromDateTime } from '../../../utils/date.utils';
 import { getAuthToken } from '../../../utils/auth-token.storage';
@@ -1070,7 +1071,8 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
   constructor(
     private slotService: SlotService,
     private trainerService: TrainerService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   /**
@@ -1449,7 +1451,13 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
   }
 
   async unassignTrainer(slotId: string) {
-    if (!confirm('Unassign trainer from this slot?')) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Unassign trainer',
+      message: 'Unassign trainer from this slot?',
+      confirmLabel: 'Unassign',
+      variant: 'warning'
+    });
+    if (!ok) return;
     try {
       await this.slotService.unassignTrainer(slotId);
       // Refresh data to get latest from backend
@@ -1462,7 +1470,13 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
   }
 
   async deleteSlot(id: string) {
-    if (!confirm('Delete this slot?')) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete slot',
+      message: 'Delete this slot? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger'
+    });
+    if (!ok) return;
     try {
       await this.slotService.deleteSlot(id);
       await this.loadSlotsForSelectedDate();

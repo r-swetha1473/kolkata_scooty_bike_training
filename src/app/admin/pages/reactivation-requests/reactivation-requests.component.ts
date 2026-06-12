@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { getApiErrorMessage } from '../../../utils/api-error';
 import { formatUserPhoneDisplay } from '../../../utils/phone-display';
 
@@ -167,7 +168,8 @@ export class AdminReactivationRequestsComponent implements OnInit {
 
   constructor(
     private adminService: AdminService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   ngOnInit() {
@@ -206,7 +208,13 @@ export class AdminReactivationRequestsComponent implements OnInit {
   }
 
   async approve(id: string) {
-    if (!confirm('Approve this reactivation request and reactivate the customer account?')) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Approve reactivation',
+      message: 'Approve this reactivation request and reactivate the customer account?',
+      confirmLabel: 'Approve',
+      variant: 'success'
+    });
+    if (!ok) return;
     this.actionId = id;
     try {
       await firstValueFrom(this.adminService.approveReactivationRequest(id));
@@ -220,7 +228,13 @@ export class AdminReactivationRequestsComponent implements OnInit {
   }
 
   async reject(id: string) {
-    if (!confirm('Reject this reactivation request?')) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Reject reactivation',
+      message: 'Reject this reactivation request?',
+      confirmLabel: 'Reject',
+      variant: 'danger'
+    });
+    if (!ok) return;
     this.actionId = id;
     try {
       await firstValueFrom(this.adminService.rejectReactivationRequest(id));

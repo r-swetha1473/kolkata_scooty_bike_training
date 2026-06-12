@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { HttpService } from './http.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -17,9 +17,15 @@ export interface AdminNotification {
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
   private unreadCountSubject = new BehaviorSubject<number>(0);
+  private openPanelSubject = new Subject<void>();
   unreadCount$ = this.unreadCountSubject.asObservable();
+  openPanel$ = this.openPanelSubject.asObservable();
 
   constructor(private http: HttpService) {}
+
+  requestOpenPanel(): void {
+    this.openPanelSubject.next();
+  }
 
   async refreshUnreadCount(): Promise<number> {
     try {

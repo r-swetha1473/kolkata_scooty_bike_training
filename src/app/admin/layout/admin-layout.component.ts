@@ -6,11 +6,23 @@ import { PermissionService } from '../../services/permission.service';
 import { AdminHeaderComponent } from '../components/admin-header/admin-header.component';
 import { AdminFooterComponent } from '../components/admin-footer/admin-footer.component';
 import { ToastComponent } from '../../components/toast/toast.component';
+import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
+import { AdminNavIconComponent } from '../components/admin-nav-icon/admin-nav-icon.component';
+import { NotificationService } from '../../services/notification.service';
+import { UserProfile } from '../../services/auth.service';
 
 @Component({
   selector: 'app-admin-layout',
   standalone: true,
-  imports: [CommonModule, RouterModule, AdminHeaderComponent, AdminFooterComponent, ToastComponent],
+  imports: [
+    CommonModule,
+    RouterModule,
+    AdminHeaderComponent,
+    AdminFooterComponent,
+    ToastComponent,
+    ConfirmDialogComponent,
+    AdminNavIconComponent
+  ],
   template: `
     <div class="admin-layout" [class.sidebar-open]="sidebarOpen">
       <app-admin-header (menuToggle)="toggleSidebar()"></app-admin-header>
@@ -36,88 +48,48 @@ import { ToastComponent } from '../../components/toast/toast.component';
 
         <nav class="sidebar-nav" *ngIf="auth.userProfile$ | async as profile">
           <a *ngIf="perms.canViewModule('dashboard')" routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
+            <app-admin-nav-icon name="dashboard"></app-admin-nav-icon>
             <span class="nav-label">Dashboard</span>
           </a>
-          <a *ngIf="perms.canViewModule('users')" routerLink="/admin/users" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-            <span class="nav-label">Users</span>
-          </a>
-          <a *ngIf="perms.canViewModule('users')" routerLink="/admin/reactivation-requests" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="8.5" cy="7" r="4"></circle>
-              <polyline points="17 11 19 13 23 9"></polyline>
-            </svg>
-            <span class="nav-label">Reactivation Requests</span>
-          </a>
-          <a *ngIf="perms.canViewModule('trainers')" routerLink="/admin/trainers" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-            <span class="nav-label">Trainers</span>
-          </a>
-          <a *ngIf="perms.canViewModule('vehicles')" routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path>
-              <polygon points="12 15 17 21 7 21 12 15"></polygon>
-            </svg>
-            <span class="nav-label">Vehicles</span>
-          </a>
           <a *ngIf="perms.canViewModule('bookings')" routerLink="/admin/bookings" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
+            <app-admin-nav-icon name="bookings"></app-admin-nav-icon>
             <span class="nav-label">Bookings</span>
           </a>
+          <a *ngIf="perms.canViewModule('vehicles')" routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="vehicles"></app-admin-nav-icon>
+            <span class="nav-label">Vehicles</span>
+          </a>
+          <a *ngIf="perms.canViewModule('trainers')" routerLink="/admin/trainers" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="trainers"></app-admin-nav-icon>
+            <span class="nav-label">Trainers</span>
+          </a>
+          <a *ngIf="perms.canViewModule('users')" routerLink="/admin/users" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="users"></app-admin-nav-icon>
+            <span class="nav-label">Users</span>
+          </a>
           <a *ngIf="perms.canViewModule('slots')" routerLink="/admin/slots" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
+            <app-admin-nav-icon name="slots"></app-admin-nav-icon>
             <span class="nav-label">Slots</span>
           </a>
-          <a *ngIf="profile.role === 'superadmin'" routerLink="/admin/audit-logs" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span class="nav-label">Audit Logs</span>
+          <a *ngIf="profile.role === 'superadmin'" routerLink="/admin/sub-admins" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="sub-admins"></app-admin-nav-icon>
+            <span class="nav-label">Sub Admins</span>
           </a>
+          <button *ngIf="isStaff(profile)" type="button" class="nav-item nav-button" (click)="openNotifications()">
+            <app-admin-nav-icon name="notifications"></app-admin-nav-icon>
+            <span class="nav-label">Notifications</span>
+          </button>
           <a *ngIf="profile.role === 'superadmin'" routerLink="/admin/settings" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
-            </svg>
+            <app-admin-nav-icon name="settings"></app-admin-nav-icon>
             <span class="nav-label">Settings</span>
           </a>
-          <a *ngIf="profile.role === 'superadmin'" routerLink="/admin/sub-admins" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
-            <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <line x1="19" y1="8" x2="19" y2="14"></line>
-              <line x1="22" y1="11" x2="16" y2="11"></line>
-            </svg>
-            <span class="nav-label">Sub Admins</span>
+          <a *ngIf="profile.role === 'superadmin'" routerLink="/admin/audit-logs" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="audit"></app-admin-nav-icon>
+            <span class="nav-label">Audit Logs</span>
+          </a>
+          <a *ngIf="perms.canViewModule('users')" routerLink="/admin/reactivation-requests" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="reactivation"></app-admin-nav-icon>
+            <span class="nav-label">Reactivation Requests</span>
           </a>
         </nav>
 
@@ -142,6 +114,7 @@ import { ToastComponent } from '../../components/toast/toast.component';
         <app-admin-footer></app-admin-footer>
       </div>
       <app-toast></app-toast>
+      <app-confirm-dialog></app-confirm-dialog>
     </div>
   `,
   styles: [`
@@ -231,12 +204,22 @@ import { ToastComponent } from '../../components/toast/toast.component';
       align-items: center;
       gap: 12px;
       padding: 12px 16px;
-      margin-bottom: 4px;
-      border-radius: 8px;
+      margin-bottom: 6px;
+      border-radius: 10px;
       color: #9CA3AF;
       text-decoration: none;
       transition: all var(--transition-base);
       cursor: pointer;
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+    }
+
+    .nav-button:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #F9FAFB;
     }
 
     .nav-item:hover {
@@ -406,8 +389,18 @@ export class AdminLayoutComponent {
   constructor(
     public auth: AuthService,
     public perms: PermissionService,
-    private router: Router
+    private router: Router,
+    private notificationService: NotificationService
   ) {}
+
+  isStaff(profile: UserProfile): boolean {
+    return ['admin', 'superadmin', 'subadmin'].includes(profile.role);
+  }
+
+  openNotifications(): void {
+    this.closeSidebar();
+    this.notificationService.requestOpenPanel();
+  }
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen;

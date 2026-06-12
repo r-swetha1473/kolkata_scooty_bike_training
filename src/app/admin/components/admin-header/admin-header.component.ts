@@ -544,6 +544,28 @@ export class AdminHeaderComponent implements OnInit, OnDestroy {
         this.unreadCount = 0;
       }
     });
+
+    this.notificationService.openPanel$.subscribe(() => {
+      if (!this.canViewNotifications) return;
+      this.showUserMenu = false;
+      this.showNotifications = true;
+      void this.loadNotificationList();
+      setTimeout(() => {
+        document.addEventListener('click', this.closeNotificationsHandler);
+      }, 0);
+    });
+  }
+
+  private async loadNotificationList(): Promise<void> {
+    this.notificationsLoading = true;
+    try {
+      const res = await this.notificationService.listNotifications({ limit: 25 });
+      this.notifications = res.notifications;
+    } catch {
+      this.notifications = [];
+    } finally {
+      this.notificationsLoading = false;
+    }
   }
 
   ngOnDestroy() {
@@ -558,15 +580,7 @@ export class AdminHeaderComponent implements OnInit, OnDestroy {
     this.showUserMenu = false;
     this.showNotifications = !this.showNotifications;
     if (this.showNotifications) {
-      this.notificationsLoading = true;
-      try {
-        const res = await this.notificationService.listNotifications({ limit: 25 });
-        this.notifications = res.notifications;
-      } catch {
-        this.notifications = [];
-      } finally {
-        this.notificationsLoading = false;
-      }
+      await this.loadNotificationList();
       setTimeout(() => {
         document.addEventListener('click', this.closeNotificationsHandler);
       }, 0);

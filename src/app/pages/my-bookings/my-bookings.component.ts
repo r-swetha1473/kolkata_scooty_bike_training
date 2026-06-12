@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import {
   extractDateFromDateTime,
   extractTime,
@@ -473,7 +474,10 @@ export class MyBookingsComponent implements OnInit {
   ratingValue = 5;
   ratingComments = '';
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private toastService: ToastService
+  ) {}
 
   async ngOnInit() {
     await this.retryLoad();
@@ -586,7 +590,7 @@ export class MyBookingsComponent implements OnInit {
       }
     } catch (e: any) {
       const msg = e?.error?.message || e?.message || 'Could not cancel';
-      window.alert(msg);
+      this.toastService.error(msg);
     } finally {
       this.cancelling = false;
     }
@@ -617,7 +621,7 @@ export class MyBookingsComponent implements OnInit {
         this.loadError = 'Rating saved. Tap Try again if the list looks out of date.';
       }
     } catch (e: any) {
-      window.alert(e?.error?.message || 'Could not submit rating');
+      this.toastService.error(e?.error?.message || 'Could not submit rating');
     }
   }
 }
