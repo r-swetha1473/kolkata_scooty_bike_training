@@ -54,6 +54,13 @@ const CHECKS = [
     migration: '20260612120000_account_reactivation_requests.sql',
     name: 'account_reactivation_requests table',
     sql: `SELECT to_regclass('public.account_reactivation_requests') AS ok`
+  },
+  {
+    migration: '20260612130000_bookings_trainer_id_nullable.sql',
+    name: 'bookings.trainer_id nullable',
+    sql: `SELECT 1 AS ok FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='bookings'
+            AND column_name='trainer_id' AND is_nullable='YES'`
   }
 ];
 

@@ -2,7 +2,7 @@ const express = require('express');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const rateLimit = require('express-rate-limit');
+const { authLoginLimiter } = require('../middleware/rateLimiters');
 const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 const { validateLogin } = require('../validators');
@@ -12,11 +12,7 @@ const { setAuthCookie, clearAuthCookie, getClientIp } = require('../utils/authCo
 const { resolveGoogleCallbackUrl, maskClientId, logOAuthDebug } = require('../utils/googleOAuth');
 const router = express.Router();
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: 'Too many login attempts. Try again later.'
-});
+const [loginLog, loginLimit] = authLoginLimiter;
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'subadmin'];
 
@@ -43,7 +39,7 @@ async function buildAuthUserResponse(user) {
 }
 
 // Admin email/password login
-router.post('/login', loginLimiter, validateLogin, async (req, res, next) => {
+router.post('/login', loginLog, loginLimit, validateLogin, async (req, res, next) => {
   const ip = getClientIp(req);
 
   try {

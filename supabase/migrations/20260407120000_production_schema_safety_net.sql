@@ -37,6 +37,18 @@ BEGIN
   END IF;
 END $$;
 
+-- bookings: trainer_id nullable for vehicle-based customer bookings (no trainer at create time)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'trainer_id'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE bookings ALTER COLUMN trainer_id DROP NOT NULL;
+  END IF;
+END $$;
+
 -- profiles: stats columns used by GET /api/admin/users
 DO $$
 BEGIN
