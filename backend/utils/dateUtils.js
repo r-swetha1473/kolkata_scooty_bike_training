@@ -190,6 +190,28 @@ function isToday(dateInput) {
   return isSameDay(dateInput, getToday());
 }
 
+/**
+ * Formats a timestamp for customer-facing messages in Asia/Kolkata.
+ *
+ * @param {Date|string} dateInput
+ * @returns {string}
+ */
+function formatKolkataDateTime(dateInput) {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) {
+    return String(dateInput);
+  }
+  return date.toLocaleString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
 module.exports = {
   normalizeDate,
   addDays,
@@ -200,5 +222,6 @@ module.exports = {
   isValidDateString,
   getDayOfWeek,
   isPastDate,
-  isToday
+  isToday,
+  formatKolkataDateTime
 };

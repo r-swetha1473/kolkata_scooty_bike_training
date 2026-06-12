@@ -484,6 +484,8 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.errorMessage =
           body?.message ||
           'That vehicle type was just fully booked. Go back and choose another vehicle or slot.';
+      } else if (code === 'BOOKING_GAP_48H' || code === 'BOOKING_ADVANCE_REQUIRED' || code === 'WEEKLY_LIMIT_REACHED') {
+        this.errorMessage = body?.message || 'This booking is not allowed at the selected time.';
       } else {
         const fromValidation =
           Array.isArray(body?.errors) && body.errors.length
@@ -601,6 +603,8 @@ export class BookingComponent implements OnInit, OnDestroy {
       const code = body?.errorCode;
       if (code === 'VEHICLE_CAPACITY_FULL') {
         this.errorMessage = body?.message || 'That vehicle is fully booked for this slot.';
+      } else if (code === 'BOOKING_GAP_48H' || code === 'BOOKING_ADVANCE_REQUIRED' || code === 'WEEKLY_LIMIT_REACHED') {
+        this.errorMessage = body?.message || 'This booking update is not allowed at the selected time.';
       } else {
         this.errorMessage = body?.message || body?.error || 'Failed to update booking.';
       }

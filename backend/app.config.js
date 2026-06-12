@@ -17,6 +17,13 @@ module.exports = {
     // Cancellation window (hours before slot start time)
     cancellationWindowHours: 5,
     cancellationWindowMessage: 'Cancellation is only allowed up to 5 hours before the class start time',
+
+    // Minimum advance booking (hours before slot start)
+    minAdvanceHours: 5,
+    bookingAdvanceMessage: 'Bookings must be made at least 5 hours before the slot start time.',
+
+    // Gap between consecutive customer bookings (hours)
+    bookingGapHours: 48,
     
     // Default booking status
     defaultStatus: 'confirmed',

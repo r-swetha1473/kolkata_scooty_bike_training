@@ -13,8 +13,11 @@ const {
   WEEKLY_BOOKING_LIMIT,
   BOOKING_WINDOW_HOURS,
   SLOT_VISIBILITY_HOURS,
-  CANCELLATION_WINDOW_HOURS
+  CANCELLATION_WINDOW_HOURS,
+  MIN_BOOKING_ADVANCE_HOURS,
+  BOOKING_GAP_HOURS
 } = require('../config/app.config');
+const { formatKolkataDateTime } = require('../utils/dateUtils');
 const vehicleService = require('./vehicle.service');
 const {
   getProfileInactiveStatus,
@@ -31,9 +34,20 @@ const {
  * @param {string} slotId - Slot UUID (required for full validation)
  * @param {string} userId - User UUID (optional, for user_id based checks)
  * @param {string} trainerId - Trainer UUID (required when slotId is set; must be active and free for this slot)
+ * @param {{ excludeBookingId?: string, mode?: 'create'|'update' }} [options]
  * @returns {Promise<{eligible: boolean, reason?: string, details?: object}>}
  */
-async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, slotId = null, userId = null, trainerId = null) {
+async function validateBookingEligibility(
+  phone,
+  slotDate,
+  slotTime,
+  vehicleId,
+  slotId = null,
+  userId = null,
+  trainerId = null,
+  options = {}
+) {
+  const { excludeBookingId = null, mode = 'create' } = options;
   try {
     const normalizedPhone = normalizeIndianMobileDigits(phone);
     
@@ -46,8 +60,10 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       };
     }
 
+    let isCustomer = true;
     if (userId) {
       const pr = await getProfileInactiveStatus(userId);
+      isCustomer = !pr.role || pr.role === 'customer';
       if (isCustomerInactiveBlocked(pr)) {
         return {
           eligible: false,
@@ -56,7 +72,7 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         };
       }
 
-      if (slotDate) {
+      if (isCustomer && mode === 'create' && slotDate) {
         const activeBooking = await db.query(
           `SELECT b.id, s.start_time, s.slot_date
            FROM bookings b
@@ -115,11 +131,109 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         message: 'Invalid slot time format'
       };
     }
-    
-    // Check 1: Booking opens 24 hours before the slot — only inside that window (slot in future, within BOOKING_WINDOW_HOURS)
+
     const currentTime = new Date();
     const hoursUntilSlot = (slotStartTime - currentTime) / (1000 * 60 * 60);
+    let weeklyBookingsCount = 0;
 
+    if (isCustomer) {
+      // Check 2: Weekly booking limit (unchanged — calendar week count)
+      if (mode === 'create') {
+        const weeklyBookingsResult = userId
+          ? await db.query(
+              `SELECT COUNT(*)::int as count
+               FROM bookings b
+               JOIN slots s ON b.slot_id = s.id
+               WHERE b.user_id = $1
+                 AND b.status NOT IN ('cancelled')
+                 AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
+                 AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
+              [userId]
+            )
+          : await db.query(
+              `SELECT COUNT(*)::int as count
+               FROM bookings b
+               JOIN profiles p ON b.user_id = p.id
+               JOIN slots s ON b.slot_id = s.id
+               WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1
+                 AND b.status NOT IN ('cancelled')
+                 AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
+                 AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
+              [normalizedPhone]
+            );
+
+        weeklyBookingsCount = parseInt(weeklyBookingsResult.rows[0]?.count || 0, 10);
+        if (weeklyBookingsCount >= WEEKLY_BOOKING_LIMIT) {
+          return {
+            eligible: false,
+            reason: 'WEEKLY_LIMIT_REACHED',
+            message: `Weekly booking limit reached. You have ${weeklyBookingsCount} booking(s) this week. Maximum allowed: ${WEEKLY_BOOKING_LIMIT}.`,
+            details: { weeklyCount: weeklyBookingsCount, limit: WEEKLY_BOOKING_LIMIT }
+          };
+        }
+      }
+
+      // Check 3: 48-hour gap between customer bookings
+      const gapParams = userId
+        ? [userId, excludeBookingId, slotStartTime.toISOString()]
+        : [normalizedPhone, excludeBookingId, slotStartTime.toISOString()];
+      const gapQuery = userId
+        ? `SELECT s.start_time
+           FROM bookings b
+           JOIN slots s ON b.slot_id = s.id
+           WHERE b.user_id = $1
+             AND b.status NOT IN ('cancelled')
+             AND ($2::uuid IS NULL OR b.id <> $2)
+             AND $3::timestamptz < s.start_time + INTERVAL '${BOOKING_GAP_HOURS} hours'
+             AND $3::timestamptz > s.start_time - INTERVAL '${BOOKING_GAP_HOURS} hours'
+           ORDER BY s.start_time ASC
+           LIMIT 1`
+        : `SELECT s.start_time
+           FROM bookings b
+           JOIN profiles p ON b.user_id = p.id
+           JOIN slots s ON b.slot_id = s.id
+           WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1
+             AND b.status NOT IN ('cancelled')
+             AND ($2::uuid IS NULL OR b.id <> $2)
+             AND $3::timestamptz < s.start_time + INTERVAL '${BOOKING_GAP_HOURS} hours'
+             AND $3::timestamptz > s.start_time - INTERVAL '${BOOKING_GAP_HOURS} hours'
+           ORDER BY s.start_time ASC
+           LIMIT 1`;
+
+      const gapConflict = await db.query(gapQuery, gapParams);
+      if (gapConflict.rows.length > 0) {
+        const conflictStart = new Date(gapConflict.rows[0].start_time);
+        const nextAllowed =
+          slotStartTime >= conflictStart
+            ? new Date(conflictStart.getTime() + BOOKING_GAP_HOURS * 60 * 60 * 1000)
+            : new Date(slotStartTime.getTime() + BOOKING_GAP_HOURS * 60 * 60 * 1000);
+        return {
+          eligible: false,
+          reason: 'BOOKING_GAP_48H',
+          message: `You already have a booking within the last 48 hours. Your next booking can be made after ${formatKolkataDateTime(nextAllowed)}.`,
+          details: { nextAllowed: nextAllowed.toISOString(), gapHours: BOOKING_GAP_HOURS }
+        };
+      }
+
+      // Check 4: Minimum 5-hour advance (Kolkata business rule — timestamptz vs NOW())
+      const advanceCheck = await db.query(
+        `SELECT ($1::timestamptz < NOW() + INTERVAL '${MIN_BOOKING_ADVANCE_HOURS} hours') AS too_soon`,
+        [slotStartTime.toISOString()]
+      );
+      if (advanceCheck.rows[0]?.too_soon) {
+        return {
+          eligible: false,
+          reason: 'BOOKING_ADVANCE_REQUIRED',
+          message: config.booking.bookingAdvanceMessage,
+          details: {
+            minAdvanceHours: MIN_BOOKING_ADVANCE_HOURS,
+            hoursUntilSlot: Math.round(hoursUntilSlot * 10) / 10
+          }
+        };
+      }
+    }
+
+    // Existing booking window: slot must be in the future and within 24h visibility window
     if (hoursUntilSlot <= 0) {
       return {
         eligible: false,
@@ -135,41 +249,6 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
         reason: 'BOOKING_NOT_OPEN_YET',
         message: `Booking opens ${BOOKING_WINDOW_HOURS} hours before the class. This slot starts in ${Math.round(hoursUntilSlot * 10) / 10} hours.`,
         details: { hoursUntilSlot, bookingWindowHours: BOOKING_WINDOW_HOURS }
-      };
-    }
-    
-    // Check 2: Weekly booking limit — use user_id when provided so counts stay correct inside a DB transaction
-    // (phone on profiles may not be committed yet when validation runs on another pool connection).
-    const weeklyBookingsResult = userId
-      ? await db.query(
-          `SELECT COUNT(*)::int as count
-           FROM bookings b
-           JOIN slots s ON b.slot_id = s.id
-           WHERE b.user_id = $1
-             AND b.status NOT IN ('cancelled')
-             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
-             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
-          [userId]
-        )
-      : await db.query(
-          `SELECT COUNT(*)::int as count
-           FROM bookings b
-           JOIN profiles p ON b.user_id = p.id
-           JOIN slots s ON b.slot_id = s.id
-           WHERE right(regexp_replace(p.phone, '\\D', '', 'g'), 10) = $1
-             AND b.status NOT IN ('cancelled')
-             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) >= date_trunc('week', CURRENT_DATE)::date
-             AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'UTC')::date) < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date`,
-          [normalizedPhone]
-        );
-    
-    const weeklyBookingsCount = parseInt(weeklyBookingsResult.rows[0]?.count || 0, 10);
-    if (weeklyBookingsCount >= WEEKLY_BOOKING_LIMIT) {
-      return {
-        eligible: false,
-        reason: 'WEEKLY_LIMIT_REACHED',
-        message: `Weekly booking limit reached. You have ${weeklyBookingsCount} booking(s) this week. Maximum allowed: ${WEEKLY_BOOKING_LIMIT}.`,
-        details: { weeklyCount: weeklyBookingsCount, limit: WEEKLY_BOOKING_LIMIT }
       };
     }
     
@@ -286,8 +365,8 @@ async function validateBookingEligibility(phone, slotDate, slotTime, vehicleId, 
       }
     }
     
-    // Check 5: duplicate booking (prefer user_id — same transaction / phone-update safety)
-    if (slotId) {
+    // Duplicate booking guard (create only)
+    if (slotId && mode === 'create') {
       const duplicateCheck = userId
         ? await db.query(
             `SELECT b.id FROM bookings b

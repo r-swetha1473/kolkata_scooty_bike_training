@@ -27,6 +27,12 @@ const TOTAL_BOOKING_LIMIT = 2;
 // Aligns with "booking opens 24 hours before the slot" — not before that window.
 const BOOKING_WINDOW_HOURS = 24;
 
+// Minimum advance booking time (hours before slot start — Kolkata business rule)
+const MIN_BOOKING_ADVANCE_HOURS = 5;
+
+// Minimum gap between customer bookings (hours from any existing booking start)
+const BOOKING_GAP_HOURS = 48;
+
 // Entitlement validity period (days)
 const ENTITLEMENT_VALIDITY_DAYS = 30;
 
@@ -38,6 +44,8 @@ module.exports = {
   WEEKLY_BOOKING_LIMIT,
   TOTAL_BOOKING_LIMIT,
   BOOKING_WINDOW_HOURS,
+  MIN_BOOKING_ADVANCE_HOURS,
+  BOOKING_GAP_HOURS,
   /** @deprecated use BOOKING_WINDOW_HOURS */
   BOOKING_ADVANCE_HOURS: BOOKING_WINDOW_HOURS,
   ENTITLEMENT_VALIDITY_DAYS

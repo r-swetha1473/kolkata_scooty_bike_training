@@ -13,7 +13,8 @@ const {
   SLOT_VISIBILITY_HOURS,
   WEEKLY_BOOKING_LIMIT,
   TOTAL_BOOKING_LIMIT,
-  ENTITLEMENT_VALIDITY_DAYS
+  ENTITLEMENT_VALIDITY_DAYS,
+  MIN_BOOKING_ADVANCE_HOURS
 } = require('../config/app.config');
 const { validateBookingEligibility, validateCancellationEligibility } = require('../services/bookingValidation.service');
 const vehicleService = require('../services/vehicle.service');
@@ -428,6 +429,7 @@ router.post(
             WHEN ls.status IN ('disabled', 'cancelled') THEN 'SLOT_NOT_AVAILABLE'
             WHEN ls.status NOT IN ('available', 'full') THEN 'SLOT_INVALID_STATUS'
             WHEN ls.start_time <= NOW() THEN 'SLOT_PAST'
+            WHEN ls.start_time < (NOW() + INTERVAL '${MIN_BOOKING_ADVANCE_HOURS} hours') THEN 'BOOKING_ADVANCE_REQUIRED'
             WHEN ls.start_time > (NOW() + INTERVAL '${SLOT_VISIBILITY_HOURS} hours') THEN 'BOOKING_NOT_OPEN_YET'
             WHEN ls.vehicle_booked_count >= vc.vehicle_capacity THEN 'VEHICLE_CAPACITY_FULL'
             ELSE 'VALID'
@@ -507,13 +509,19 @@ router.post(
         'SLOT_NOT_VISIBLE': config.slot.visibilityWindowMessage,
         'SLOT_PAST': 'This slot has already started or passed',
         'BOOKING_NOT_OPEN_YET': config.booking.bookingWindowMessage,
+        'BOOKING_ADVANCE_REQUIRED': config.booking.bookingAdvanceMessage,
         'TRAINER_NOT_FOUND': 'Selected trainer was not found',
         'TRAINER_INACTIVE': 'This trainer is not available for booking',
         'TRAINER_SLOT_TAKEN': 'This trainer is already booked for this time slot. Choose another trainer.',
         'VEHICLE_CAPACITY_FULL': `All ${vehicle.name} slots are full for this time slot`,
         'INVALID_VEHICLE': 'Invalid or inactive vehicle selected'
       };
-      throw new Error(errorMessages[result.validation_status] || 'Unable to create booking');
+      const insertErr = new Error(
+        errorMessages[result.validation_status] || 'Unable to create booking'
+      );
+      insertErr.status = 400;
+      insertErr.errorCode = result.validation_status || 'BOOKING_NOT_ELIGIBLE';
+      throw insertErr;
     }
 
     // Extract booking data (exclude validation fields)
@@ -814,6 +822,43 @@ router.put('/:id/update', authenticate, async (req, res, next) => {
 
     const booking = bookingResult.rows[0];
     const slotId = booking.slot_id;
+
+    const profileRow = await client.query('SELECT phone FROM profiles WHERE id = $1', [req.user.id]);
+    const bookingPhone =
+      normalizeIndianMobileDigits(profileRow.rows[0]?.phone) || profileRow.rows[0]?.phone || booking.phone;
+
+    const slotRow = await client.query(
+      `SELECT start_time, COALESCE(slot_date, (start_time AT TIME ZONE 'UTC')::date) AS slot_date
+       FROM slots WHERE id = $1`,
+      [slotId]
+    );
+    if (slotRow.rows.length === 0) {
+      const error = new Error('Slot not found');
+      error.status = 404;
+      error.errorCode = 'SLOT_NOT_FOUND';
+      throw error;
+    }
+
+    const slotDate = slotRow.rows[0].slot_date;
+    const slotTime = slotRow.rows[0].start_time;
+
+    const updateValidation = await validateBookingEligibility(
+      bookingPhone,
+      slotDate,
+      slotTime,
+      vehicle_id,
+      slotId,
+      req.user.id,
+      null,
+      { excludeBookingId: booking.id, mode: 'update' }
+    );
+
+    if (!updateValidation.eligible) {
+      const error = new Error(updateValidation.message || 'Booking update not allowed');
+      error.status = updateValidation.reason === 'INACTIVE_BLOCKED' ? 403 : 400;
+      error.errorCode = updateValidation.reason || 'BOOKING_NOT_ELIGIBLE';
+      throw error;
+    }
 
     if (booking.vehicle_id !== vehicle_id) {
       const vehicleAvail = await vehicleService.checkVehicleAvailability(slotId, vehicle_id);
