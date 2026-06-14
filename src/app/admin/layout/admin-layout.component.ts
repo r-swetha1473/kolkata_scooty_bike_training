@@ -55,6 +55,10 @@ import { UserProfile } from '../../services/auth.service';
             <app-admin-nav-icon name="bookings"></app-admin-nav-icon>
             <span class="nav-label">Bookings</span>
           </a>
+          <a *ngIf="perms.can('bookings', 'create')" routerLink="/admin/offline-bookings" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
+            <app-admin-nav-icon name="bookings"></app-admin-nav-icon>
+            <span class="nav-label">Offline Bookings</span>
+          </a>
           <a *ngIf="perms.canViewModule('vehicles')" routerLink="/admin/vehicles" routerLinkActive="active" class="nav-item" (click)="closeSidebar()">
             <app-admin-nav-icon name="vehicles"></app-admin-nav-icon>
             <span class="nav-label">Vehicles</span>

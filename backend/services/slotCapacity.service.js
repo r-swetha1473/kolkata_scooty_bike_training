@@ -74,6 +74,31 @@ async function resolveSlotCapacity(client = null) {
   return Math.max(1, total);
 }
 
+async function pruneInactiveSlotVehicleCapacities(slotIds = null, client = null) {
+  try {
+    if (Array.isArray(slotIds) && slotIds.length > 0) {
+      await query(client, 'SELECT prune_inactive_slot_vehicle_capacities($1::uuid[])', [slotIds]);
+      return;
+    }
+    await query(
+      client,
+      `
+      DELETE FROM slot_vehicle_capacity svc
+      USING vehicles v, slots s
+      WHERE svc.vehicle_id = v.id
+        AND svc.slot_id = s.id
+        AND v.is_active = false
+        AND COALESCE(s.slot_date, (s.start_time AT TIME ZONE 'Asia/Kolkata')::date) >= ${KOLKATA_TODAY}
+      `
+    );
+  } catch (e) {
+    const msg = String(e.message || '');
+    if (!msg.includes('does not exist') && !msg.includes('prune_inactive_slot_vehicle_capacities')) {
+      console.warn('[slotCapacity] pruneInactiveSlotVehicleCapacities:', msg);
+    }
+  }
+}
+
 async function syncSlotVehicleCapacities(slotIds, client = null) {
   for (const slotId of slotIds) {
     try {
@@ -97,6 +122,7 @@ async function syncSlotVehicleCapacities(slotIds, client = null) {
       }
     }
   }
+  await pruneInactiveSlotVehicleCapacities(slotIds, client);
 }
 
 async function fetchActiveTrainerIds(client = null) {
@@ -161,18 +187,31 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
     client,
     `
     UPDATE slots
-    SET capacity = $1,
+    SET capacity = GREATEST(booked_count, $1),
+        capacity_exceeded = (booked_count > $1),
         updated_at = NOW(),
         status = CASE
           WHEN status IN ('cancelled', 'completed', 'disabled') THEN status
-          WHEN booked_count >= $1 THEN 'full'
+          WHEN booked_count > $1 OR booked_count >= GREATEST(booked_count, $1) THEN 'full'
           ELSE 'available'
         END
     WHERE ${SLOT_DAY} >= ${KOLKATA_TODAY}
-    RETURNING id
+    RETURNING id, capacity_exceeded
     `,
     [capacity]
   );
+
+  const exceededCount = result.rows.filter((r) => r.capacity_exceeded).length;
+  if (exceededCount > 0) {
+    await notificationService.createNotification({
+      type: 'slot_capacity',
+      title: 'Capacity exceeded on slot(s)',
+      body: `${exceededCount} slot(s) have more bookings than active vehicle capacity. Existing bookings are preserved; no new bookings allowed until resolved.`,
+      entity_type: 'slot',
+      entity_id: null,
+      dedupeHours: 1
+    }).catch(() => {});
+  }
 
   const slotIds = result.rows.map((r) => r.id);
   if (slotIds.length > 0) {
@@ -206,6 +245,18 @@ async function recalculateFutureSlotCapacities(adminId = null, client = null) {
   };
 }
 
+/** Sum of active vehicle capacities for a slot payload (API rows or DB). */
+function computeLiveCapacityFromRows(vehicleCapacities, fallbackCapacity = 0) {
+  if (!Array.isArray(vehicleCapacities) || vehicleCapacities.length === 0) {
+    return Math.max(0, Number(fallbackCapacity) || 0);
+  }
+  const total = vehicleCapacities.reduce(
+    (sum, row) => sum + Math.max(0, Number(row?.capacity) || 0),
+    0
+  );
+  return total > 0 ? total : Math.max(0, Number(fallbackCapacity) || 0);
+}
+
 module.exports = {
   SETTING_KEY,
   isAutoCapacityEnabled,
@@ -214,5 +265,7 @@ module.exports = {
   resolveSlotCapacity,
   recalculateFutureSlotCapacities,
   syncSlotVehicleCapacities,
+  pruneInactiveSlotVehicleCapacities,
+  computeLiveCapacityFromRows,
   assignMissingTrainerIds
 };

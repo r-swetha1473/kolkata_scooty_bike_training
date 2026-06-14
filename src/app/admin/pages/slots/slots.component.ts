@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { SlotService, Slot } from '../../../services/slot.service';
 import { TrainerService, Trainer } from '../../../services/trainer.service';
 import { ToastService } from '../../../services/toast.service';
@@ -83,7 +84,10 @@ import { getAuthToken } from '../../../utils/auth-token.storage';
                 <span class="time-separator">–</span>
                 <span class="time-end">{{ formatTimeOnly(slot.end_time) }}</span>
               </div>
-              <div class="slot-status-indicator" [class]="'indicator-' + slot.status"></div>
+              <div class="slot-header-badges">
+                <span class="over-capacity-badge" *ngIf="isOverCapacity(slot)">OVER CAPACITY</span>
+                <div class="slot-status-indicator" [class]="'indicator-' + slot.status"></div>
+              </div>
             </div>
             
             <div class="slot-card-body">
@@ -132,7 +136,9 @@ import { getAuthToken } from '../../../utils/auth-token.storage';
                 </ng-template>
                 <!-- Legacy total capacity (keep for reference) -->
                 <div class="capacity-header" style="margin-top: 8px;">
-                  <span class="capacity-text" style="font-size: 11px; color: var(--admin-text-secondary);">Total: {{ slot.booked_count }} / {{ slot.capacity }}</span>
+                  <span class="capacity-text" style="font-size: 11px; color: var(--admin-text-secondary);">
+                    Total: {{ slotUtilizationLabel(slot) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -534,6 +540,24 @@ import { getAuthToken } from '../../../utils/auth-token.storage';
       align-items: center;
       padding-bottom: 8px;
       border-bottom: 1px solid #F3F4F6;
+    }
+
+    .slot-header-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .over-capacity-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
     }
 
     .slot-time-compact {
@@ -1072,7 +1096,8 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
     private slotService: SlotService,
     private trainerService: TrainerService,
     private toastService: ToastService,
-    private confirmDialog: ConfirmDialogService
+    private confirmDialog: ConfirmDialogService,
+    private route: ActivatedRoute
   ) {}
 
   /**
@@ -1102,7 +1127,8 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.selectedDate = this.getDefaultDate();
+    const dateParam = this.route.snapshot.queryParamMap.get('date');
+    this.selectedDate = dateParam ? this.normalizeDate(dateParam) : this.getDefaultDate();
     await this.loadDataForSelectedDate();
     this.subscribeToSlotEvents();
     
@@ -1696,6 +1722,18 @@ export class AdminSlotsComponent implements OnInit, OnDestroy {
     return raw.filter(
       (x: any) => x && x.vehicle_id && typeof x.capacity === 'number'
     ) as { vehicle_id: string; vehicle_name: string; capacity: number; booked: number }[];
+  }
+
+  slotUtilizationLabel(slot: Slot): string {
+    const booked = slot.booked_count || 0;
+    const cap = slot.capacity || 0;
+    if (cap <= 0) return `${booked} / 0 (0%)`;
+    const pct = Math.round((booked / cap) * 100);
+    return `${booked} / ${cap} (${pct}%)`;
+  }
+
+  isOverCapacity(slot: Slot): boolean {
+    return slot.capacity_exceeded === true;
   }
 
   openVehicleCapacityModal(vc: { vehicle_id: string; vehicle_name: string; capacity: number; booked: number }) {

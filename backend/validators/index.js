@@ -1,6 +1,6 @@
 // Export all validators for easy importing
 const { validateLogin } = require('./auth.validator');
-const { validateBookingCreation } = require('./booking.validator');
+const { validateBookingCreation, validateOfflineBookingCreation } = require('./booking.validator');
 const { validateSlotCreation, validateSlotUpdate } = require('./slot.validator');
 const {
   validateBookingStatusUpdate,
@@ -33,6 +33,7 @@ module.exports = {
   
   // Booking validators
   validateBookingCreation,
+  validateOfflineBookingCreation,
   
   // Slot validators
   validateSlotCreation,

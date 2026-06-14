@@ -16,10 +16,15 @@ import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 import {
   aggregateDailyBookings,
+  aggregateSourceCounts,
+  aggregateAttendanceCounts,
+  aggregateMonthlyAttendanceTrend,
   aggregateStatusCounts,
   aggregateVehicleUsage,
   ChartCleanup,
+  renderAttendanceTrendChart,
   renderDonutChart,
+  renderLabelBarChart,
   renderLineChart,
   renderStatusBarChart
 } from '../../utils/dashboard-charts';
@@ -47,6 +52,36 @@ interface KpiCard {
         <button type="button" class="refresh-btn" (click)="loadStats()" [disabled]="loading">Refresh</button>
       </div>
 
+      <div class="capacity-alert over-capacity-alert" *ngIf="(stats?.capacityExceededSlots || 0) > 0">
+        <span class="over-capacity-badge">OVER CAPACITY</span>
+        {{ stats.capacityExceededSlots }} slot(s) have current bookings exceeding active vehicle capacity. Existing bookings are preserved; no new bookings should be added until resolved.
+      </div>
+
+      <section class="ops-section" *ngIf="!loading">
+        <h2 class="section-title">Today's Operations</h2>
+        <div class="ops-grid">
+          <article class="ops-card"><span class="ops-value">{{ n(stats?.todayOperations?.todayBookings) }}</span><span class="ops-label">Today's Bookings</span></article>
+          <article class="ops-card"><span class="ops-value">{{ n(stats?.todayOperations?.todayOfflineBookings) }}</span><span class="ops-label">Today's Offline</span></article>
+          <article class="ops-card"><span class="ops-value">{{ n(stats?.todayOperations?.todayOnlineBookings) }}</span><span class="ops-label">Today's Online</span></article>
+          <article class="ops-card tone-success"><span class="ops-value">{{ n(stats?.todayOperations?.todayAttended) }}</span><span class="ops-label">Today's Attended</span></article>
+          <article class="ops-card tone-warn"><span class="ops-value">{{ n(stats?.todayOperations?.todayPending) }}</span><span class="ops-label">Today's Pending</span></article>
+          <article class="ops-card tone-danger"><span class="ops-value">{{ n(stats?.todayOperations?.todayNoShows) }}</span><span class="ops-label">Today's No Shows</span></article>
+        </div>
+      </section>
+
+      <section class="health-section" *ngIf="!loading">
+        <h2 class="section-title">System Health</h2>
+        <div class="health-grid">
+          <div><strong>{{ n(stats?.systemHealth?.activeVehicles) }}</strong><span>Active Vehicles</span></div>
+          <div><strong>{{ n(stats?.systemHealth?.activeTrainers) }}</strong><span>Active Trainers</span></div>
+          <div><strong>{{ n(stats?.systemHealth?.futureSlots) }}</strong><span>Future Slots</span></div>
+          <div><strong>{{ n(stats?.systemHealth?.pendingReactivationRequests) }}</strong><span>Pending Reactivation</span></div>
+          <div><strong>{{ n(stats?.systemHealth?.offlineBookingsToday) }}</strong><span>Offline Today</span></div>
+          <div><strong>{{ n(stats?.systemHealth?.capacityWarnings) }}</strong><span>Capacity Warnings</span></div>
+          <div class="health-version"><strong>{{ stats?.systemHealth?.deploymentVersion || '—' }}</strong><span>Deployment Version</span></div>
+        </div>
+      </section>
+
       <section class="action-section" *ngIf="stats?.overdueBookings?.length">
         <div class="section-head">
           <div>
@@ -67,7 +102,7 @@ interface KpiCard {
               <span *ngIf="b.trainer_name">👤 {{ b.trainer_name }}</span>
             </div>
             <div class="action-card-actions">
-              <button type="button" class="btn-outline" (click)="viewBookingDetails()">View Details</button>
+              <button type="button" class="btn-outline" (click)="viewBookingDetails(b)">View Details</button>
               <ng-container *ngIf="perms.can('bookings', 'edit')">
                 <button type="button" class="btn-success-sm" (click)="resolveBooking(b.id, 'completed')">Complete</button>
                 <button type="button" class="btn-danger-sm" (click)="resolveBooking(b.id, 'cancelled')">Cancel</button>
@@ -89,6 +124,19 @@ interface KpiCard {
       </div>
       <p *ngIf="loading" class="loading-hint">Loading dashboard…</p>
 
+      <section class="util-section" *ngIf="!loading && stats?.slotUtilization?.length">
+        <h2 class="section-title">Peak Slot Utilization</h2>
+        <div class="util-list">
+          <article class="util-row" *ngFor="let slot of stats.slotUtilization">
+            <div>
+              <strong>{{ formatDateTime(slot.start_time) }}</strong>
+              <span class="util-label">{{ slot.utilization_label }}</span>
+            </div>
+            <span class="over-capacity-badge" *ngIf="slot.capacity_exceeded">OVER CAPACITY</span>
+          </article>
+        </div>
+      </section>
+
       <div class="charts-grid" *ngIf="!loading && chartsReady">
         <section class="chart-card chart-wide">
           <h3>Bookings Trend (30 days)</h3>
@@ -98,15 +146,128 @@ interface KpiCard {
           <h3>Vehicle Usage</h3>
           <div #donutChartHost class="chart-host chart-host-donut"></div>
         </section>
+        <section class="chart-card">
+          <h3>Online vs Offline</h3>
+          <div #sourceChartHost class="chart-host chart-host-donut"></div>
+        </section>
+        <section class="chart-card">
+          <h3>Attendance Status</h3>
+          <div #attendanceChartHost class="chart-host chart-host-donut"></div>
+        </section>
+        <section class="chart-card chart-wide">
+          <h3>Monthly Attendance Trend</h3>
+          <div #attendanceTrendHost class="chart-host"></div>
+        </section>
         <section class="chart-card chart-wide">
           <h3>Booking Status</h3>
           <div #statusChartHost class="chart-host"></div>
         </section>
       </div>
 
+      <section class="analytics-section" *ngIf="!loading">
+        <h2 class="section-title">Vehicle Analytics</h2>
+        <div class="analytics-table-wrap" *ngIf="stats?.vehicleAnalytics?.length; else noVehicleAnalytics">
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Vehicle</th>
+                <th>Total Bookings</th>
+                <th>Attendance %</th>
+                <th>No Shows</th>
+                <th>Usage %</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of stats.vehicleAnalytics">
+                <td>{{ row.vehicle_name }}</td>
+                <td>{{ row.total_bookings }}</td>
+                <td>{{ row.attendance_percent }}%</td>
+                <td>{{ row.no_shows }}</td>
+                <td>{{ row.usage_percent }}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noVehicleAnalytics><p class="empty-analytics">No vehicle analytics yet.</p></ng-template>
+        <div class="charts-grid analytics-charts" *ngIf="chartsReady">
+          <section class="chart-card">
+            <h3>Top Used Vehicle</h3>
+            <div #topVehicleChartHost class="chart-host"></div>
+          </section>
+          <section class="chart-card">
+            <h3>Least Used Vehicle</h3>
+            <div #leastVehicleChartHost class="chart-host"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="analytics-section" *ngIf="!loading">
+        <h2 class="section-title">Trainer Analytics</h2>
+        <div class="analytics-table-wrap" *ngIf="stats?.trainerAnalytics?.length; else noTrainerAnalytics">
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Trainer</th>
+                <th>Assigned Bookings</th>
+                <th>Completed Sessions</th>
+                <th>Attendance %</th>
+                <th>No Show %</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of stats.trainerAnalytics">
+                <td>{{ row.trainer_name }}</td>
+                <td>{{ row.assigned_bookings }}</td>
+                <td>{{ row.completed_sessions }}</td>
+                <td>{{ row.attendance_percent }}%</td>
+                <td>{{ row.no_show_percent }}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noTrainerAnalytics><p class="empty-analytics">No trainer analytics yet.</p></ng-template>
+        <div class="charts-grid analytics-charts" *ngIf="chartsReady">
+          <section class="chart-card">
+            <h3>Trainer Workload</h3>
+            <div #trainerWorkloadChartHost class="chart-host"></div>
+          </section>
+          <section class="chart-card">
+            <h3>Trainer Assignment Trend</h3>
+            <div #trainerTrendChartHost class="chart-host"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="activity-section" *ngIf="!loading && stats?.recentAdminActivity?.length">
+        <h2 class="section-title">Recent Admin Activity</h2>
+        <div class="activity-table-wrap">
+          <table class="analytics-table">
+            <thead>
+              <tr>
+                <th>Admin Name</th>
+                <th>Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of stats.recentAdminActivity">
+                <td>{{ row.admin_name }}</td>
+                <td>{{ formatDateTime(row.date) }}</td>
+                <td>{{ row.action }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <div class="quick-actions" *ngIf="!loading">
         <h2 class="section-title">Quick Actions</h2>
         <div class="actions-grid">
+          <button class="action-tile" *ngIf="perms.can('bookings', 'create')" (click)="navigateTo('/admin/offline-bookings')">Create Offline Booking</button>
+          <button class="action-tile" *ngIf="perms.can('bookings', 'create')" (click)="navigateTo('/admin/offline-bookings')">Create Walk-in Customer</button>
+          <button class="action-tile" *ngIf="perms.canViewModule('bookings')" (click)="navigateTo('/admin/bookings')">Assign Trainer</button>
+          <button class="action-tile" *ngIf="perms.canViewModule('slots')" (click)="viewTodaySchedule()">View Today's Schedule</button>
+          <button class="action-tile" *ngIf="perms.canViewModule('bookings')" (click)="exportTodayBookings()">Export Today's Bookings</button>
           <button class="action-tile" *ngIf="perms.canViewModule('bookings')" (click)="navigateTo('/admin/bookings')">Manage Bookings</button>
           <button class="action-tile" *ngIf="perms.canViewModule('slots')" (click)="navigateTo('/admin/slots')">Slots (automated)</button>
           <button class="action-tile" *ngIf="perms.canViewModule('trainers')" (click)="navigateTo('/admin/trainers')">Manage Trainers</button>
@@ -118,6 +279,110 @@ interface KpiCard {
   styles: [
     `
       .dashboard { max-width: 1400px; }
+      .capacity-alert {
+        margin-bottom: 16px;
+        padding: 12px 16px;
+        border-radius: 10px;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        font-size: 14px;
+      }
+      .over-capacity-alert {
+        background: #fef2f2;
+        color: #991b1b;
+        border-color: #fecaca;
+      }
+      .over-capacity-badge {
+        display: inline-block;
+        margin-right: 8px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+      }
+      .ops-section, .health-section, .util-section, .analytics-section, .activity-section {
+        margin-bottom: 28px;
+      }
+      .ops-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+      }
+      .ops-card {
+        background: #fff;
+        border: 1px solid var(--admin-border);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        box-shadow: var(--admin-shadow-sm);
+      }
+      .ops-card.tone-success { border-color: #bbf7d0; background: #f0fdf4; }
+      .ops-card.tone-warn { border-color: #fde68a; background: #fffbeb; }
+      .ops-card.tone-danger { border-color: #fecaca; background: #fef2f2; }
+      .ops-value { font-size: 24px; font-weight: 700; color: #111827; }
+      .ops-label { font-size: 12px; color: #6b7280; font-weight: 600; }
+      .health-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        background: #fff;
+        border: 1px solid var(--admin-border);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .health-grid div {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .health-grid strong { font-size: 20px; color: #111827; }
+      .health-grid span { font-size: 12px; color: #6b7280; }
+      .health-version { grid-column: span 2; }
+      .util-list { display: flex; flex-direction: column; gap: 8px; }
+      .util-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        background: #fff;
+        border: 1px solid var(--admin-border);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .util-label { display: block; font-size: 12px; color: #6b7280; margin-top: 2px; }
+      .analytics-table-wrap, .activity-table-wrap {
+        overflow-x: auto;
+        margin-bottom: 16px;
+        background: #fff;
+        border: 1px solid var(--admin-border);
+        border-radius: 12px;
+      }
+      .analytics-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .analytics-table th, .analytics-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      .analytics-table th {
+        background: #f9fafb;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7280;
+      }
+      .analytics-charts { margin-top: 8px; }
+      .empty-analytics { color: #6b7280; font-size: 13px; margin: 0 0 12px; }
       .dashboard-header {
         display: flex;
         justify-content: space-between;
@@ -310,7 +575,14 @@ interface KpiCard {
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('lineChartHost') lineChartHost?: ElementRef<HTMLElement>;
   @ViewChild('donutChartHost') donutChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('sourceChartHost') sourceChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('attendanceChartHost') attendanceChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('attendanceTrendHost') attendanceTrendHost?: ElementRef<HTMLElement>;
   @ViewChild('statusChartHost') statusChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('topVehicleChartHost') topVehicleChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('leastVehicleChartHost') leastVehicleChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('trainerWorkloadChartHost') trainerWorkloadChartHost?: ElementRef<HTMLElement>;
+  @ViewChild('trainerTrendChartHost') trainerTrendChartHost?: ElementRef<HTMLElement>;
 
   stats: any = null;
   loading = true;
@@ -397,6 +669,9 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     const lineEl = this.lineChartHost?.nativeElement;
     const donutEl = this.donutChartHost?.nativeElement;
+    const sourceEl = this.sourceChartHost?.nativeElement;
+    const attendanceEl = this.attendanceChartHost?.nativeElement;
+    const attendanceTrendEl = this.attendanceTrendHost?.nativeElement;
     const statusEl = this.statusChartHost?.nativeElement;
     if (lineEl) {
       this.chartCleanups.push(
@@ -406,10 +681,48 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     if (donutEl) {
       this.chartCleanups.push(renderDonutChart(donutEl, aggregateVehicleUsage(this.chartBookings)));
     }
+    if (sourceEl) {
+      this.chartCleanups.push(renderDonutChart(sourceEl, aggregateSourceCounts(this.chartBookings)));
+    }
+    if (attendanceEl) {
+      this.chartCleanups.push(renderDonutChart(attendanceEl, aggregateAttendanceCounts(this.chartBookings)));
+    }
+    if (attendanceTrendEl) {
+      this.chartCleanups.push(
+        renderAttendanceTrendChart(attendanceTrendEl, aggregateMonthlyAttendanceTrend(this.chartBookings))
+      );
+    }
     if (statusEl) {
       this.chartCleanups.push(
         renderStatusBarChart(statusEl, aggregateStatusCounts(this.chartBookings))
       );
+    }
+
+    const topVehicleEl = this.topVehicleChartHost?.nativeElement;
+    const leastVehicleEl = this.leastVehicleChartHost?.nativeElement;
+    const trainerWorkloadEl = this.trainerWorkloadChartHost?.nativeElement;
+    const trainerTrendEl = this.trainerTrendChartHost?.nativeElement;
+
+    if (topVehicleEl) {
+      this.chartCleanups.push(
+        renderLabelBarChart(topVehicleEl, this.stats?.vehicleCharts?.topUsed || [], '#0066B1')
+      );
+    }
+    if (leastVehicleEl) {
+      this.chartCleanups.push(
+        renderLabelBarChart(leastVehicleEl, this.stats?.vehicleCharts?.leastUsed || [], '#6B7280')
+      );
+    }
+    if (trainerWorkloadEl) {
+      this.chartCleanups.push(
+        renderLabelBarChart(trainerWorkloadEl, this.stats?.trainerCharts?.workload || [], '#10B981')
+      );
+    }
+    if (trainerTrendEl) {
+      const trend = (this.stats?.trainerCharts?.assignmentTrend || []).map(
+        (row: { label: string; value: number }) => ({ date: row.label, count: row.value })
+      );
+      this.chartCleanups.push(renderLineChart(trainerTrendEl, trend));
     }
   }
 
@@ -424,6 +737,11 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
       { label: 'Active Trainers', value: n(s.activeTrainers ?? s.totalTrainers), icon: '✓', tone: 'success' },
       { label: 'Active Vehicles', value: n(s.activeVehicles), icon: '🚗', tone: 'default' },
       { label: "Today's Bookings", value: n(s.todayBookings), icon: '📅', tone: 'purple', trend: 'Live today' },
+      { label: "Today's Online", value: n(s.todayOnlineBookings), icon: '🌐', tone: 'success', trend: 'Customer bookings' },
+      { label: "Today's Offline", value: n(s.todayOfflineBookings), icon: '🏪', tone: 'purple', trend: 'Walk-in bookings' },
+      { label: 'Total Attended', value: n(s.totalAttended), icon: '✓', tone: 'success' },
+      { label: 'Total No Shows', value: n(s.totalNoShows), icon: '✗', tone: 'warn' },
+      { label: 'Attendance Rate', value: `${n(s.attendanceRate)}%`, icon: '📊', tone: 'default', trend: 'Attended vs no-show' },
       { label: 'Pending Bookings', value: n(s.pendingBookings), icon: '⏳', tone: 'warn' }
     ];
   }
@@ -432,7 +750,37 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     this.router.navigateByUrl(route);
   }
 
-  viewBookingDetails() {
+  viewTodaySchedule() {
+    const today = new Date().toISOString().slice(0, 10);
+    this.router.navigate(['/admin/slots'], { queryParams: { date: today } });
+  }
+
+  async exportTodayBookings() {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const blob = await this.adminService.exportBookings({ startDate: today, endDate: today });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `bookings_today_${today}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      this.toastService.success("Today's bookings exported");
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Export failed'));
+    }
+  }
+
+  n(value: unknown): number {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  viewBookingDetails(booking?: { id?: string }) {
+    if (booking?.id) {
+      this.router.navigate(['/admin/bookings'], { queryParams: { details: booking.id } });
+      return;
+    }
     this.router.navigate(['/admin/bookings']);
   }
 

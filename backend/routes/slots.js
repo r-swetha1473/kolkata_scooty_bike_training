@@ -12,6 +12,16 @@ const { normalizeDate, addDays, getDayOfWeek, getToday } = require('../utils/dat
 const { sqlBookableSlotConditions } = require('../utils/slotBookableSql');
 const slotGenerationService = require('../services/slotGeneration.service');
 
+const { computeLiveCapacityFromRows } = require('../services/slotCapacity.service');
+
+function enrichSlotsWithLiveCapacity(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map((row) => ({
+    ...row,
+    live_capacity: computeLiveCapacityFromRows(row.vehicle_capacities, row.capacity)
+  }));
+}
+
 let autoGenerationInFlight = null;
 
 async function ensureAutoSlotsIfNeeded(baseQuery, params, mode = 'list') {
@@ -158,7 +168,7 @@ router.get('/', async (req, res, next) => {
       ? await ensureAutoSlotsIfNeeded(query, params, 'root')
       : await db.query(query, params);
 
-    res.json(result.rows);
+    res.json(enrichSlotsWithLiveCapacity(result.rows));
   } catch (error) {
     next(error);
   }
@@ -283,7 +293,7 @@ router.get('/date/:date', async (req, res, next) => {
       });
     }
 
-    res.json(result.rows);
+    res.json(enrichSlotsWithLiveCapacity(result.rows));
   } catch (error) {
     // Handle PostgreSQL errors gracefully
     if (error.code === '42P01') {
@@ -328,7 +338,7 @@ router.get('/range', async (req, res, next) => {
       ORDER BY s.start_time ASC
     `, [start_date, end_date]);
 
-    res.json(result.rows);
+    res.json(enrichSlotsWithLiveCapacity(result.rows));
   } catch (error) {
     next(error);
   }
@@ -392,7 +402,7 @@ router.get('/available', async (req, res, next) => {
       ? await ensureAutoSlotsForDateIfNeeded(availableQuery, params, date, 'available-date')
       : await ensureAutoSlotsIfNeeded(availableQuery, params, 'available');
 
-    res.json(result.rows);
+    res.json(enrichSlotsWithLiveCapacity(result.rows));
   } catch (error) {
     next(error);
   }
@@ -569,7 +579,7 @@ router.get('/:id', async (req, res, next) => {
       return next(error);
     }
 
-    res.json(result.rows[0]);
+    res.json(enrichSlotsWithLiveCapacity([result.rows[0]])[0]);
   } catch (error) {
     next(error);
   }

@@ -38,6 +38,7 @@ export function categorizeVehicleName(name: string): VehicleCategory | null {
 export function getVehicleCategoryOptions(
   rows: VehicleCapacityRow[] | undefined | null
 ): VehicleCategoryOption[] {
+  const hasApiRows = (rows?.length ?? 0) > 0;
   const grouped = new Map<
     VehicleCategory,
     { capacity: number; booked: number; vehicles: VehicleCapacityRow[] }
@@ -61,7 +62,7 @@ export function getVehicleCategoryOptions(
     const meta = CATEGORY_META[category];
     const g = grouped.get(category)!;
     const capacity =
-      g.capacity > 0 ? g.capacity : meta.defaultCapacity;
+      g.capacity > 0 ? g.capacity : hasApiRows ? 0 : meta.defaultCapacity;
     const booked = Math.min(g.booked, capacity);
     const available = Math.max(0, capacity - booked);
     const pick = g.vehicles.find(
@@ -93,8 +94,26 @@ export function slotHasVehicleAvailability(slot: {
   return booked < cap;
 }
 
+/** Live total seats from active vehicle rows (matches booking validation). */
+export function getLiveSlotCapacity(slot: {
+  vehicle_capacities?: VehicleCapacityRow[];
+  live_capacity?: number;
+  capacity?: number;
+}): number {
+  if (slot.live_capacity != null && Number.isFinite(Number(slot.live_capacity))) {
+    return Math.max(0, Number(slot.live_capacity));
+  }
+  const options = getVehicleCategoryOptions(slot.vehicle_capacities);
+  const fromVehicles = options.reduce((sum, o) => sum + o.capacity, 0);
+  if (fromVehicles > 0 || (slot.vehicle_capacities?.length ?? 0) > 0) {
+    return fromVehicles;
+  }
+  return Math.max(0, Number(slot.capacity) || 0);
+}
+
 export function getTotalAvailableSeats(slot: {
   vehicle_capacities?: VehicleCapacityRow[];
+  live_capacity?: number;
   capacity?: number;
   booked_count?: number;
 }): number {
@@ -103,7 +122,7 @@ export function getTotalAvailableSeats(slot: {
   if (fromVehicles > 0 || (slot.vehicle_capacities?.length ?? 0) > 0) {
     return fromVehicles;
   }
-  const cap = Number(slot.capacity) || 5;
+  const cap = getLiveSlotCapacity(slot) || Number(slot.capacity) || 5;
   const booked = Number(slot.booked_count) || 0;
   return Math.max(0, cap - booked);
 }

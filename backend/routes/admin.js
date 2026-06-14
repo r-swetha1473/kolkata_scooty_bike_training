@@ -18,7 +18,8 @@ const {
   validateAdminAccountCreation,
   validateSubAdminCreation,
   validateAdminAccountUpdate,
-  validateSubAdminUpdate
+  validateSubAdminUpdate,
+  validateOfflineBookingCreation
 } = require('../validators');
 const auditService = require('../services/audit.service');
 const slotCapacityService = require('../services/slotCapacity.service');
@@ -26,8 +27,13 @@ const notificationService = require('../services/notification.service');
 const reactivationService = require('../services/reactivationRequest.service');
 const overdueBookingService = require('../services/overdueBooking.service');
 const { getDashboardStats } = require('../services/dashboardStats.service');
-const { buildBookingListQuery } = require('../utils/bookingSearch');
+const { buildBookingListQuery, rowsToCsv } = require('../utils/bookingSearch');
 const { enrichBookingTimes } = require('../utils/bookingTimeFormat');
+const offlineBookingService = require('../services/offlineBooking.service');
+const offlineCustomerSearchService = require('../services/offlineCustomerSearch.service');
+const bookingAdminService = require('../services/bookingAdmin.service');
+const bookingAttendanceService = require('../services/bookingAttendance.service');
+const { logBookingEvent, EVENT_TYPES } = require('../services/bookingEvent.service');
 const { buildAdminUsersListQuery, LATEST_BOOKING_PHONE_SQL } = require('../utils/adminUsersQuery');
 const { enrichUsersWithDisplayPhone } = require('../utils/userPhone');
 const { runOverdueBookingDetection } = require('../services/overdueDetection.service');
@@ -89,10 +95,66 @@ router.put('/change-password', validateAdminChangePassword, async (req, res, nex
   }
 });
 
+function mapAdminBookingRow(row) {
+  return enrichBookingTimes({
+    id: row.id,
+    user_id: row.user_id,
+    slot_id: row.slot_id,
+    trainer_id: row.trainer_id,
+    vehicle_id: row.vehicle_id,
+    status: row.status,
+    notes: row.notes,
+    phone: row.phone,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    slot_date: row.slot_date,
+    user: {
+      id: row.user_id,
+      full_name: row.user_name,
+      email: row.user_email
+    },
+    trainer: {
+      id: row.trainer_table_id,
+      profile: {
+        id: row.trainer_profile_id,
+        full_name: row.trainer_name
+      }
+    },
+    slot: {
+      start_time: row.start_time,
+      end_time: row.end_time,
+      slot_date: row.slot_date,
+      capacity_exceeded: row.capacity_exceeded
+    },
+    vehicle_name: row.vehicle_name,
+    booking_source: row.booking_source || 'ONLINE',
+    offline_reference_number: row.offline_reference_number,
+    attendance_status: row.attendance_status || 'SCHEDULED',
+    created_by_admin_id: row.created_by_admin_id,
+    created_by_admin_name: row.created_by_admin_name,
+    created_by_admin_role: row.created_by_admin_role,
+    updated_by_admin_name: row.updated_by_admin_name,
+    updated_by_admin_role: row.updated_by_admin_role,
+    attendance_updated_by_name: row.attendance_updated_by_name,
+    attendance_updated_by_role: row.attendance_updated_by_role,
+    attendance_updated_at: row.attendance_updated_at,
+    offline_customer_name: row.offline_customer_name,
+    offline_customer_age: row.offline_customer_age,
+    offline_customer_gender: row.offline_customer_gender,
+    user_name: row.user_name,
+    user_email: row.user_email,
+    trainer_name: row.trainer_name
+  });
+}
+
 router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, next) => {
   try {
     const { countSql, listSql, countParams, listParams, limit, offset } = buildBookingListQuery({
       status: req.query.status ? String(req.query.status).trim() : '',
+      source: req.query.source ? String(req.query.source).trim().toUpperCase() : '',
+      attendance: req.query.attendance ? String(req.query.attendance).trim() : '',
       startDate: req.query.startDate ? String(req.query.startDate).trim() : '',
       endDate: req.query.endDate ? String(req.query.endDate).trim() : '',
       searchRaw: req.query.search != null ? String(req.query.search).trim() : '',
@@ -105,50 +167,151 @@ router.get('/bookings', requirePermission('bookings', 'view'), async (req, res, 
 
     const result = await db.query(listSql, listParams);
 
-    const bookings = result.rows.map((row) =>
-      enrichBookingTimes({
-        id: row.id,
-        user_id: row.user_id,
-        slot_id: row.slot_id,
-        trainer_id: row.trainer_id,
-        vehicle_id: row.vehicle_id,
-        status: row.status,
-        notes: row.notes,
-        phone: row.phone,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        start_time: row.start_time,
-        end_time: row.end_time,
-        slot_date: row.slot_date,
-        user: {
-          id: row.user_id,
-          full_name: row.user_name,
-          email: row.user_email
-        },
-        trainer: {
-          id: row.trainer_table_id,
-          profile: {
-            id: row.trainer_profile_id,
-            full_name: row.trainer_name
-          }
-        },
-        slot: {
-          start_time: row.start_time,
-          end_time: row.end_time,
-          slot_date: row.slot_date
-        },
-        vehicle_name: row.vehicle_name,
-        user_name: row.user_name,
-        user_email: row.user_email,
-        trainer_name: row.trainer_name
-      })
-    );
+    const bookings = result.rows.map((row) => mapAdminBookingRow(row));
 
     res.json({ bookings, total, limit, offset });
   } catch (error) {
     next(error);
   }
 });
+
+router.get('/bookings/export', requirePermission('bookings', 'view'), async (req, res, next) => {
+  try {
+    const { listSql, listParams } = buildBookingListQuery({
+      status: req.query.status ? String(req.query.status).trim() : '',
+      source: req.query.source ? String(req.query.source).trim().toUpperCase() : '',
+      attendance: req.query.attendance ? String(req.query.attendance).trim() : '',
+      startDate: req.query.startDate ? String(req.query.startDate).trim() : '',
+      endDate: req.query.endDate ? String(req.query.endDate).trim() : '',
+      searchRaw: req.query.search != null ? String(req.query.search).trim() : '',
+      limit: 5000,
+      offset: 0
+    });
+
+    const result = await db.query(listSql, listParams);
+    const exportRows = result.rows.map((row) => {
+      const slotStart = row.start_time ? new Date(row.start_time) : null;
+      const slotTime =
+        slotStart && !Number.isNaN(slotStart.getTime())
+          ? slotStart.toLocaleTimeString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            })
+          : '';
+      const createdAt = row.created_at ? new Date(row.created_at) : null;
+      const createdDate =
+        createdAt && !Number.isNaN(createdAt.getTime())
+          ? createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+          : '';
+
+      return {
+        'Reference Number': row.offline_reference_number || row.id,
+        Source: row.booking_source || 'ONLINE',
+        'Attendance Status': row.attendance_status || 'SCHEDULED',
+        'Created By':
+          row.booking_source === 'OFFLINE' ? row.created_by_admin_name || 'Admin' : 'Self',
+        'Created Date': createdDate,
+        Vehicle: row.vehicle_name || '',
+        Trainer: row.trainer_name || '',
+        'Customer Name':
+          row.booking_source === 'OFFLINE' ? row.offline_customer_name : row.user_name,
+        Phone: row.phone || '',
+        'Booking Date': row.slot_date || '',
+        'Slot Time': slotTime
+      };
+    });
+
+    if (exportRows.length === 0) {
+      const error = new Error('No bookings found for export');
+      error.status = 404;
+      error.errorCode = 'NO_BOOKINGS_FOUND';
+      return next(error);
+    }
+
+    const csv = rowsToCsv(exportRows);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="bookings_${new Date().toISOString().split('T')[0]}.csv"`
+    );
+    res.send(csv);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/bookings/overdue', requirePermission('bookings', 'view'), async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const bookings = await overdueBookingService.listOverdueBookings(limit);
+    const total = await overdueBookingService.countOverdueBookings();
+    res.json({ bookings, total });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/bookings/:id', requirePermission('bookings', 'view'), async (req, res, next) => {
+  try {
+    const booking = await bookingAdminService.getBookingDetail(req.params.id);
+    if (!booking) {
+      const error = new Error('Booking not found');
+      error.status = 404;
+      error.errorCode = 'BOOKING_NOT_FOUND';
+      return next(error);
+    }
+    res.json(booking);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/bookings/:id/attendance', requirePermission('bookings', 'edit'), async (req, res, next) => {
+  try {
+    const { attendance_status: attendanceStatus } = req.body;
+    const updated = await bookingAttendanceService.updateBookingAttendance(
+      req.user.id,
+      req.params.id,
+      attendanceStatus
+    );
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get(
+  '/offline-bookings/customers/search',
+  requirePermission('bookings', 'create'),
+  async (req, res, next) => {
+    try {
+      const matches = await offlineCustomerSearchService.searchOfflineCustomers({
+        phone: req.query.phone,
+        name: req.query.name,
+        limit: req.query.limit
+      });
+      res.json({ matches });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/offline-bookings',
+  requirePermission('bookings', 'create'),
+  validateOfflineBookingCreation,
+  async (req, res, next) => {
+    try {
+      const booking = await offlineBookingService.createOfflineBooking(req.user.id, req.body);
+      res.status(201).json(booking);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 router.get('/users', requirePermission('users', 'view'), async (req, res, next) => {
   try {
@@ -428,17 +591,6 @@ router.post('/slots/recalculate-capacity', requirePermission('slots', 'edit'), a
       message: 'Slot capacities recalculated for all slots from today onward',
       ...result
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/bookings/overdue', requirePermission('bookings', 'view'), async (req, res, next) => {
-  try {
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const bookings = await overdueBookingService.listOverdueBookings(limit);
-    const total = await overdueBookingService.countOverdueBookings();
-    res.json({ bookings, total });
   } catch (error) {
     next(error);
   }
@@ -837,8 +989,10 @@ router.put('/bookings/:id/status', requirePermission('bookings', 'edit'), valida
 
     // Update booking status
     const result = await db.query(
-      'UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-      [status, id]
+      `UPDATE bookings
+       SET status = $1, updated_by_admin_id = $3, updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [status, id, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -852,6 +1006,27 @@ router.put('/bookings/:id/status', requirePermission('bookings', 'edit'), valida
     console.log(`[Admin] Booking ${id} status updated successfully to: ${updatedBooking.status}`);
 
     await auditService.logBookingStatusChange(req.user.id, id, bookingCheck.rows[0], status);
+
+    const eventType =
+      status === 'cancelled'
+        ? EVENT_TYPES.BOOKING_CANCELLED
+        : status === 'completed'
+          ? EVENT_TYPES.BOOKING_COMPLETED
+          : EVENT_TYPES.BOOKING_UPDATED;
+    const eventTitle =
+      status === 'cancelled'
+        ? 'Booking Cancelled'
+        : status === 'completed'
+          ? 'Booking Completed'
+          : 'Booking Updated';
+    await logBookingEvent({
+      bookingId: id,
+      eventType,
+      title: eventTitle,
+      description: `Status changed from ${oldStatus} to ${status}`,
+      actorId: req.user.id,
+      metadata: { from: oldStatus, to: status }
+    });
 
     if (status === 'completed') {
       await auditService.logBookingCompleted(req.user.id, id, {
@@ -923,10 +1098,30 @@ router.put('/bookings/:id/trainer', requirePermission('bookings', 'edit'), async
       }
     }
 
+    const oldTrainerId = bookingCheck.rows[0].trainer_id;
+
     const result = await db.query(
-      'UPDATE bookings SET trainer_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-      [trainer_id, id]
+      `UPDATE bookings
+       SET trainer_id = $1, updated_by_admin_id = $3, updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [trainer_id, id, req.user.id]
     );
+
+    if (trainer_id) {
+      const trainerNameRow = await db.query(
+        `SELECT p.full_name FROM trainers t JOIN profiles p ON t.user_id = p.id WHERE t.id = $1`,
+        [trainer_id]
+      );
+      const trainerName = trainerNameRow.rows[0]?.full_name || 'Trainer';
+      await logBookingEvent({
+        bookingId: id,
+        eventType: EVENT_TYPES.TRAINER_ASSIGNED,
+        title: 'Trainer Assigned',
+        description: trainerName,
+        actorId: req.user.id,
+        metadata: { trainer_id, previous_trainer_id: oldTrainerId }
+      });
+    }
 
     res.json(result.rows[0]);
   } catch (error) {

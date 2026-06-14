@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { AdminService } from '../../../services/admin.service';
 import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -8,15 +9,19 @@ import { getApiErrorMessage } from '../../../utils/api-error';
 import { firstValueFrom } from 'rxjs';
 import { categorizeVehicleName } from '../../../utils/vehicle.utils';
 import { PermissionService } from '../../../services/permission.service';
+import { AdminBookingDetailsModalComponent } from '../../components/admin-booking-details-modal/admin-booking-details-modal.component';
 
 @Component({
   selector: 'app-admin-bookings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, AdminBookingDetailsModalComponent],
   template: `
     <div class="bookings-page">
       <div class="admin-page-header">
         <h1 class="admin-page-title">Manage Bookings</h1>
+        <button type="button" class="admin-btn admin-btn-secondary" (click)="exportBookings()" [disabled]="loadingList">
+          Export CSV
+        </button>
       </div>
 
       <div class="admin-filters-bar">
@@ -42,6 +47,20 @@ import { PermissionService } from '../../../services/permission.service';
             <option value="confirmed">Confirmed</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+
+          <select [(ngModel)]="sourceFilter" (change)="onServerFiltersChange()" class="admin-select">
+            <option value="">All Sources</option>
+            <option value="ONLINE">Online</option>
+            <option value="OFFLINE">Offline</option>
+          </select>
+
+          <select [(ngModel)]="attendanceFilter" (change)="onServerFiltersChange()" class="admin-select">
+            <option value="">All Attendance</option>
+            <option value="SCHEDULED">Scheduled</option>
+            <option value="ATTENDED">Attended</option>
+            <option value="NO_SHOW">No Show</option>
+            <option value="CANCELLED">Cancelled</option>
           </select>
 
           <div class="admin-filter-group">
@@ -92,11 +111,15 @@ import { PermissionService } from '../../../services/permission.service';
         <table class="admin-data-table bookings-table" *ngIf="!loadingList">
           <thead>
             <tr>
+              <th>Reference</th>
               <th>Customer</th>
               <th>Slot Time</th>
               <th>Vehicle</th>
               <th>Trainer</th>
               <th>Status</th>
+              <th>Attendance</th>
+              <th>Source</th>
+              <th>Created By</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -104,9 +127,14 @@ import { PermissionService } from '../../../services/permission.service';
           <tbody>
             <tr *ngFor="let booking of bookings">
               <td>
+                <button type="button" class="ref-link" (click)="openDetails(booking.id)">
+                  {{ booking.offline_reference_number || '—' }}
+                </button>
+              </td>
+              <td>
                 <div class="customer-info">
-                  <div class="name">{{ booking.user?.full_name || booking.user_name || 'N/A' }}</div>
-                  <div class="email">{{ booking.user?.email || booking.user_email || '' }}</div>
+                  <div class="name">{{ getCustomerName(booking) }}</div>
+                  <div class="email">{{ getCustomerSubline(booking) }}</div>
                 </div>
               </td>
               <td>{{ booking.formatted_slot_time || (booking.slot?.start_time ? formatDateTime(booking.slot.start_time) : (booking.start_time ? formatDateTime(booking.start_time) : 'N/A')) }}</td>
@@ -121,9 +149,18 @@ import { PermissionService } from '../../../services/permission.service';
                   {{ booking.status }}
                 </span>
               </td>
+              <td><span class="attendance-pill">{{ formatAttendance(booking.attendance_status) }}</span></td>
+              <td><span class="source-pill" [class.online]="booking.booking_source !== 'OFFLINE'" [class.offline]="booking.booking_source === 'OFFLINE'">{{ getSourceLabel(booking) }}</span></td>
+              <td>{{ getCreatedByLabel(booking) }}</td>
               <td>{{ formatDate(booking.created_at) }}</td>
               <td>
                 <div class="action-buttons">
+                  <button class="btn-action btn-view" (click)="openDetails(booking.id)" title="View details" aria-label="View details">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
                   <button
                     *ngIf="perms.can('bookings', 'edit') && !getTrainerName(booking)"
                     class="btn-action btn-assign"
@@ -264,6 +301,13 @@ import { PermissionService } from '../../../services/permission.service';
         </div>
       </div>
     </div>
+
+    <app-admin-booking-details-modal
+      [open]="detailsOpen"
+      [bookingId]="detailsBookingId"
+      (closed)="closeDetails()"
+      (updated)="loadBookings()">
+    </app-admin-booking-details-modal>
   `,
   styles: [`
     .bookings-page {
@@ -293,6 +337,53 @@ import { PermissionService } from '../../../services/permission.service';
       font-weight: 600;
       background: #eff6ff;
       color: #1d4ed8;
+    }
+
+    .source-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .source-pill.online {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .source-pill.offline {
+      background: #ffedd5;
+      color: #9a3412;
+    }
+
+    .attendance-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .ref-link {
+      border: none;
+      background: transparent;
+      color: var(--admin-primary, #0066B1);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      font-size: 12px;
+    }
+
+    .admin-page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
     }
 
     .trainer-pill.unassigned {
@@ -526,6 +617,8 @@ import { PermissionService } from '../../../services/permission.service';
 export class AdminBookingsComponent implements OnInit {
   bookings: any[] = [];
   statusFilter = '';
+  sourceFilter = '';
+  attendanceFilter = '';
   startDateFilter = '';
   endDateFilter = '';
   searchTerm = '';
@@ -549,8 +642,12 @@ export class AdminBookingsComponent implements OnInit {
     trainerId: ''
   };
 
+  detailsOpen = false;
+  detailsBookingId: string | null = null;
+
   constructor(
     private adminService: AdminService,
+    private route: ActivatedRoute,
     private toastService: ToastService,
     private confirmDialog: ConfirmDialogService,
     public perms: PermissionService
@@ -558,6 +655,10 @@ export class AdminBookingsComponent implements OnInit {
 
   async ngOnInit() {
     await this.loadBookings();
+    const detailsId = this.route.snapshot.queryParamMap.get('details');
+    if (detailsId) {
+      this.openDetails(detailsId);
+    }
   }
 
   async loadBookings() {
@@ -567,6 +668,8 @@ export class AdminBookingsComponent implements OnInit {
       const offset = (this.currentPage - 1) * limit;
       const res = await this.adminService.getAllBookings({
         status: this.statusFilter || undefined,
+        source: this.sourceFilter || undefined,
+        attendance: this.attendanceFilter || undefined,
         startDate: this.startDateFilter || undefined,
         endDate: this.endDateFilter || undefined,
         search: this.searchTerm.trim() || undefined,
@@ -697,6 +800,8 @@ export class AdminBookingsComponent implements OnInit {
   resetFilters() {
     this.searchTerm = '';
     this.statusFilter = '';
+    this.sourceFilter = '';
+    this.attendanceFilter = '';
     this.datePreset = 'all';
     this.startDateFilter = '';
     this.endDateFilter = '';
@@ -720,7 +825,7 @@ export class AdminBookingsComponent implements OnInit {
   async openAssignTrainer(booking: any) {
     this.assignForm = {
       bookingId: booking.id,
-      customerName: booking.user?.full_name || booking.user_name || 'N/A',
+      customerName: this.getCustomerName(booking),
       slotTime:
         booking.formatted_slot_time ||
         (booking.slot?.start_time ? this.formatDateTime(booking.slot.start_time) : 'N/A'),
@@ -796,6 +901,77 @@ export class AdminBookingsComponent implements OnInit {
     if (category === 'petrol_scooty') return 'Petrol Scooty';
     if (category === 'bike') return 'Bike';
     return name || 'N/A';
+  }
+
+  getCustomerName(booking: any): string {
+    if (booking?.booking_source === 'OFFLINE') {
+      return booking.offline_customer_name || 'Walk-in customer';
+    }
+    return booking.user?.full_name || booking.user_name || 'N/A';
+  }
+
+  getCustomerSubline(booking: any): string {
+    if (booking?.booking_source === 'OFFLINE') {
+      return booking.phone || booking.user?.email || booking.user_email || '';
+    }
+    return booking.user?.email || booking.user_email || '';
+  }
+
+  getSourceLabel(booking: any): string {
+    return booking?.booking_source === 'OFFLINE' ? 'Offline' : 'Online';
+  }
+
+  getCreatedByLabel(booking: any): string {
+    if (booking?.booking_source !== 'OFFLINE') {
+      return 'Self';
+    }
+    const name = booking.created_by_admin_name;
+    if (!name) return 'Admin';
+    if (booking.created_by_admin_role === 'subadmin') return `${name} (Sub Admin)`;
+    if (booking.created_by_admin_role === 'superadmin') return `${name} (Super Admin)`;
+    return name;
+  }
+
+  formatAttendance(value?: string): string {
+    const map: Record<string, string> = {
+      SCHEDULED: 'Scheduled',
+      ATTENDED: 'Attended',
+      NO_SHOW: 'No Show',
+      CANCELLED: 'Cancelled'
+    };
+    return map[String(value || 'SCHEDULED').toUpperCase()] || 'Scheduled';
+  }
+
+  openDetails(bookingId: string) {
+    this.detailsBookingId = bookingId;
+    this.detailsOpen = true;
+  }
+
+  closeDetails() {
+    this.detailsOpen = false;
+    this.detailsBookingId = null;
+  }
+
+  async exportBookings() {
+    try {
+      const blob = await this.adminService.exportBookings({
+        status: this.statusFilter || undefined,
+        source: this.sourceFilter || undefined,
+        attendance: this.attendanceFilter || undefined,
+        startDate: this.startDateFilter || undefined,
+        endDate: this.endDateFilter || undefined,
+        search: this.searchTerm.trim() || undefined
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `bookings_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      this.toastService.success('Bookings exported');
+    } catch (err) {
+      this.toastService.error(getApiErrorMessage(err, 'Export failed'));
+    }
   }
 
   formatDate(dateString: string): string {

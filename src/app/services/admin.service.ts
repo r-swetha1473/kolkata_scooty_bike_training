@@ -51,8 +51,24 @@ function normalizeDashboardStats(raw: Record<string, unknown> | null | undefined
     totalTrainers: asNumber(s['totalTrainers']),
     activeVehicles: asNumber(s['activeVehicles']),
     totalCustomers: asNumber(s['totalCustomers']),
+    onlineBookings: asNumber(s['onlineBookings']),
+    offlineBookings: asNumber(s['offlineBookings']),
+    todayOnlineBookings: asNumber(s['todayOnlineBookings']),
+    todayOfflineBookings: asNumber(s['todayOfflineBookings']),
+    totalAttended: asNumber(s['totalAttended']),
+    totalNoShows: asNumber(s['totalNoShows']),
+    attendanceRate: asNumber(s['attendanceRate']),
+    capacityExceededSlots: asNumber(s['capacityExceededSlots']),
     totalBookings: asNumber(s['totalBookings']),
-    overdueBookings: Array.isArray(s['overdueBookings']) ? s['overdueBookings'] : []
+    overdueBookings: Array.isArray(s['overdueBookings']) ? s['overdueBookings'] : [],
+    todayOperations: s['todayOperations'] || {},
+    systemHealth: s['systemHealth'] || {},
+    vehicleAnalytics: Array.isArray(s['vehicleAnalytics']) ? s['vehicleAnalytics'] : [],
+    vehicleCharts: s['vehicleCharts'] || { topUsed: [], leastUsed: [] },
+    trainerAnalytics: Array.isArray(s['trainerAnalytics']) ? s['trainerAnalytics'] : [],
+    trainerCharts: s['trainerCharts'] || { workload: [], assignmentTrend: [] },
+    recentAdminActivity: Array.isArray(s['recentAdminActivity']) ? s['recentAdminActivity'] : [],
+    slotUtilization: Array.isArray(s['slotUtilization']) ? s['slotUtilization'] : []
   };
 }
 
@@ -74,6 +90,8 @@ export class AdminService {
 
   async getAllBookings(filters?: {
     status?: string;
+    source?: string;
+    attendance?: string;
     startDate?: string;
     endDate?: string;
     search?: string;
@@ -82,6 +100,8 @@ export class AdminService {
   }): Promise<{ bookings: any[]; total: number; limit: number; offset: number }> {
     const params = new URLSearchParams();
     if (filters?.status) params.set('status', filters.status);
+    if (filters?.source) params.set('source', filters.source);
+    if (filters?.attendance) params.set('attendance', filters.attendance);
     if (filters?.startDate) params.set('startDate', filters.startDate);
     if (filters?.endDate) params.set('endDate', filters.endDate);
     const search = filters?.search?.trim();
@@ -119,6 +139,50 @@ export class AdminService {
       limit: resolvedLimit,
       offset: resolvedOffset
     };
+  }
+
+  async createOfflineBooking(payload: Record<string, unknown>): Promise<any> {
+    return firstValueFrom(this.http.post<any>('/admin/offline-bookings', payload));
+  }
+
+  async searchOfflineCustomers(params: { phone?: string; name?: string }): Promise<any[]> {
+    const qs = new URLSearchParams();
+    if (params.phone) qs.set('phone', params.phone);
+    if (params.name) qs.set('name', params.name);
+    const result = await firstValueFrom(
+      this.http.get<{ matches: any[] }>(`/admin/offline-bookings/customers/search?${qs.toString()}`)
+    );
+    return result?.matches || [];
+  }
+
+  async getBookingDetail(id: string): Promise<any> {
+    return firstValueFrom(this.http.get<any>(`/admin/bookings/${id}`));
+  }
+
+  async updateBookingAttendance(id: string, attendanceStatus: string): Promise<any> {
+    return firstValueFrom(
+      this.http.put<any>(`/admin/bookings/${id}/attendance`, { attendance_status: attendanceStatus })
+    );
+  }
+
+  async exportBookings(filters?: {
+    status?: string;
+    source?: string;
+    attendance?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+  }): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.source) params.set('source', filters.source);
+    if (filters?.attendance) params.set('attendance', filters.attendance);
+    if (filters?.startDate) params.set('startDate', filters.startDate);
+    if (filters?.endDate) params.set('endDate', filters.endDate);
+    if (filters?.search) params.set('search', filters.search);
+    return firstValueFrom(
+      this.http.getBlob(`/admin/bookings/export?${params.toString()}`)
+    );
   }
 
   async getAllTrainers(): Promise<any[]> {

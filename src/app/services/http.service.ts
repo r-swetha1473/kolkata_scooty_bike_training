@@ -27,6 +27,17 @@ export class HttpService {
     });
   }
 
+  getBlob(endpoint: string): Observable<Blob> {
+    const token = getAuthToken();
+    return this.http.get(`${this.apiUrl}${endpoint}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      withCredentials: true,
+      responseType: 'blob'
+    });
+  }
+
   post<T>(endpoint: string, data: any): Observable<T> {
     return this.http.post<T>(`${this.apiUrl}${endpoint}`, data, {
       headers: this.getHeaders(),

@@ -10,7 +10,7 @@ const OVERDUE_TIME_SQL = `s.end_time < NOW()`;
 const OVERDUE_SELECT = `
   SELECT b.id, b.status, b.created_at,
          s.start_time, s.end_time, s.slot_date,
-         u.full_name AS customer_name, u.email AS customer_email,
+         COALESCE(b.offline_customer_name, u.full_name) AS customer_name, u.email AS customer_email,
          p.full_name AS trainer_name
   FROM bookings b
   JOIN slots s ON b.slot_id = s.id

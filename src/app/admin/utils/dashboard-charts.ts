@@ -73,8 +73,142 @@ export interface BookingChartRow {
   created_at?: string;
   status?: string;
   vehicle_name?: string;
+  booking_source?: string;
+  attendance_status?: string;
   start_time?: string;
   slot_date?: string;
+}
+
+export function aggregateSourceCounts(
+  bookings: BookingChartRow[]
+): { label: string; value: number }[] {
+  let online = 0;
+  let offline = 0;
+  for (const row of bookings || []) {
+    if (String(row.booking_source || 'ONLINE').toUpperCase() === 'OFFLINE') {
+      offline += 1;
+    } else {
+      online += 1;
+    }
+  }
+  return [
+    { label: 'Online', value: online },
+    { label: 'Offline', value: offline }
+  ].filter((entry) => entry.value > 0);
+}
+
+export function aggregateAttendanceCounts(
+  bookings: BookingChartRow[]
+): { label: string; value: number }[] {
+  const counts = { Scheduled: 0, Attended: 0, 'No Show': 0, Cancelled: 0 };
+  for (const row of bookings || []) {
+    const key = String(row.attendance_status || 'SCHEDULED').toUpperCase();
+    if (key === 'ATTENDED') counts.Attended += 1;
+    else if (key === 'NO_SHOW') counts['No Show'] += 1;
+    else if (key === 'CANCELLED') counts.Cancelled += 1;
+    else counts.Scheduled += 1;
+  }
+  return Object.entries(counts)
+    .map(([label, value]) => ({ label, value }))
+    .filter((entry) => entry.value > 0);
+}
+
+export function aggregateMonthlyAttendanceTrend(
+  bookings: BookingChartRow[]
+): { month: string; attended: number; noShow: number }[] {
+  const map = new Map<string, { attended: number; noShow: number }>();
+  for (const row of bookings || []) {
+    const raw = row.start_time || row.created_at || row.slot_date;
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) continue;
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const bucket = map.get(month) || { attended: 0, noShow: 0 };
+    const att = String(row.attendance_status || '').toUpperCase();
+    if (att === 'ATTENDED') bucket.attended += 1;
+    if (att === 'NO_SHOW') bucket.noShow += 1;
+    map.set(month, bucket);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6)
+    .map(([month, v]) => ({ month, attended: v.attended, noShow: v.noShow }));
+}
+
+export function renderAttendanceTrendChart(
+  container: HTMLElement,
+  data: { month: string; attended: number; noShow: number }[]
+): ChartCleanup {
+  const theme = getChartTheme(container);
+  const tooltip = ChartTooltip.getInstance();
+  d3.select(container).selectAll('*').remove();
+
+  const width = container.clientWidth || 480;
+  const height = 260;
+  const margin = { top: 16, right: 16, bottom: 36, left: 40 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = d3
+    .select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+  const months = data.map((d) => d.month);
+  const x = d3.scaleBand().domain(months).range([0, innerW]).padding(0.2);
+  const maxVal = Math.max(1, d3.max(data, (d) => Math.max(d.attended, d.noShow)) || 0);
+  const y = d3.scaleLinear().domain([0, maxVal]).nice().range([innerH, 0]);
+
+  g.append('g').attr('transform', `translate(0,${innerH})`).call(d3.axisBottom(x).tickFormat((m) => String(m).slice(5)));
+  g.append('g').call(d3.axisLeft(y).ticks(5));
+  styleAxes(g as unknown as d3.Selection<SVGGElement, unknown, null, undefined>, theme);
+
+  const barW = x.bandwidth() / 2;
+  data.forEach((d) => {
+    const xPos = x(d.month) || 0;
+    g.append('rect')
+      .attr('x', xPos)
+      .attr('y', innerH)
+      .attr('width', barW)
+      .attr('height', 0)
+      .attr('fill', theme.palette[1])
+      .transition()
+      .duration(ANIM_MS)
+      .attr('y', y(d.attended))
+      .attr('height', innerH - y(d.attended))
+      .on('end', function handleEnd(this: SVGRectElement) {
+        d3.select(this)
+          .on('mouseenter', (event: MouseEvent) =>
+            tooltip.show(
+              tooltipRows([
+                { label: 'Attended', value: String(d.attended) },
+                { label: 'Month', value: d.month }
+              ]),
+              event.clientX,
+              event.clientY
+            )
+          )
+          .on('mousemove', (event: MouseEvent) => tooltip.move(event.clientX, event.clientY))
+          .on('mouseleave', () => tooltip.hide());
+      });
+    g.append('rect')
+      .attr('x', xPos + barW)
+      .attr('y', innerH)
+      .attr('width', barW)
+      .attr('height', 0)
+      .attr('fill', theme.palette[2])
+      .transition()
+      .duration(ANIM_MS)
+      .attr('y', y(d.noShow))
+      .attr('height', innerH - y(d.noShow));
+  });
+
+  return () => {
+    d3.select(container).selectAll('*').remove();
+  };
 }
 
 export function lastNDaysLabels(n: number): string[] {
@@ -596,6 +730,103 @@ export function renderStatusBarChart(
   };
 
   bars.on('mouseenter', onEnter).on('mousemove', onMove).on('mouseleave', onLeave);
+
+  return () => {
+    bars.on('mouseenter', null).on('mousemove', null).on('mouseleave', null);
+    tooltip.hide();
+    d3.select(container).selectAll('*').remove();
+  };
+}
+
+export function renderLabelBarChart(
+  container: HTMLElement,
+  data: { label: string; value: number }[],
+  barColor?: string
+): ChartCleanup {
+  const theme = getChartTheme(container);
+  const tooltip = ChartTooltip.getInstance();
+  d3.select(container).selectAll('*').remove();
+
+  if (!data.length) {
+    d3.select(container)
+      .append('p')
+      .attr('class', 'chart-empty')
+      .style('color', theme.axis)
+      .style('font-size', '13px')
+      .text('No data available');
+    return () => d3.select(container).selectAll('*').remove();
+  }
+
+  const width = container.clientWidth || 480;
+  const height = 260;
+  const margin = { top: 16, right: 16, bottom: 48, left: 40 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = d3
+    .select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3
+    .scaleBand()
+    .domain(data.map((d) => d.label))
+    .range([0, innerW])
+    .padding(0.35);
+
+  const y = d3
+    .scaleLinear()
+    .domain([0, Math.max(1, d3.max(data, (d) => d.value) || 0)])
+    .nice()
+    .range([innerH, 0]);
+
+  g.append('g')
+    .attr('transform', `translate(0,${innerH})`)
+    .call(d3.axisBottom(x))
+    .selectAll('text')
+    .attr('font-size', 10)
+    .attr('transform', 'rotate(-24)')
+    .style('text-anchor', 'end');
+
+  g.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size', 10);
+  styleAxes(g, theme);
+
+  const fill = barColor || theme.primary;
+  const bars = g
+    .selectAll<SVGRectElement, { label: string; value: number }>('rect.bar')
+    .data(data)
+    .join('rect')
+    .attr('class', 'bar')
+    .attr('x', (d) => x(d.label) || 0)
+    .attr('y', innerH)
+    .attr('width', x.bandwidth())
+    .attr('height', 0)
+    .attr('rx', 6)
+    .attr('fill', fill)
+    .style('cursor', 'pointer');
+
+  bars
+    .transition()
+    .duration(ANIM_MS)
+    .attr('y', (d) => y(d.value))
+    .attr('height', (d) => innerH - y(d.value));
+
+  bars
+    .on('mouseenter', (event: MouseEvent, d) => {
+      tooltip.show(
+        tooltipRows([
+          { label: d.label, value: String(d.value) }
+        ]),
+        event.clientX,
+        event.clientY
+      );
+    })
+    .on('mousemove', (event: MouseEvent) => tooltip.move(event.clientX, event.clientY))
+    .on('mouseleave', () => tooltip.hide());
 
   return () => {
     bars.on('mouseenter', null).on('mousemove', null).on('mouseleave', null);

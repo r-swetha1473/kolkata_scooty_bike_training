@@ -37,7 +37,59 @@ BEGIN
   END IF;
 END $$;
 
--- bookings: trainer_id nullable for vehicle-based customer bookings (no trainer at create time)
+-- bookings: offline booking + source tracking
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_source_enum') THEN
+    CREATE TYPE booking_source_enum AS ENUM ('ONLINE', 'OFFLINE');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'booking_source'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN booking_source booking_source_enum NOT NULL DEFAULT 'ONLINE';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'created_by_admin_id'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN created_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'offline_customer_name'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN offline_customer_name TEXT;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'offline_customer_age'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN offline_customer_age INTEGER;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'offline_customer_gender'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN offline_customer_gender TEXT;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'user_id'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE bookings ALTER COLUMN user_id DROP NOT NULL;
+  END IF;
+END $$;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -46,6 +98,58 @@ BEGIN
       AND is_nullable = 'NO'
   ) THEN
     ALTER TABLE bookings ALTER COLUMN trainer_id DROP NOT NULL;
+  END IF;
+END $$;
+
+-- Phase 2 offline enhancements (reference, attendance, audit)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status_enum') THEN
+    CREATE TYPE attendance_status_enum AS ENUM ('SCHEDULED', 'ATTENDED', 'NO_SHOW', 'CANCELLED');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'offline_reference_number'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN offline_reference_number TEXT;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'attendance_status'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN attendance_status attendance_status_enum NOT NULL DEFAULT 'SCHEDULED';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'attendance_updated_by'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN attendance_updated_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'attendance_updated_at'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN attendance_updated_at TIMESTAMPTZ;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'updated_by_admin_id'
+  ) THEN
+    ALTER TABLE bookings ADD COLUMN updated_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'slots' AND column_name = 'capacity_exceeded'
+  ) THEN
+    ALTER TABLE slots ADD COLUMN capacity_exceeded BOOLEAN NOT NULL DEFAULT false;
   END IF;
 END $$;
 

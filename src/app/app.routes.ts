@@ -88,6 +88,16 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'offline-bookings',
+        canActivate: [permissionGuard('bookings', 'create'), passwordChangeRequiredGuard],
+        loadComponent: () =>
+          loadWithRetry(() =>
+            import('./admin/pages/offline-bookings/offline-bookings.component').then(
+              (m) => m.AdminOfflineBookingsComponent
+            )
+          )
+      },
+      {
         path: 'slots',
         canActivate: [permissionGuard('slots', 'view'), passwordChangeRequiredGuard],
         loadComponent: () =>

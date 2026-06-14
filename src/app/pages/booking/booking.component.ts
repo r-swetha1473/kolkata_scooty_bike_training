@@ -10,6 +10,7 @@ import { normalizeDate, addDays, getKolkataToday, getKolkataCurrentMinutes, form
 import { Subscription } from 'rxjs';
 import {
   getVehicleCategoryOptions,
+  getLiveSlotCapacity,
   getTotalAvailableSeats,
   slotHasVehicleAvailability,
   VehicleCategoryOption
@@ -699,7 +700,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   getSlotCapacity(slot: Slot): number {
-    return Number(slot.capacity) || 0;
+    return getLiveSlotCapacity(slot);
   }
 
   getAvailableCount(slot: Slot): number {
