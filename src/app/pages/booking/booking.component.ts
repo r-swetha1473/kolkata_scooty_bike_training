@@ -305,6 +305,17 @@ export class BookingComponent implements OnInit, OnDestroy {
     await this.loadActiveBooking();
   }
 
+  /** UI-only click handler — does not change booking validation in selectSlot(). */
+  onSlotClick(slot: Slot) {
+    if (this.isSlotDisabled(slot)) {
+      return;
+    }
+    if (this.isSlotFullyBookedUI(slot) && !this.isUserBookedSlot(slot)) {
+      return;
+    }
+    void this.selectSlot(slot);
+  }
+
   async selectSlot(slot: Slot) {
     if (this.isSlotDisabled(slot)) {
       return;
@@ -699,6 +710,43 @@ export class BookingComponent implements OnInit, OnDestroy {
     return getTotalAvailableSeats(slot);
   }
 
+  /** Display capacity from API live_capacity or computed live total. */
+  getSlotLiveCapacity(slot: Slot): number {
+    if (slot.live_capacity != null && Number.isFinite(Number(slot.live_capacity))) {
+      return Math.max(0, Number(slot.live_capacity));
+    }
+    return getLiveSlotCapacity(slot);
+  }
+
+  /** UI display: availableSeats = live_capacity - booked_count */
+  getDisplayAvailableSeats(slot: Slot): number {
+    const liveCap = this.getSlotLiveCapacity(slot);
+    const booked = Number(slot.booked_count) || 0;
+    return Math.max(0, liveCap - booked);
+  }
+
+  isSlotFullyBookedUI(slot: Slot): boolean {
+    if (this.isSlotDisabled(slot) || this.isUserBookedSlot(slot)) {
+      return false;
+    }
+    return this.getDisplayAvailableSeats(slot) <= 0;
+  }
+
+  isSlotLimitedUI(slot: Slot): boolean {
+    if (this.isSlotDisabled(slot) || this.isUserBookedSlot(slot) || this.isSlotFullyBookedUI(slot)) {
+      return false;
+    }
+    const available = this.getDisplayAvailableSeats(slot);
+    return available >= 1 && available <= FEW_SLOTS_THRESHOLD;
+  }
+
+  isSlotAvailableUI(slot: Slot): boolean {
+    if (this.isSlotDisabled(slot) || this.isUserBookedSlot(slot) || this.isSlotFullyBookedUI(slot)) {
+      return false;
+    }
+    return this.getDisplayAvailableSeats(slot) > FEW_SLOTS_THRESHOLD;
+  }
+
   getSlotCapacity(slot: Slot): number {
     return getLiveSlotCapacity(slot);
   }
@@ -726,25 +774,26 @@ export class BookingComponent implements OnInit, OnDestroy {
     if (this.isUserBookedSlot(slot)) {
       return 'YOUR BOOKING';
     }
-    if (this.isSlotFull(slot)) {
-      return 'FULL';
+    if (this.isSlotFullyBookedUI(slot)) {
+      return 'FULLY BOOKED';
     }
-    if (this.isFewSlotsLeft(slot)) {
-      return 'FEW SLOTS LEFT';
+    if (this.isSlotLimitedUI(slot)) {
+      return 'Limited Availability';
     }
-    return 'AVAILABLE';
+    return 'Available';
   }
 
   getCapacityLabel(slot: Slot): string {
-    const total = this.getSlotCapacity(slot);
-    const available = this.getAvailableCount(slot);
+    const total = this.getSlotLiveCapacity(slot);
+    const available = this.getDisplayAvailableSeats(slot);
+    const booked = Number(slot.booked_count) || 0;
     if (this.isUserBookedSlot(slot)) {
       return 'Your booking';
     }
-    if (this.isSlotFull(slot)) {
-      return `0 / ${total} Available`;
+    if (this.isSlotFullyBookedUI(slot)) {
+      return `0/${total} Available · ${booked}/${total} booked`;
     }
-    return `${available} / ${total} Available`;
+    return `${available}/${total} · ${booked}/${total} booked`;
   }
 
   getSameDateBookingMessage(): string {

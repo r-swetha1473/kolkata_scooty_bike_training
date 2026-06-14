@@ -12,6 +12,8 @@ export interface Slot {
   slot_date: string;
   capacity: number;
   booked_count: number;
+  /** Active vehicle capacity from API (matches server validation). */
+  live_capacity?: number;
   capacity_exceeded?: boolean;
   status: 'available' | 'full' | 'cancelled' | 'completed' | 'disabled';
   is_auto_generated: boolean;

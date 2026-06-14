@@ -65,10 +65,10 @@
         <div class="slots-header">
           <h2 class="page-title">Available Time Slots</h2>
           <div class="legend">
-            <span class="legend-item"><span class="dot available"></span> Available</span>
+            <span class="legend-item"><span class="dot available"></span> Available (&gt;2 seats)</span>
             <span class="legend-item"><span class="dot your-booking"></span> Your Booking</span>
-            <span class="legend-item"><span class="dot partial"></span> Few Slots Left</span>
-            <span class="legend-item"><span class="dot full"></span> Full</span>
+            <span class="legend-item"><span class="dot partial"></span> Limited (1–2 seats)</span>
+            <span class="legend-item"><span class="dot full"></span> Fully Booked</span>
             <span class="legend-item"><span class="dot disabled"></span> Disabled</span>
           </div>
         </div>
@@ -86,14 +86,15 @@
             *ngFor="let slot of slots"
             class="slot-card"
             [class.your-booking]="isUserBookedSlot(slot)"
-            [class.available]="!isUserBookedSlot(slot) && isSlotAvailable(slot) && !isFewSlotsLeft(slot)"
-            [class.partial]="!isUserBookedSlot(slot) && isFewSlotsLeft(slot)"
-            [class.full]="!isUserBookedSlot(slot) && isSlotFull(slot)"
+            [class.available]="!isUserBookedSlot(slot) && isSlotAvailableUI(slot)"
+            [class.partial]="!isUserBookedSlot(slot) && isSlotLimitedUI(slot)"
+            [class.full]="!isUserBookedSlot(slot) && isSlotFullyBookedUI(slot)"
             [class.disabled]="isSlotDisabled(slot)"
-            (click)="selectSlot(slot)">
+            (click)="onSlotClick(slot)">
             <span class="your-booking-badge" *ngIf="isUserBookedSlot(slot)">✓ Your Booking</span>
+            <span class="fully-booked-badge" *ngIf="!isUserBookedSlot(slot) && isSlotFullyBookedUI(slot)">FULLY BOOKED</span>
             <div class="slot-time">{{ formatTime(slot.start_time) }}</div>
-            <div class="slot-status-text">{{ getSlotStatusLabel(slot) }}</div>
+            <div class="slot-status-text" *ngIf="!isSlotFullyBookedUI(slot) || isUserBookedSlot(slot)">{{ getSlotStatusLabel(slot) }}</div>
             <div class="slot-trainer slot-trainer-hint" *ngIf="slot.trainer?.profile?.full_name && !isUserBookedSlot(slot)">
               <svg class="trainer-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
