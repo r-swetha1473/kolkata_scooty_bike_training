@@ -285,6 +285,13 @@ if (process.env.DISABLE_REACTIVATION_SCHEMA_STARTUP !== '1') {
   });
 }
 
+if (process.env.DISABLE_OFFLINE_BOOKING_SCHEMA_STARTUP !== '1') {
+  const { ensureOfflineBookingSchemaOnStartup } = require('./services/offlineBookingSchema.service');
+  ensureOfflineBookingSchemaOnStartup().catch((err) => {
+    console.error('[Offline booking schema startup]', err.message);
+  });
+}
+
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);

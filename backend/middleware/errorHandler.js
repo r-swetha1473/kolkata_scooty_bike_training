@@ -3,6 +3,11 @@
  * Standardizes error responses and handles error logging
  */
 
+const {
+  formatSchemaPgError,
+  SCHEMA_PG_CODES
+} = require('../services/offlineBookingSchema.service');
+
 /**
  * Standardized error response format
  * @param {Error} err - The error object
@@ -18,16 +23,20 @@ const errorHandler = (err, req, res, next) => {
   let statusCode = err.status || err.statusCode || 500;
   let message = err.message || 'Internal server error';
   let errorCode = err.code || err.errorCode || 'INTERNAL_ERROR';
+  let schemaDetail = null;
 
-  // Missing column — schema drift (migration not applied on production DB)
-  if (err.code === '42703') {
+  // PostgreSQL schema drift (missing column/type/function/table)
+  if (err.code && SCHEMA_PG_CODES.has(err.code)) {
     statusCode = 503;
     errorCode = 'SCHEMA_MISMATCH';
     message = 'Database schema is out of date. Contact support or retry after maintenance.';
-    console.error('[Schema] Missing column:', {
-      message: err.message,
+    schemaDetail = formatSchemaPgError(err);
+    console.error('[Schema] SCHEMA_MISMATCH — PostgreSQL object missing:', {
+      ...schemaDetail,
       url: req.originalUrl,
-      method: req.method
+      method: req.method,
+      hint:
+        'Apply migrations 20260614120000, 20260615120000, then 20260407120000 on Render DATABASE_URL. Run: node scripts/verify_offline_booking_schema.js'
     });
   }
 
@@ -101,14 +110,16 @@ const errorHandler = (err, req, res, next) => {
         query: req.query
       });
     } else {
-      // In production: log minimal information
-      console.error('Error:', {
-        message,
-        errorCode,
-        statusCode,
-        url: req.originalUrl,
-        method: req.method
-      });
+      // In production: log minimal information (schema errors already logged above with pg detail)
+      if (errorCode !== 'SCHEMA_MISMATCH') {
+        console.error('Error:', {
+          message,
+          errorCode,
+          statusCode,
+          url: req.originalUrl,
+          method: req.method
+        });
+      }
     }
   }
 
@@ -131,6 +142,10 @@ const errorHandler = (err, req, res, next) => {
   if (err.allowedDate != null) extraData.allowedDate = err.allowedDate;
   if (Object.keys(extraData).length > 0) {
     response.data = extraData;
+  }
+
+  if (isDevelopment && schemaDetail) {
+    response.schemaDetail = schemaDetail;
   }
 
   // Include stack trace in development mode only
