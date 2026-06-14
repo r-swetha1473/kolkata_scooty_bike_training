@@ -174,7 +174,7 @@ async function getDashboardStats() {
 
   try {
     const exceededResult = await db.query(
-      `SELECT COUNT(*)::int AS count FROM slots WHERE capacity_exceeded = true AND ${SLOT_DAY} >= ${KOLKATA_TODAY}`
+      `SELECT COUNT(*)::int AS count FROM slots s WHERE capacity_exceeded = true AND ${SLOT_DAY} >= ${KOLKATA_TODAY}`
     );
     stats.capacityExceededSlots = toCount(exceededResult.rows);
   } catch (capErr) {
